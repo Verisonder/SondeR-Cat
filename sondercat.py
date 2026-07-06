@@ -288,9 +288,11 @@ class InputWatcher:
         self.last_scroll = 0.0
         self.scroll_accum = 0.0
         self.kb_ok = self.mouse_ok = False
+        self._down = set()
         try:
             from pynput import keyboard
-            self._kb = keyboard.Listener(on_press=self._on_press)
+            self._kb = keyboard.Listener(on_press=self._on_press,
+                                             on_release=self._on_release)
             self._kb.daemon = True
             self._kb.start()
             self.kb_ok = True
@@ -314,7 +316,21 @@ class InputWatcher:
             self._ms = None
         self.mouse_ok = bool(self._native or self._ms)
 
-    def _on_press(self, _key):
+    def _on_release(self, key):
+        try:
+            self._down.discard(key)
+        except Exception:
+            pass
+
+    def _on_press(self, key):
+        try:
+            if key in self._down:
+                return                 # OS auto-repeat while held: count once
+            self._down.add(key)
+            if len(self._down) > 24:   # safety net for missed releases
+                self._down.clear()
+        except Exception:
+            pass
         now = time.time()
         self.last_key = now
         self.key_times.append(now)
@@ -361,7 +377,8 @@ class InputWatcher:
         try:
             if self.kb_ok and (self._kb is None or not self._kb.is_alive()):
                 from pynput import keyboard
-                self._kb = keyboard.Listener(on_press=self._on_press)
+                self._kb = keyboard.Listener(on_press=self._on_press,
+                                             on_release=self._on_release)
                 self._kb.daemon = True
                 self._kb.start()
         except Exception:
@@ -1332,7 +1349,7 @@ class CatWindow(QWidget):
             return
 
         want_peek = self.manual_peek or mgr.fullscreen_active
-        typing_now = inputs.typing(0.30 if self.knead_hyst else 0.25)
+        typing_now = inputs.typing(0.12 if self.knead_hyst else 0.10)
         self.knead_hyst = typing_now
         overheat = (inputs.keys_per_sec() > 5.5 and typing_now)
 
