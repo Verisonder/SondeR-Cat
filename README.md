@@ -49,7 +49,9 @@ It installs everything, creates a Desktop shortcut, offers autostart, and
 launches the cat. (SmartScreen may warn about an unrecognized file —
 *More info → Run anyway*.)
 
-**Windows (from source):** clone/download this repo and run `install.bat`.
+**Windows (from source):** download the repo zip, extract it, and
+double-click **`CLICK_ME_TO_INSTALL.bat`** — it finds and runs the installer
+for you wherever you extracted it.
 
 **Linux:**
 ```bash
