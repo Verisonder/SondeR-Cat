@@ -693,7 +693,8 @@ class Manager(QObject):
                 self.tray.setIcon(icon)
             self.tray.setToolTip(APP_NAME)
             if self.primary():
-                self.tray.setContextMenu(self.primary().build_menu())
+                self._tray_menu = self.primary().build_menu()
+                self.tray.setContextMenu(self._tray_menu)
         except Exception:
             self.tray = None
 
@@ -1012,7 +1013,7 @@ class CatWindow(QWidget):
 
     # -------------------------------------------------------------- menu ----
     def build_menu(self):
-        menu = QMenu()
+        menu = QMenu(self)
         mgr = self.mgr
 
         fur = menu.addMenu("Fur color")
@@ -1109,11 +1110,6 @@ class CatWindow(QWidget):
         doctor = QAction("Scroll doctor (5s live test)", menu)
         doctor.triggered.connect(mgr.scroll_doctor)
         beh.addAction(doctor)
-        slp = QAction("Deep sleep (don't wake up) 💤", menu)
-        slp.setCheckable(True)
-        slp.setChecked(self.gcfg.get("force_sleep", False))
-        slp.triggered.connect(mgr.toggle_force_sleep)
-        beh.addAction(slp)
         snd = QAction("Meow sounds", menu)
         snd.setCheckable(True)
         snd.setChecked(self.gcfg.get("sounds", True))
@@ -1157,6 +1153,11 @@ class CatWindow(QWidget):
         about = QAction("About", menu)
         about.triggered.connect(self.show_about)
         menu.addAction(about)
+        slp = QAction("Deep sleep 💤", menu)
+        slp.setCheckable(True)
+        slp.setChecked(self.gcfg.get("force_sleep", False))
+        slp.triggered.connect(mgr.toggle_force_sleep)
+        menu.addAction(slp)
         quit_act = QAction("Quit", menu)
         quit_act.triggered.connect(QApplication.instance().quit)
         menu.addAction(quit_act)
