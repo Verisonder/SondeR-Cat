@@ -145,7 +145,8 @@ CAT_DEFAULTS = {"palette": "orange tabby", "pattern": "tabby",
 GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "auto_peek": True, "chase_enabled": True,
                    "name": "", "pinned": "", "reminders": [], "sounds": True, "laser_only": True, "wiggle_hide": True,
-                   "wiggle_sens": "medium"}
+                   "wiggle_sens": "medium",
+                   "force_sleep": False}
 
 (IDLE, KNEAD, SLEEP, CHASE, DRAG, STRETCH,
  OVERHEAT, SCROLLPLAY, PEEK, THINK) = range(10)
@@ -766,6 +767,18 @@ class Manager(QObject):
         self.say_primary("I only hunt wiggles now!" if g["laser_only"]
                          else "I'll chase any fast cursor!", 2.5)
 
+    def toggle_force_sleep(self):
+        g = self.cfg["global"]
+        g["force_sleep"] = not g.get("force_sleep", False)
+        save_config(self.cfg)
+        if g["force_sleep"]:
+            self.say_primary("zzz… (wake me from the Behavior menu)", 4)
+        else:
+            for c in self.cats:
+                c.sleep_at = time.time() + g["sleep_seconds"]
+                c.state = IDLE
+            self.say_primary("mrrp! I'm awake 🐾", 3)
+
     def toggle_sounds(self):
         g = self.cfg["global"]
         g["sounds"] = not g.get("sounds", True)
@@ -1096,6 +1109,11 @@ class CatWindow(QWidget):
         doctor = QAction("Scroll doctor (5s live test)", menu)
         doctor.triggered.connect(mgr.scroll_doctor)
         beh.addAction(doctor)
+        slp = QAction("Deep sleep (don't wake up) 💤", menu)
+        slp.setCheckable(True)
+        slp.setChecked(self.gcfg.get("force_sleep", False))
+        slp.triggered.connect(mgr.toggle_force_sleep)
+        beh.addAction(slp)
         snd = QAction("Meow sounds", menu)
         snd.setCheckable(True)
         snd.setChecked(self.gcfg.get("sounds", True))
@@ -1256,7 +1274,7 @@ class CatWindow(QWidget):
                 self.manual_peek = True
         if dist_moved > 2 or inputs.typing(1.2):
             self.sleep_at = now + self.gcfg["sleep_seconds"]
-            if self.state == SLEEP:
+            if self.state == SLEEP and not self.gcfg.get("force_sleep"):
                 self.state = IDLE
                 self.say("mrrp?", 1.5)
         self.prev_cursor = cur
@@ -1295,6 +1313,22 @@ class CatWindow(QWidget):
 
         if self.glide_target is not None:
             self._glide_step(dt)
+
+        # deep sleep: stays asleep no matter what, until toggled off
+        if self.gcfg.get("force_sleep"):
+            if self.peeking:
+                self._unpeek(cancel=False)
+            self.state = SLEEP
+            if now > self.next_zzz and len(self.zzz) < 3:
+                self.next_zzz = now + 1.4
+                r = self.cat_rect()
+                self.zzz.append({"x": r.center().x() + 20, "y": r.top() + 10,
+                                 "vy": 0.7, "life": 2.5,
+                                 "seed": random.random() * 6})
+            self.wobble *= 0.92
+            self.mochi += (1.0 - self.mochi) * 0.35
+            self.update()
+            return
 
         want_peek = self.manual_peek or mgr.fullscreen_active
         typing_now = inputs.typing(0.45 if self.knead_hyst else 0.35)
@@ -1536,7 +1570,8 @@ class CatWindow(QWidget):
                         "seed": random.random() * 6})
                     if random.random() < 0.3:
                         self.say(random.choice(["purrr…", "prrrp", "♥"]), 1.2)
-                    if self.state == SLEEP:
+                    if self.state == SLEEP \
+                            and not self.gcfg.get("force_sleep"):
                         self.sleep_at = now + self.gcfg["sleep_seconds"]
                         self.state = IDLE
 
