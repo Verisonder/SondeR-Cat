@@ -1,0 +1,109 @@
+# SondeR cat 🐾
+
+A pixel cat that lives on your desktop — for **Windows** and **Linux**.
+Free, open source, no telemetry, no accounts.
+
+![SondeR cats](assets/preview.png)
+
+> Inspired by the lovely [Comnyang](https://comnyang.com/en) (macOS).
+> SondeR cat is an unofficial, from-scratch implementation with its own code
+> and art, for people not on a Mac. If you use macOS, go support the
+> original!
+
+## Features
+
+**Reacts to you**
+- 👀 **Eye follow** — pupils track your cursor anywhere on screen
+- 🔴 **Laser hunt** — wiggle the cursor side-to-side like a laser dot and the cat gallops after it (sensitivity: high / medium / low)
+- 🐾 **Purring pets** — rub its head with the mouse → hearts + "purrr…"
+- 🍡 **Mochi drag** — grab it and it hangs from your cursor by its paws, stretching like mochi as you swing it; shake for wobble
+- 😾 **Startle** — buzz the cursor past it and it jumps
+- ⌨️ **Keyboard kneading** — types along with you on tiny 3D keycaps, stops the moment you do
+- 🔥 **Overheat mode** — type too fast and the whole cat turns red with steam puffing over its head
+- 📜 **Paper unroll** — scroll and it unspools a paper roll with a torn edge
+
+**Being a good coworker**
+- 😴 Naps when you're idle; wakes with a "mrrp?"
+- 📺 **Peek mode** — auto-hides at the bottom edge during fullscreen video; or send it to hide by wiggling your cursor up-down at the bottom of the screen
+- 🧘 **Stretch reminders** — it *grows big* and stretches with you every 30/50/90 min
+- 🍅 **Pomodoro** — focus/break **loops** with a pixel timer floating next to the cat
+- ⏰ **Message reminders** — "Ali, 21:30 'Meeting'" in a red bubble, with a meow
+- 📌 **Pinned note** — keep an important message above its head
+- 🗣️ **Tell it your name** — it calls you by name in reminders and breaks
+
+**AI agent reactions** (Claude Code, Codex CLI, or any command)
+- 🤔 **Thinking along** — thought bubbles + upward gaze while your agent works
+- 🎉 **Agent done jump** — happy hop + meow when the task finishes
+- Hook up via `sonder_agent.py` (wrap any command) or Claude Code hooks — see below
+
+**Make it yours**
+- 🎨 10 fur colors + any custom color, 5 patterns (tabby / solid / tuxedo / spots / siamese)
+- 🐈🐈 **Multiple cats**, each with its own look
+- 📏 7 sizes from tiny 2× to chunky 10×; positions and settings remembered
+
+## Install
+
+**Windows (one click):** download
+[`SondeR_cat_setup.bat`](../../releases/latest) and double-click it.
+It installs everything, creates a Desktop shortcut, offers autostart, and
+launches the cat. (SmartScreen may warn about an unrecognized file —
+*More info → Run anyway*.)
+
+**Windows (from source):** clone/download this repo and run `install.bat`.
+
+**Linux:**
+```bash
+git clone https://github.com/Verisonder/SondeR-Cat.git
+cd SondeR-Cat && ./install.sh
+```
+
+Requires Python 3.9+. Dependencies: PySide6, pynput.
+
+## Hooking up AI agents
+
+The cat watches `~/.sondercat_agent`. Write `working|Label` while an agent
+runs and `done|Label` when it finishes.
+
+Wrap any command:
+```bash
+python sonder_agent.py run "Codex" -- codex "fix the failing tests"
+```
+
+Claude Code hooks (`~/.claude/settings.json`):
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command",
+        "command": "python /path/to/sonder_agent.py working \"Claude Code\"" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command",
+        "command": "python /path/to/sonder_agent.py done \"Claude Code\"" } ] }
+    ]
+  }
+}
+```
+
+Try it instantly: right-click the cat → *AI agent reactions → Test*.
+
+## Troubleshooting
+
+- **Shortcut does nothing** → run `debug.bat` to see the error; crashes are
+  also logged to `sondercat_error.log` in your home folder.
+- **No reaction to scrolling** → right-click → *Behavior → Scroll doctor*
+  runs a 5-second live test and tells you whether global mouse hooks are
+  being blocked (usually antivirus). Scrolling while hovering the cat
+  always works.
+- **Linux/Wayland** — global input hooks are restricted by Wayland; use an
+  X11 session for the full experience.
+
+## Customizing the art
+
+Every animation frame is a plain-text pixel grid in `sprites.py` — one
+character per pixel. Edit frames, add palettes to `PALETTES`, or new pattern
+rules to `apply_pattern()`; the menus update automatically.
+
+## License
+
+[MIT](LICENSE) — do whatever you like, no warranty.
