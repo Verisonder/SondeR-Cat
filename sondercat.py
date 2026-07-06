@@ -54,6 +54,59 @@ def _fatal(title, details):
         sys.stderr.write(msg)
 
 
+LINUX_DEPS_HINT = (
+    "  Debian/Ubuntu:  sudo apt install libxcb-cursor0 libgl1 "
+    "libxkbcommon-x11-0 libegl1\n"
+    "  Fedora:         sudo dnf install xcb-util-cursor libxkbcommon-x11\n"
+    "  Arch:           sudo pacman -S xcb-util-cursor libxkbcommon-x11\n"
+    "  openSUSE:       sudo zypper install libxcb-cursor0 libxkbcommon-x11-0\n"
+    "  Alpine:         sudo apk add xcb-util-cursor mesa-gl libxkbcommon"
+)
+
+
+def _linux_platform_shim():
+    """Make the cat behave the same everywhere:
+    - pure X11: nothing to do (full features)
+    - Wayland WITH XWayland: force Qt onto xcb so window positioning,
+      always-on-top, and cursor tracking keep working
+    - pure Wayland (no XWayland): run natively, warn about limits"""
+    if platform.system() != "Linux":
+        return None
+    if os.environ.get("QT_QPA_PLATFORM"):
+        return "user-set"
+    wayland = (os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+               or bool(os.environ.get("WAYLAND_DISPLAY")))
+    if wayland:
+        if os.environ.get("DISPLAY"):
+            os.environ["QT_QPA_PLATFORM"] = "xcb"     # XWayland bridge
+            return "xwayland"
+        return "wayland"
+    return None
+
+
+def _linux_preflight_warn():
+    """Warn (never block) if display libraries Qt commonly needs look
+    absent — the message lands above Qt's own error if startup fails."""
+    if platform.system() != "Linux":
+        return
+    try:
+        import ctypes.util
+        if ctypes.util.find_library("c") is None:
+            return                       # ldconfig unusable (e.g. musl)
+        missing = [n for n in ("xcb-cursor", "xkbcommon-x11")
+                   if ctypes.util.find_library(n) is None]
+        if missing:
+            sys.stderr.write(
+                "[SondeR cat] Heads-up: system libraries possibly missing: "
+                + ", ".join(missing) + "\nIf the window fails to open, "
+                "install them:\n" + LINUX_DEPS_HINT + "\n")
+    except Exception:
+        pass
+
+
+PLATFORM_NOTE = _linux_platform_shim()
+_linux_preflight_warn()
+
 try:
     from PySide6.QtCore import (Qt, QTimer, QObject, QPoint, QPointF, QRect,
                             Signal)
@@ -65,8 +118,9 @@ try:
                                    QWidget)
 except Exception:
     _fatal("PySide6 (the GUI library) isn't installed correctly.",
-           "Fix: run install.bat again (Windows) or ./install.sh (Linux).\n\n"
-           + traceback.format_exc())
+           "Fix: run install.bat again (Windows) or ./install.sh (Linux).\n"
+           "On Linux, also make sure system display libraries exist:\n"
+           + LINUX_DEPS_HINT + "\n\n" + traceback.format_exc())
     sys.exit(1)
 
 try:
@@ -1738,7 +1792,11 @@ def main():
     if os.path.exists(ico):
         app.setWindowIcon(QIcon(ico))
     mgr = Manager(app)
-    mgr.say_primary("nyang! 🐾", 3)
+    if PLATFORM_NOTE == "wayland":
+        mgr.say_primary("Pure Wayland session: some tricks are limited — "
+                        "an X11/Xorg login gives me superpowers!", 8)
+    else:
+        mgr.say_primary("nyang! 🐾", 3)
     sys.exit(app.exec())
 
 

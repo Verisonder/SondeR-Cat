@@ -44,8 +44,7 @@ Free, open source, no telemetry, no accounts.
 ## Install
 
 **Windows (one click):** download
-[`SondeR_cat_setup.bat`](https://github.com/Verisonder/SondeR-Cat/raw/main/SondeR_cat_setup.bat)
-and double-click it.
+[`SondeR_cat_setup.bat`](../../releases/latest) and double-click it.
 It installs everything, creates a Desktop shortcut, offers autostart, and
 launches the cat. (SmartScreen may warn about an unrecognized file —
 *More info → Run anyway*.)
@@ -54,8 +53,8 @@ launches the cat. (SmartScreen may warn about an unrecognized file —
 
 **Linux:**
 ```bash
-git clone https://github.com/Verisonder/SondeR-Cat.git
-cd SondeR-Cat && ./install.sh
+git clone https://github.com/Verisonder/sondercat.git
+cd sondercat && ./install.sh
 ```
 
 Requires Python 3.9+. Dependencies: PySide6, pynput.
@@ -88,6 +87,29 @@ Claude Code hooks (`~/.claude/settings.json`):
 
 Try it instantly: right-click the cat → *AI agent reactions → Test*.
 
+## Linux support
+
+| Environment | Status |
+|---|---|
+| **X11 / Xorg** (any distro) | ✅ Everything works |
+| **Wayland with XWayland** (default on Ubuntu, Fedora, etc.) | ✅ Auto-detected — the cat routes itself through XWayland for full features |
+| **Pure Wayland** (no XWayland) | ⚠️ Runs, but global cursor tracking / hooks / self-positioning are restricted by Wayland's security model — the cat tells you at startup |
+| **GNOME** | ✅ Note: GNOME hides system trays — just right-click the *cat* for the full menu |
+
+Tested package managers: **apt** (Debian/Ubuntu/Mint), **dnf** (Fedora),
+**pacman** (Arch), **zypper** (openSUSE), **apk** (Alpine). `install.sh`
+detects yours, checks for the Qt system libraries (`xcb-cursor`,
+`xkbcommon-x11`, GL), and offers to install anything missing with the right
+command for your distro. If the window ever fails to open:
+
+```bash
+# Debian/Ubuntu        sudo apt install libxcb-cursor0 libgl1 libxkbcommon-x11-0 libegl1
+# Fedora               sudo dnf install xcb-util-cursor libxkbcommon-x11
+# Arch                 sudo pacman -S xcb-util-cursor libxkbcommon-x11
+# openSUSE             sudo zypper install libxcb-cursor0 libxkbcommon-x11-0
+# Alpine               sudo apk add xcb-util-cursor mesa-gl libxkbcommon
+```
+
 ## Troubleshooting
 
 - **Shortcut does nothing** → run `debug.bat` to see the error; crashes are
@@ -96,8 +118,9 @@ Try it instantly: right-click the cat → *AI agent reactions → Test*.
   runs a 5-second live test and tells you whether global mouse hooks are
   being blocked (usually antivirus). Scrolling while hovering the cat
   always works.
-- **Linux/Wayland** — global input hooks are restricted by Wayland; use an
-  X11 session for the full experience.
+- **Linux** — see the support matrix above; `install.sh` diagnoses most
+  issues, and the app prints exact package commands if display libraries
+  are missing.
 
 ## Customizing the art
 
