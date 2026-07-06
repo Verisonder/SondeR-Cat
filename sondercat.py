@@ -773,7 +773,7 @@ class Manager(QObject):
         g["force_sleep"] = not g.get("force_sleep", False)
         save_config(self.cfg)
         if g["force_sleep"]:
-            self.say_primary("zzz… (wake me from the Behavior menu)", 4)
+            self.say_primary("zzz… (untick Deep sleep 💤 in my menu)", 4)
         else:
             for c in self.cats:
                 c.sleep_at = time.time() + g["sleep_seconds"]
@@ -1332,7 +1332,7 @@ class CatWindow(QWidget):
             return
 
         want_peek = self.manual_peek or mgr.fullscreen_active
-        typing_now = inputs.typing(0.45 if self.knead_hyst else 0.35)
+        typing_now = inputs.typing(0.30 if self.knead_hyst else 0.25)
         self.knead_hyst = typing_now
         overheat = (inputs.keys_per_sec() > 5.5 and typing_now)
 
