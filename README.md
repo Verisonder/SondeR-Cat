@@ -44,7 +44,8 @@ Free, open source, no telemetry, no accounts.
 ## Install
 
 **Windows (one click):** download
-[`SondeR_cat_setup.bat`](../../releases/latest) and double-click it.
+[`SondeR_cat_setup.bat`](https://github.com/Verisonder/SondeR-Cat/raw/main/SondeR_cat_setup.bat)
+and double-click it.
 It installs everything, creates a Desktop shortcut, offers autostart, and
 launches the cat. (SmartScreen may warn about an unrecognized file —
 *More info → Run anyway*.)
