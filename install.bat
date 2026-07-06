@@ -106,7 +106,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$s.TargetPath = '%VPYW%';" ^
   "$s.Arguments = 'sondercat.py';" ^
   "$s.WorkingDirectory = '%BASE%';" ^
-  "$s.IconLocation = '%BASE%cat.ico';" ^
+  "$s.IconLocation = '%BASE%sondercat.ico';" ^
   "$s.Description = 'A pixel cat for your desktop';" ^
   "$s.Save()"
 
@@ -118,7 +118,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$s.TargetPath = '%VPYW%';" ^
   "$s.Arguments = 'sondercat.py';" ^
   "$s.WorkingDirectory = '%BASE%';" ^
-  "$s.IconLocation = '%BASE%cat.ico';" ^
+  "$s.IconLocation = '%BASE%sondercat.ico';" ^
   "$s.Save()"
 echo Autostart enabled.
 :skipstartup

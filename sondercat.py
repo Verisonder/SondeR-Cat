@@ -1788,7 +1788,7 @@ class CatWindow(QWidget):
 def main():
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    ico = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cat.ico")
+    ico = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sondercat.ico")
     if os.path.exists(ico):
         app.setWindowIcon(QIcon(ico))
     mgr = Manager(app)
