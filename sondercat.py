@@ -145,7 +145,7 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "1.6.0"
+APP_VERSION = "2.1.0"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1154,6 +1154,8 @@ class CatWindow(QWidget):
         self.perch_until = 0.0
         self.perch_home = None
         self.next_perch_try = time.time() + random.uniform(120, 360)
+        self.perch_nap_until = 0.0
+        self._force_nap_next = False
         self.wobble = 0.0
         self._last_drag_x = 0
         self._last_drag_dir = 0
@@ -1425,6 +1427,11 @@ class CatWindow(QWidget):
         wtest.triggered.connect(
             lambda _=False: mgr.primary().try_perch(announce=True))
         tst.addAction(wtest)
+        wnap = QAction("Nap on a window 💤🪟", menu)
+        wnap.triggered.connect(
+            lambda _=False: mgr.primary().try_perch(announce=True,
+                                                    force_nap=True))
+        tst.addAction(wnap)
         tst.addSeparator()
         doctor = QAction("Scroll doctor (5s live test)", menu)
         doctor.triggered.connect(mgr.scroll_doctor)
@@ -1553,7 +1560,8 @@ class CatWindow(QWidget):
                 self.manual_peek = True
         if dist_moved > 2 or inputs.typing(1.2):
             self.sleep_at = now + self.gcfg["sleep_seconds"]
-            if self.state == SLEEP and not self.gcfg.get("force_sleep"):
+            if self.state == SLEEP and not self.gcfg.get("force_sleep") \
+                    and now >= self.perch_nap_until:
                 self.state = IDLE
                 self.say("mrrp?", 1.5)
         self.prev_cursor = cur
@@ -1723,6 +1731,14 @@ class CatWindow(QWidget):
             if not self.peeking:
                 self._peek()
             self.state = PEEK
+        elif now < self.perch_nap_until:
+            self.state = SLEEP
+            if now > self.next_zzz and len(self.zzz) < 3:
+                self.next_zzz = now + 1.4
+                r = self.cat_rect()
+                self.zzz.append({"x": r.center().x() + 20, "y": r.top() + 10,
+                                 "vy": 0.7, "life": 2.5,
+                                 "seed": random.random() * 6})
         elif mgr.agent_working:
             self.state = THINK
             if self.index == 0 and now > self.next_think_bubble:
@@ -1909,7 +1925,8 @@ class CatWindow(QWidget):
                     if random.random() < 0.3:
                         self.say(random.choice(["purrr…", "prrrp", "♥"]), 1.2)
                     if self.state == SLEEP \
-                            and not self.gcfg.get("force_sleep"):
+                            and not self.gcfg.get("force_sleep") \
+                            and now >= self.perch_nap_until:
                         self.sleep_at = now + self.gcfg["sleep_seconds"]
                         self.state = IDLE
 
@@ -1998,7 +2015,8 @@ class CatWindow(QWidget):
         except Exception:
             return "gone"
 
-    def try_perch(self, announce=False):
+    def try_perch(self, announce=False, force_nap=False):
+        self._force_nap_next = force_nap
         targets = self._perch_targets()
         if not targets:
             if announce:
@@ -2025,7 +2043,13 @@ class CatWindow(QWidget):
             self.perch_hwnd = self.perch_pending
             self.perch_pending = None
             self.perch_until = now + random.uniform(60, 180)
-            if random.random() < 0.5:
+            if self._force_nap_next or random.random() < 0.4:
+                self._force_nap_next = False
+                self.perch_nap_until = now + random.uniform(45, 120)
+                self.perch_until = max(self.perch_until,
+                                       self.perch_nap_until + 8)
+                self.yawn_until = now + 0.9
+            elif random.random() < 0.5:
                 self.say(random.choice(["nice view up here", "mine now.",
                                         "🪟🐾"]), 2.5)
         if self.perch_hwnd is None:
@@ -2033,6 +2057,9 @@ class CatWindow(QWidget):
         q = self._perch_query(self.perch_hwnd)
         if q == "minimized" or q == "gone":
             self._end_perch(go_home=False)   # just stands where it is
+            if now >= self.perch_nap_until and random.random() < 0.5:
+                self.perch_nap_until = now + random.uniform(40, 90)
+                self.yawn_until = now + 0.9
             self.next_perch_try = now + random.uniform(180, 420)
             return
         _, (l, t, r, b) = q
