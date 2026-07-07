@@ -1660,6 +1660,20 @@ class CatWindow(QWidget):
             self.update()
             return
 
+        # window nap: sleeping on (or where it was left by) a window
+        if now < self.perch_nap_until:
+            self.state = SLEEP
+            if now > self.next_zzz and len(self.zzz) < 3:
+                self.next_zzz = now + 1.4
+                r = self.cat_rect()
+                self.zzz.append({"x": r.center().x() + 20, "y": r.top() + 10,
+                                 "vy": 0.7, "life": 2.5,
+                                 "seed": random.random() * 6})
+            self.wobble *= 0.92
+            self.mochi += (1.0 - self.mochi) * 0.35
+            self.update()
+            return
+
         want_peek = self.manual_peek or mgr.fullscreen_active
         typing_now = inputs.typing(0.30 if self.knead_hyst else 0.25)
         self.knead_hyst = typing_now
@@ -1731,14 +1745,6 @@ class CatWindow(QWidget):
             if not self.peeking:
                 self._peek()
             self.state = PEEK
-        elif now < self.perch_nap_until:
-            self.state = SLEEP
-            if now > self.next_zzz and len(self.zzz) < 3:
-                self.next_zzz = now + 1.4
-                r = self.cat_rect()
-                self.zzz.append({"x": r.center().x() + 20, "y": r.top() + 10,
-                                 "vy": 0.7, "life": 2.5,
-                                 "seed": random.random() * 6})
         elif mgr.agent_working:
             self.state = THINK
             if self.index == 0 and now > self.next_think_bubble:
