@@ -28,7 +28,6 @@
 
 #define PY_URL  L"https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe"
 
-static const unsigned char MAGIC[8] = {'S','N','D','R','C','A','T','1'};
 static HWND g_wnd, g_bar, g_label;
 static HFONT g_font;
 static volatile LONG g_busy = 1;
@@ -132,6 +131,20 @@ static int find_python(void)
 static void ensure_python(void)
 {
     if (find_python()) { logline("python found"); return; }
+    /* preferred: Windows' own package manager (trusted, silent) */
+    wchar_t wg[MAX_PATH];
+    if (SearchPathW(NULL, L"winget.exe", NULL, MAX_PATH, wg, NULL)) {
+        status(L"Installing Python via Windows' package manager\u2026");
+        bar(-1);
+        wchar_t c[640];
+        _snwprintf(c, 640,
+            L"\"%s\" install -e --id Python.Python.3.12 --silent "
+            L"--scope user --accept-package-agreements "
+            L"--accept-source-agreements", wg);
+        run_hidden(wg, c, 15 * 60 * 1000);
+        logline("winget attempted");
+        if (find_python()) return;
+    }
     status(L"Downloading Python 3.12 (about 25 MB, one time)\u2026");
     bar(-1);
     wchar_t tmp[MAX_PATH], inst[MAX_PATH];
@@ -183,24 +196,16 @@ static void make_shortcut(int csidl, const wchar_t *pythonw)
 /* ------------------------------------------------------------ worker ----- */
 static DWORD WINAPI worker(LPVOID arg)
 {
-    /* 1. unpack embedded payload */
+    /* 1. unpack embedded payload (RCDATA resource) */
     status(L"Unpacking SondeR cat\u2026");
-    wchar_t self[MAX_PATH];
-    GetModuleFileNameW(NULL, self, MAX_PATH);
-    FILE *f = _wfopen(self, L"rb");
-    if (!f) fail(L"Couldn't read the installer file.");
-    fseek(f, 0, SEEK_END);
-    long fsize = ftell(f);
-    rewind(f);
-    unsigned char *whole = malloc((size_t)fsize);
-    if (!whole || fread(whole, 1, fsize, f) != (size_t)fsize)
-        fail(L"Couldn't read the installer file.");
-    fclose(f);
-    if (fsize < 16 || memcmp(whole + fsize - 8, MAGIC, 8) != 0)
+    HRSRC rc = FindResourceW(NULL, MAKEINTRESOURCEW(2),
+                             (LPCWSTR)RT_RCDATA);
+    if (!rc) fail(L"This download looks damaged \u2014 please re-download it.");
+    DWORD zsize = SizeofResource(NULL, rc);
+    const unsigned char *zipb =
+        (const unsigned char *)LockResource(LoadResource(NULL, rc));
+    if (!zipb || !zsize)
         fail(L"This download looks damaged \u2014 please re-download it.");
-    unsigned long long zsize = 0;
-    memcpy(&zsize, whole + fsize - 16, 8);
-    const unsigned char *zipb = whole + fsize - 16 - zsize;
 
     CreateDirectoryW(g_dest, NULL);
     CreateDirectoryW(g_app, NULL);
@@ -232,7 +237,6 @@ static DWORD WINAPI worker(LPVOID arg)
         bar((i + 1) * 100 / n);
     }
     mz_zip_reader_end(&za);
-    free(whole);
     logline("unpacked");
 
     /* 2. python */

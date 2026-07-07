@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Rebuild SondeR_cat_setup.exe: compiled setup_stub.exe + zip payload.
-Cross-compile the stub first (Linux):
-  x86_64-w64-mingw32-gcc -municode -mwindows -Os -s -static \
-      -o setup_stub.exe setup_stub.c miniz/miniz.c miniz/miniz_zip.c \
-      miniz/miniz_tinfl.c miniz/miniz_tdef.c -I miniz -luser32 -lshell32
+"""Build SondeR_cat_setup.exe: payload as an RCDATA resource (no overlay).
+Needs mingw-w64:  apt install gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
+and miniz sources in ./miniz or /home/claude/miniz-master.
 """
-import io, zipfile, struct
+import io, zipfile, subprocess, os, sys
 
 FILES = ["sondercat.py", "sprites.py", "sonder_agent.py", "requirements.txt",
          "install.bat", "debug.bat", "run.bat", "run.sh", "install.sh",
@@ -14,8 +12,17 @@ buf = io.BytesIO()
 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
     for f in FILES:
         z.write(f, f"sondercat/{f}")
-zdata = buf.getvalue()
-stub = open("setup_stub.exe", "rb").read()
-open("SondeR_cat_setup.exe", "wb").write(
-    stub + zdata + struct.pack("<Q", len(zdata)) + b"SNDRCAT1")
-print("built SondeR_cat_setup.exe")
+open("payload.zip", "wb").write(buf.getvalue())
+
+mz = "miniz" if os.path.isdir("miniz") else "/home/claude/miniz-master"
+subprocess.check_call(["x86_64-w64-mingw32-windres", "setup_stub.rc",
+                       "-O", "coff", "-o", "setup_stub_res.o"])
+subprocess.check_call(["x86_64-w64-mingw32-gcc", "-municode", "-mwindows",
+    "-Os", "-s", "-static", "-o", "SondeR_cat_setup.exe",
+    "setup_stub.c", "setup_stub_res.o",
+    f"{mz}/miniz.c", f"{mz}/miniz_zip.c", f"{mz}/miniz_tinfl.c",
+    f"{mz}/miniz_tdef.c", "-I", mz,
+    "-luser32", "-lshell32", "-lcomctl32", "-lole32", "-luuid",
+    "-lurlmon", "-ladvapi32"])
+os.remove("payload.zip")
+print("built SondeR_cat_setup.exe (resource payload)")
