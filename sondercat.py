@@ -160,10 +160,11 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "name": "", "pinned": "", "reminders": [], "sounds": True, "laser_only": True, "wiggle_hide": True,
                    "wiggle_sens": "medium",
                    "force_sleep": False, "watch_sprites": False,
-                   "window_perch": True, "auto_update": True}
+                   "window_perch": True, "auto_update": True,
+                   "dance_music": True}
 
 (IDLE, KNEAD, SLEEP, CHASE, DRAG, STRETCH,
- OVERHEAT, SCROLLPLAY, PEEK, THINK) = range(10)
+ OVERHEAT, SCROLLPLAY, PEEK, THINK, DANCE) = range(11)
 
 
 # ----------------------------------------------------------------- config ----
@@ -625,6 +626,83 @@ class _InputBridge(QObject):
     poked = Signal()
 
 
+class _AudioMeter:
+    """System output level 0..1 via WASAPI IAudioMeterInformation."""
+    def __init__(self):
+        self._meter = None
+        self._dead_until = 0.0
+
+    def _init_com(self):
+        import ctypes
+        from ctypes import POINTER, byref, c_void_p, c_float, c_uint
+
+        class GUID(ctypes.Structure):
+            _fields_ = [("d1", ctypes.c_uint32), ("d2", ctypes.c_uint16),
+                        ("d3", ctypes.c_uint16), ("d4", ctypes.c_ubyte * 8)]
+
+        def guid(txt):
+            g = GUID()
+            ole = ctypes.windll.ole32
+            ole.CLSIDFromString(ctypes.c_wchar_p(txt), byref(g))
+            return g
+
+        ole = ctypes.windll.ole32
+        ole.CoInitialize(None)
+        CLSID_ENUM = guid("{BCDE0395-E52F-467C-8E3D-C4579291692E}")
+        IID_ENUM = guid("{A95664D2-9614-4F35-A746-DE8DB63617E6}")
+        IID_METER = guid("{C02216F6-8C67-4B5B-9D00-D008E73E0064}")
+        enum = c_void_p()
+        if ole.CoCreateInstance(byref(CLSID_ENUM), None, 1,
+                                byref(IID_ENUM), byref(enum)) != 0:
+            raise OSError("no device enumerator")
+
+        def vtbl(obj, idx, restype, *argtypes):
+            vt = ctypes.cast(obj, POINTER(POINTER(c_void_p)))[0]
+            fn = ctypes.WINFUNCTYPE(restype, c_void_p, *argtypes)(vt[idx])
+            return fn
+
+        # IMMDeviceEnumerator::GetDefaultAudioEndpoint(eRender, eConsole)
+        get_ep = vtbl(enum, 4, ctypes.c_long, c_uint, c_uint,
+                      POINTER(c_void_p))
+        dev = c_void_p()
+        if get_ep(enum, 0, 0, byref(dev)) != 0:
+            raise OSError("no default endpoint")
+        # IMMDevice::Activate(iid, CLSCTX_ALL, NULL, &meter)
+        activate = vtbl(dev, 3, ctypes.c_long, POINTER(GUID), c_uint,
+                        c_void_p, POINTER(c_void_p))
+        meter = c_void_p()
+        if activate(dev, byref(IID_METER), 23, None, byref(meter)) != 0:
+            raise OSError("no meter")
+        # IAudioMeterInformation::GetPeakValue(&float)
+        self._peak_fn = vtbl(meter, 3, ctypes.c_long,
+                             POINTER(c_float))
+        self._meter = meter
+        self._c_float = c_float
+        self._byref = byref
+
+    def peak(self):
+        if platform.system() != "Windows":
+            return 0.0
+        now = time.time()
+        if self._meter is None:
+            if now < self._dead_until:
+                return 0.0
+            try:
+                self._init_com()
+            except Exception:
+                self._dead_until = now + 30
+                return 0.0
+        try:
+            v = self._c_float(0.0)
+            if self._peak_fn(self._meter, self._byref(v)) != 0:
+                raise OSError
+            return max(0.0, min(1.0, v.value))
+        except Exception:
+            self._meter = None          # device changed: re-init later
+            self._dead_until = now + 5
+            return 0.0
+
+
 class _CallBridge(QObject):
     """Marshal callables from worker threads onto the GUI thread."""
     call = Signal(object)
@@ -646,6 +724,12 @@ class Manager(QObject):
         self.first_run = not os.path.exists(CONFIG_PATH)
         self._call_bridge = _CallBridge()
         QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
+        self._audio = _AudioMeter()
+        self._music_hist = deque(maxlen=24)
+        self.music_on = False
+        self._music_timer = QTimer()
+        self._music_timer.timeout.connect(self._poll_music)
+        self._music_timer.start(120)
         self._auto_timer = QTimer()
         self._auto_timer.timeout.connect(
             lambda: self.check_updates(manual=False))
@@ -1151,6 +1235,25 @@ class Manager(QObject):
         self.say_primary("I only hunt wiggles now!" if g["laser_only"]
                          else "I'll chase any fast cursor!", 2.5)
 
+    def _poll_music(self):
+        if not self.cfg["global"].get("dance_music", True):
+            self.music_on = False
+            return
+        self._music_hist.append(self._audio.peak())
+        h = list(self._music_hist)
+        if len(h) < 12:
+            return
+        loud = sum(1 for v in h if v > 0.015)
+        if not self.music_on and loud >= int(len(h) * 0.7):
+            self.music_on = True
+        elif self.music_on and loud <= int(len(h) * 0.15):
+            self.music_on = False
+
+    def toggle_dance_music(self):
+        g = self.cfg["global"]
+        g["dance_music"] = not g.get("dance_music", True)
+        save_config(self.cfg)
+
     def toggle_auto_update(self):
         g = self.cfg["global"]
         g["auto_update"] = not g.get("auto_update", True)
@@ -1287,6 +1390,8 @@ class CatWindow(QWidget):
         self.next_blink = time.time() + random.uniform(2, 6)
         self.sleep_at = time.time() + self.gcfg["sleep_seconds"]
         self.zzz, self.hearts, self.steam = [], [], []
+        self.notes = []
+        self.next_note = 0.0
         self.pet_accum = 0.0
         self.last_pet_heart = 0.0
         self.bubble_text = ""
@@ -1569,6 +1674,11 @@ class CatWindow(QWidget):
         prc.setChecked(self.gcfg.get("window_perch", True))
         prc.triggered.connect(mgr.toggle_window_perch)
         beh.addAction(prc)
+        dnc = QAction("Dance to music 🎧", menu)
+        dnc.setCheckable(True)
+        dnc.setChecked(self.gcfg.get("dance_music", True))
+        dnc.triggered.connect(mgr.toggle_dance_music)
+        beh.addAction(dnc)
         aup = QAction("Install updates automatically ⤓", menu)
         aup.setCheckable(True)
         aup.setChecked(self.gcfg.get("auto_update", True))
@@ -1643,7 +1753,8 @@ class CatWindow(QWidget):
                             ("Running", "run"),
                             ("Stretch", "stretch"),
                             ("Dangle (hanging)", "dangle"),
-                            ("Peek pose", "peek")):
+                            ("Peek pose", "peek"),
+                            ("Dance 🎧", "dance")):
             act = QAction(label, menu)
             act.triggered.connect(
                 lambda _=False, k=kind: mgr.start_anim_test(k))
@@ -1812,6 +1923,11 @@ class CatWindow(QWidget):
         self.hearts = [p for p in self.hearts if p["life"] > 0]
         self.zzz = [p for p in self.zzz if p["life"] > 0]
         self.steam = [p for p in self.steam if p["life"] > 0]
+        for p in self.notes:
+            p["y"] -= p["vy"]
+            p["x"] += math.sin(time.time() * 3 + p["seed"]) * 0.6
+            p["life"] -= 0.016
+        self.notes = [p for p in self.notes if p["life"] > 0]
 
         # --- drag: follow the cursor from the tick too, so the cat never
         #     falls behind even when mouse events are missed ---
@@ -1848,6 +1964,7 @@ class CatWindow(QWidget):
             if now < t["until"]:
                 kind = t["kind"]
                 self.state = {"blink": IDLE, "groom": IDLE,
+                              "dance": DANCE,
                               "knead": KNEAD, "overheat": OVERHEAT,
                               "sleep": SLEEP, "run": CHASE,
                               "stretch": STRETCH, "dangle": DRAG,
@@ -1864,6 +1981,14 @@ class CatWindow(QWidget):
                                          "y": r.top() + 10, "vy": 0.7,
                                          "life": 2.5,
                                          "seed": random.random() * 6})
+                elif kind == "dance":
+                    if now > self.next_note and len(self.notes) < 4:
+                        self.next_note = now + random.uniform(0.5, 1.1)
+                        r = self.cat_rect()
+                        self.notes.append({
+                            "x": r.center().x() + random.randint(-14, 22),
+                            "y": r.top() + 4, "vy": 0.9, "life": 2.2,
+                            "seed": random.random() * 6})
                 elif kind == "overheat" and random.random() < 0.25:
                     r = self.cat_rect()
                     self.steam.append({
@@ -1992,6 +2117,15 @@ class CatWindow(QWidget):
                 self.next_think_bubble = now + random.uniform(6, 12)
                 self.say(random.choice(["…", "thinking along…", "hmmm",
                                         f"go {mgr.agent_label}!"]), 1.8)
+        elif mgr.music_on and self.gcfg.get("dance_music", True):
+            self.state = DANCE
+            if now > self.next_note and len(self.notes) < 4:
+                self.next_note = now + random.uniform(0.5, 1.1)
+                r = self.cat_rect()
+                self.notes.append({
+                    "x": r.center().x() + random.randint(-14, 22),
+                    "y": r.top() + 4, "vy": 0.9, "life": 2.2,
+                    "seed": random.random() * 6})
         elif now > self.sleep_at:
             if self.state != SLEEP:
                 self.yawn_until = now + 0.9
@@ -2544,6 +2678,8 @@ class CatWindow(QWidget):
             if getattr(self, "glide_speed", 1100) <= 600:
                 return "run_a" if int(now / 0.34) % 2 else "run_b"
             return "run_a" if fast else "run_b"
+        if self.state == DANCE:
+            return "sit_a" if int(now / 0.24) % 2 else "sit_b"
         if self.state == SLEEP:
             if now < self.yawn_until:
                 return "yawn"
@@ -2615,6 +2751,20 @@ class CatWindow(QWidget):
             ew_x, ew_y = sprites.EYE_W * s, sprites.EYE_H * s
             pw = 2 * s                     # pupil size (px)
             pp = QPainter(img)
+            if self.state == DANCE:
+                dark = QColor("#2a2a33")
+                lite = QColor("#7d7d94")
+                band = [(6, 4), (7, 3), (8, 3), (9, 2), (10, 2), (11, 2),
+                        (12, 2), (13, 2), (14, 2), (15, 2), (16, 3),
+                        (17, 3), (18, 4)]
+                cups = [(cx, cy) for cy in range(7, 11)
+                        for cx in (2, 3, 22, 23)]
+                for (hx, hy) in band + cups:
+                    fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
+                    pp.fillRect(fx * s, hy * s, s, s, dark)
+                for (hx, hy) in ((3, 8), (22, 8), (6, 4), (18, 4)):
+                    fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
+                    pp.fillRect(fx * s, hy * s, s, s, lite)
             for (ex, ey) in eyes:
                 bx, by = ex * s, ey * s
                 px = max(bx, min(bx + offx + (ew_x - pw) // 2, bx + ew_x - pw))
@@ -2649,6 +2799,13 @@ class CatWindow(QWidget):
             tw_ = int(r.width() / (m ** 0.5))
             tx = r.center().x() - tw_ // 2
             ty = r.top() + jy
+        elif self.state == DANCE:            # groove: bounce + sway
+            ph = math.sin(time.time() * 2 * math.pi * 1.9)
+            th_ = int(r.height() * (0.955 + 0.045 * ph))
+            tw_ = int(r.width() * (1.0 + 0.05 * (1.0 - th_ / r.height())))
+            tx = r.center().x() - tw_ // 2 \
+                + int(math.sin(time.time() * 2 * math.pi * 0.95) * s * 0.8)
+            ty = r.top() + jy + (r.height() - th_)
         elif self.state == STRETCH:          # reach up: taller, feet planted
             th_ = int(r.height() * 1.14)
             tw_ = int(r.width() * 0.96)
@@ -2731,6 +2888,12 @@ class CatWindow(QWidget):
             col.setAlphaF(max(0.0, min(1.0, z["life"] / 2)))
             p.setPen(col)
             p.drawText(QPointF(z["x"], z["y"]), "z")
+        for nt in self.notes:                      # floating music notes
+            col = QColor("#b48ae0")
+            col.setAlphaF(max(0.0, min(1.0, nt["life"])))
+            p.setPen(col)
+            p.drawText(QPointF(nt["x"], nt["y"]),
+                       "♪" if int(nt["seed"] * 7) % 2 else "♫")
         p.setPen(Qt.NoPen)
         for st in self.steam:                      # rising steam puffs
             grow_p = 1.0 - max(0.0, min(1.0, st["life"]))
