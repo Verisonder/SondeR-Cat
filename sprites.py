@@ -578,6 +578,9 @@ SIT_A_REF = SIT_A
 SIT_A = SIT_A                   # tray icon uses this
 
 PALETTES = {
+    "lilly": {"B": "#efa75a", "S": "#d8853a", "W": "#f7f2e8",
+              "K": "#503219", "E": "#f8f8f4", "N": "#e78a8a",
+              "M": "#503219", "Z": "#f2b8ac", "P": "#3c5240"},
     "orange tabby": {"B": "#e8963c", "S": "#c9752a", "W": "#f6ead8", "K": "#4a2f1a",
                      "E": "#f8f8f4", "N": "#e06a7c", "M": "#4a2f1a", "Z": "#eeb0a0", "P": "#2c3138"},
     "gray":         {"B": "#8b8f98", "S": "#6e727c", "W": "#e8e8ea", "K": "#33353b",
@@ -607,7 +610,7 @@ OVERHEAT_PALETTE = {
     "E": "#fdf3f1", "N": "#a41d10", "M": "#8e1a0c", "Z": "#ff9a8c", "P": "#54100a",
 }
 
-PATTERNS = ["tabby", "solid", "tuxedo", "spots", "siamese"]
+PATTERNS = ["tabby", "solid", "tuxedo", "spots", "siamese", "lilly"]
 
 
 def _spot_hash(x, y):
@@ -637,6 +640,13 @@ def apply_pattern(grid, pattern):
                 if c == "B" and y >= int(h * 0.55) and w * 0.30 <= x <= w * 0.70:
                     c = "W"
                 if c == "B" and h * 0.36 <= y <= h * 0.46 and w * 0.36 <= x <= w * 0.64:
+                    c = "W"
+            elif pattern == "lilly":
+                if c == "B" and y >= int(h * 0.52) \
+                        and w * 0.28 <= x <= w * 0.72:
+                    c = "W"
+                if c == "B" and h * 0.36 <= y <= h * 0.47 \
+                        and w * 0.36 <= x <= w * 0.64:
                     c = "W"
             elif pattern == "siamese":
                 if c == "S":

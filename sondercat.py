@@ -1616,11 +1616,14 @@ class CatWindow(QWidget):
     def set_palette(self, name):
         self.ccfg["palette"] = name
         self.ccfg["custom_body"] = None
+        if name == "lilly":
+            self.ccfg["pattern"] = "lilly"   # her signature white chest
         save_config(self.mgr.cfg)
         self._frame_cache = {}
         if self.index == 0:
             self.mgr._make_tray()
-        self.say(f"New fur: {name}!")
+        self.say("Lilly! 🧡" if name == "lilly"
+                 else f"New fur: {name}!")
 
     def set_pattern(self, name):
         self.ccfg["pattern"] = name
