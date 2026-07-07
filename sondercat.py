@@ -159,7 +159,8 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "auto_peek": True, "chase_enabled": True,
                    "name": "", "pinned": "", "reminders": [], "sounds": True, "laser_only": True, "wiggle_hide": True,
                    "wiggle_sens": "medium",
-                   "force_sleep": False, "watch_sprites": False}
+                   "force_sleep": False, "watch_sprites": False,
+                   "window_perch": True}
 
 (IDLE, KNEAD, SLEEP, CHASE, DRAG, STRETCH,
  OVERHEAT, SCROLLPLAY, PEEK, THINK) = range(10)
@@ -990,6 +991,15 @@ class Manager(QObject):
         self.say_primary("I only hunt wiggles now!" if g["laser_only"]
                          else "I'll chase any fast cursor!", 2.5)
 
+    def toggle_window_perch(self):
+        g = self.cfg["global"]
+        g["window_perch"] = not g.get("window_perch", True)
+        save_config(self.cfg)
+        if not g["window_perch"]:
+            for c in self.cats:
+                if c.perch_hwnd is not None or c.perch_pending is not None:
+                    c._end_perch(go_home=True)
+
     def toggle_force_sleep(self):
         g = self.cfg["global"]
         g["force_sleep"] = not g.get("force_sleep", False)
@@ -1138,6 +1148,12 @@ class CatWindow(QWidget):
         self._wigv_times = deque(maxlen=12)
         self._hide_wig_cd = 0.0
         self.glide_target = None
+        self.perch_hwnd = None
+        self.perch_offx = 0
+        self.perch_pending = None
+        self.perch_until = 0.0
+        self.perch_home = None
+        self.next_perch_try = time.time() + random.uniform(120, 360)
         self.wobble = 0.0
         self._last_drag_x = 0
         self._last_drag_dir = 0
@@ -1329,6 +1345,11 @@ class CatWindow(QWidget):
             act.triggered.connect(lambda _=False, k=key:
                                   mgr.set_wiggle_sens(k))
             sens.addAction(act)
+        prc = QAction("Sometimes sit on top of windows 🪟", menu)
+        prc.setCheckable(True)
+        prc.setChecked(self.gcfg.get("window_perch", True))
+        prc.triggered.connect(mgr.toggle_window_perch)
+        beh.addAction(prc)
         snd = QAction("Meow sounds", menu)
         snd.setCheckable(True)
         snd.setChecked(self.gcfg.get("sounds", True))
@@ -1400,6 +1421,10 @@ class CatWindow(QWidget):
             act.triggered.connect(
                 lambda _=False, k=kind: mgr.start_anim_test(k))
             tst.addAction(act)
+        wtest = QAction("Walk onto a window 🪟", menu)
+        wtest.triggered.connect(
+            lambda _=False: mgr.primary().try_perch(announce=True))
+        tst.addAction(wtest)
         tst.addSeparator()
         doctor = QAction("Scroll doctor (5s live test)", menu)
         doctor.triggered.connect(mgr.scroll_doctor)
@@ -1561,12 +1586,15 @@ class CatWindow(QWidget):
             want = min(1.40, 1.06 + speed / 180.0)
             self.mochi += (want - self.mochi) * 0.30
             self.state = DRAG
+            if self.perch_hwnd is not None or self.perch_pending is not None:
+                self._end_perch(go_home=False)
             self.wobble *= 0.92
             self.update()
             return
 
         if self.glide_target is not None:
             self._glide_step(dt)
+        self._perch_tick(now)
 
         # manual animation test (from the Test menu) overrides everything
         t = mgr.anim_test
@@ -1680,6 +1708,8 @@ class CatWindow(QWidget):
         elif self.state == CHASE:
             self._chase_step(cur, now, dt)
         elif start_chase:
+            if self.perch_hwnd is not None:
+                self._end_perch(go_home=False)
             self.state = CHASE
             self._wig_times.clear()
             self.glide_target = None
@@ -1717,6 +1747,15 @@ class CatWindow(QWidget):
             if now > self.next_groom and now > self.groom_until:
                 self.groom_until = now + 2.6
                 self.next_groom = now + random.uniform(30, 80)
+            if (self.gcfg.get("window_perch", True)
+                    and now > self.next_perch_try
+                    and self.perch_hwnd is None
+                    and self.perch_pending is None
+                    and self.glide_target is None
+                    and not self.peeking
+                    and not mgr.fullscreen_active):
+                self.next_perch_try = now + random.uniform(180, 420)
+                self.try_perch()
 
         if self.state != PEEK and self.peeking:
             self._unpeek(cancel=True)
@@ -1873,6 +1912,138 @@ class CatWindow(QWidget):
                             and not self.gcfg.get("force_sleep"):
                         self.sleep_at = now + self.gcfg["sleep_seconds"]
                         self.state = IDLE
+
+    # ------------------------------------------------- window perching ------
+    def _feet_offset(self):
+        return TOP_MARGIN + int((sprites.GRID_H - 2) * self.scale)
+
+    def _dpr(self):
+        try:
+            return float(self.screen().devicePixelRatio()) or 1.0
+        except Exception:
+            return 1.0
+
+    def _perch_targets(self):
+        """Visible, non-minimized, decent-sized top-level windows."""
+        if platform.system() != "Windows":
+            return []
+        try:
+            import ctypes
+            from ctypes import wintypes
+            u = ctypes.windll.user32
+            own = {int(c.winId()) for c in self.mgr.cats}
+            dpr = self._dpr()
+            out = []
+            proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND,
+                                      wintypes.LPARAM)
+
+            def cb(hwnd, _l):
+                try:
+                    if hwnd in own or not u.IsWindowVisible(hwnd) \
+                            or u.IsIconic(hwnd):
+                        return True
+                    if u.GetWindowTextLengthW(hwnd) == 0:
+                        return True
+                    cls = ctypes.create_unicode_buffer(64)
+                    u.GetClassNameW(hwnd, cls, 64)
+                    if cls.value in ("Progman", "WorkerW", "Shell_TrayWnd",
+                                     "SondeRcatSetup"):
+                        return True
+                    r = wintypes.RECT()
+                    try:
+                        ctypes.windll.dwmapi.DwmGetWindowAttribute(
+                            wintypes.HWND(hwnd), 9, ctypes.byref(r),
+                            ctypes.sizeof(r))
+                    except Exception:
+                        u.GetWindowRect(hwnd, ctypes.byref(r))
+                    l_, t_, r_, b_ = (int(r.left / dpr), int(r.top / dpr),
+                                      int(r.right / dpr),
+                                      int(r.bottom / dpr))
+                    if r_ - l_ < 380 or b_ - t_ < 260:
+                        return True
+                    if t_ - self._feet_offset() < 8:
+                        return True          # no headroom for the cat
+                    out.append((int(hwnd), (l_, t_, r_, b_)))
+                except Exception:
+                    pass
+                return True
+
+            u.EnumWindows(proc(cb), 0)
+            return out
+        except Exception:
+            return []
+
+    def _perch_query(self, hwnd):
+        """('ok', rect) while perchable; 'minimized'; 'gone'."""
+        if platform.system() != "Windows":
+            return "gone"
+        try:
+            import ctypes
+            from ctypes import wintypes
+            u = ctypes.windll.user32
+            if not u.IsWindow(hwnd) or not u.IsWindowVisible(hwnd):
+                return "gone"
+            if u.IsIconic(hwnd):
+                return "minimized"
+            r = wintypes.RECT()
+            try:
+                ctypes.windll.dwmapi.DwmGetWindowAttribute(
+                    wintypes.HWND(hwnd), 9, ctypes.byref(r),
+                    ctypes.sizeof(r))
+            except Exception:
+                u.GetWindowRect(hwnd, ctypes.byref(r))
+            dpr = self._dpr()
+            return ("ok", (int(r.left / dpr), int(r.top / dpr),
+                           int(r.right / dpr), int(r.bottom / dpr)))
+        except Exception:
+            return "gone"
+
+    def try_perch(self, announce=False):
+        targets = self._perch_targets()
+        if not targets:
+            if announce:
+                self.say("no window to climb 🪟", 2.5)
+            return False
+        hwnd, (l, t, r, b) = random.choice(targets)
+        x = random.randint(l + 20, max(l + 20, r - self.width() - 20))
+        y = t - self._feet_offset()
+        self.perch_home = self.pos()
+        self.perch_pending = hwnd
+        self.perch_offx = x - l
+        self._glide_to(QPoint(x, y))
+        return True
+
+    def _end_perch(self, go_home):
+        self.perch_hwnd = None
+        self.perch_pending = None
+        if go_home and self.perch_home is not None:
+            self._glide_to(self.perch_home)
+        self.perch_home = None
+
+    def _perch_tick(self, now):
+        if self.perch_pending is not None and self.glide_target is None:
+            self.perch_hwnd = self.perch_pending
+            self.perch_pending = None
+            self.perch_until = now + random.uniform(60, 180)
+            if random.random() < 0.5:
+                self.say(random.choice(["nice view up here", "mine now.",
+                                        "🪟🐾"]), 2.5)
+        if self.perch_hwnd is None:
+            return
+        q = self._perch_query(self.perch_hwnd)
+        if q == "minimized" or q == "gone":
+            self._end_perch(go_home=False)   # just stands where it is
+            self.next_perch_try = now + random.uniform(180, 420)
+            return
+        _, (l, t, r, b) = q
+        x = max(l + 6, min(l + self.perch_offx, r - self.width() - 6))
+        y = t - self._feet_offset()
+        if (x, y) != (self.x(), self.y()):
+            self.move(x, y)
+            self._sync_float()
+        if now > self.perch_until:
+            self._end_perch(go_home=True)
+            self.next_perch_try = now + random.uniform(180, 420)
 
     # -------------------------------------------------------------- render --
     def _frame_name(self):

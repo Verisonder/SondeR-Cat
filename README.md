@@ -24,6 +24,7 @@ Free, open source, no telemetry, no accounts.
 
 **Being a good coworker**
 - 😴 Naps when you're idle; wakes with a "mrrp?"
+- 🪟 **Climbs on your windows** — occasionally walks over and sits on top of an open window, riding along if you move it (toggleable)
 - 💤 **Deep sleep** toggle (main menu, above Quit) — sleeps until YOU say otherwise; nothing wakes it
 - 📺 **Peek mode** — auto-hides at the bottom edge during fullscreen video; or send it to hide by wiggling your cursor up-down at the bottom of the screen
 - 🧘 **Stretch reminders** — it *grows big* and stretches with you every 30/50/90 min
