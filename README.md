@@ -45,6 +45,8 @@ Free, open source, no telemetry, no accounts.
 
 ## Install
 
+> **Requires 64-bit Windows 10/11** (or Linux). 32-bit systems can't run the Qt6 framework the cat is built on.
+
 ### Windows — one file, everything inside
 
 **[Download SondeR_cat_setup.exe](https://github.com/Verisonder/SondeR-Cat/raw/main/SondeR_cat_setup.exe)** (20 MB) and double-click it.
