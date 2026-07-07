@@ -1986,6 +1986,11 @@ class CatWindow(QWidget):
             tw_ = int(r.width() / (m ** 0.5))
             tx = r.center().x() - tw_ // 2
             ty = r.top() + jy
+        elif self.state == STRETCH:          # reach up: taller, feet planted
+            th_ = int(r.height() * 1.14)
+            tw_ = int(r.width() * 0.96)
+            tx = r.center().x() - tw_ // 2
+            ty = r.top() + jy + (r.height() - th_)
         p.drawImage(QRect(tx, ty, tw_, th_), img)
         p.restore()
 
