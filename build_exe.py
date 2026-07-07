@@ -5,6 +5,10 @@ and miniz sources in ./miniz or /home/claude/miniz-master.
 """
 import io, zipfile, subprocess, os, sys
 
+# NOTE: the shipped SondeR_cat_setup.exe is HASH-FROZEN for Smart App
+# Control reputation. Do NOT rebuild/commit the exe for app-code changes —
+# the self-updater (incl. first-run auto-update) delivers current code.
+# Rebuild the exe ONLY when the installer itself (setup_stub.*) changes.
 FILES = ["sondercat.py", "sprites.py", "sonder_agent.py", "requirements.txt",
          "install.bat", "debug.bat", "run.bat", "run.sh", "install.sh",
          "README.md", "ANIMATIONS.md", "sondercat_gray.ico", "meow.wav"]

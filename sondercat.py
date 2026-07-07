@@ -643,6 +643,7 @@ class Manager(QObject):
         self.app = app
         self.cfg = load_config()
         self.anim_test = None
+        self.first_run = not os.path.exists(CONFIG_PATH)
         self._call_bridge = _CallBridge()
         QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
         self.sprites_reloads = 0
@@ -854,11 +855,16 @@ class Manager(QObject):
                                    != self._local("sprites.py"))
                     except Exception:
                         return
-                if changed:
+                if not changed:
+                    return
+                if not getattr(self, "first_run", False):
                     ui(lambda: self.say_primary(
                         f"{label} is available! menu → Check for updates",
                         6))
-                return
+                    return
+                # first run after a fresh install: bring it fully current
+                ui(lambda: self.say_primary(
+                    "getting the freshest version… ⤓", 6))
             try:
                 # cheap verdict first: the two files every update touches
                 blobs = {"sondercat.py": main_bytes,
