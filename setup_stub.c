@@ -188,7 +188,7 @@ static void make_shortcut(int csidl, const wchar_t *pythonw)
         return;
     _snwprintf(lnk, MAX_PATH, L"%s\\SondeR cat.lnk", dir);
     _snwprintf(script, MAX_PATH, L"\"%s\\sondercat.py\"", g_app);
-    _snwprintf(icon, MAX_PATH, L"%s\\sondercat.ico", g_app);
+    _snwprintf(icon, MAX_PATH, L"%s\\sondercat_gray.ico", g_app);
     IShellLinkW *sl = NULL;
     if (FAILED(CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER,
                                 &IID_IShellLinkW, (void **)&sl)))

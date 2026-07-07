@@ -58,7 +58,7 @@ if not exist "%PYW%" set "PYW=%PY%"
 
 echo [..] Creating Desktop shortcut...
 set "LNK=%USERPROFILE%\Desktop\SondeR cat.lnk"
-powershell -NoProfile -Command "$q=[char]34;$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%LNK%');$s.TargetPath='%PYW%';$s.Arguments=$q+'%DEST%\sondercat\sondercat.py'+$q;$s.WorkingDirectory='%DEST%\sondercat';$s.IconLocation='%DEST%\sondercat\sondercat.ico';$s.Save()" >nul 2>&1
+powershell -NoProfile -Command "$q=[char]34;$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%LNK%');$s.TargetPath='%PYW%';$s.Arguments=$q+'%DEST%\sondercat\sondercat.py'+$q;$s.WorkingDirectory='%DEST%\sondercat';$s.IconLocation='%DEST%\sondercat\sondercat_gray.ico';$s.Save()" >nul 2>&1
 if exist "%LNK%" goto lnkok
 rem fallback launcher if shortcut creation was restricted
 (
