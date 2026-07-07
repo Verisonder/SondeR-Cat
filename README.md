@@ -147,8 +147,12 @@ command for your distro. If the window ever fails to open:
 ## Customizing the art
 
 Every animation frame is a plain-text pixel grid in `sprites.py` — one
-character per pixel. Edit frames, add palettes to `PALETTES`, or new pattern
-rules to `apply_pattern()`; the menus update automatically.
+character per pixel, **live-editable**: right-click the cat → *Animations →
+Open animations file*, tick *Auto-reload on save*, and the cat updates the
+moment you hit Ctrl+S. Bad edits can't crash it — they're rejected with a
+message telling you exactly which line to fix.
+
+**Full guide: [ANIMATIONS.md](ANIMATIONS.md)**
 
 ## License
 

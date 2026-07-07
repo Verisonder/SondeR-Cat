@@ -23,6 +23,7 @@ import math
 import os
 import platform
 import random
+import subprocess
 import sys
 import time
 import traceback
@@ -155,7 +156,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "auto_peek": True, "chase_enabled": True,
                    "name": "", "pinned": "", "reminders": [], "sounds": True, "laser_only": True, "wiggle_hide": True,
                    "wiggle_sens": "medium",
-                   "force_sleep": False}
+                   "force_sleep": False, "watch_sprites": False}
 
 (IDLE, KNEAD, SLEEP, CHASE, DRAG, STRETCH,
  OVERHEAT, SCROLLPLAY, PEEK, THINK) = range(10)
@@ -492,6 +493,91 @@ def clear_agent_status():
         pass
 
 
+# ------------------------------------------------- live sprite reloading -----
+
+SPRITE_CHARS = set(".KBSWENMZHGgO")
+REQUIRED_FRAMES = ["sit_a", "sit_b", "blink", "type_a", "type_b",
+                   "knead_a", "knead_b", "sleep", "run_a", "run_b",
+                   "stretch", "dangle", "peek"]
+
+
+def validate_sprites(ns):
+    """Return (ok, message). Checks a freshly-executed sprites namespace so a
+    bad edit can NEVER crash the app — worst case is a precise error."""
+    try:
+        W, H = int(ns["GRID_W"]), int(ns["GRID_H"])
+        frames = ns["FRAMES"]
+        for name in REQUIRED_FRAMES:
+            if name not in frames:
+                return False, f"Missing frame: {name.upper()}"
+            g = frames[name]
+            if len(g) != H:
+                return False, (f"{name.upper()}: has {len(g)} rows, "
+                               f"needs {H}")
+            for i, row in enumerate(g):
+                if len(row) != W:
+                    return False, (f"{name.upper()}, row {i}: has "
+                                   f"{len(row)} characters, needs {W}")
+                bad = set(row) - SPRITE_CHARS
+                if bad:
+                    return False, (f"{name.upper()}, row {i}: illegal "
+                                   f"character {sorted(bad)[0]!r}")
+        ew, eh = int(ns["EYE_W"]), int(ns["EYE_H"])
+        for name, cells in ns["EYE_CELLS"].items():
+            if name not in frames:
+                return False, f"EYE_CELLS points at unknown frame: {name}"
+            g = frames[name]
+            for (x, y) in cells:
+                if not (0 <= x <= W - ew and 0 <= y <= H - eh):
+                    return False, (f"EYE_CELLS for {name.upper()}: "
+                                   f"({x},{y}) is outside the grid")
+                blk = {g[y + yy][x + xx]
+                       for yy in range(eh) for xx in range(ew)}
+                if blk - {"E", "B", "K"}:
+                    return False, (f"EYE_CELLS for {name.upper()}: "
+                                   f"({x},{y}) isn't on an eye (E block)")
+        for pname, pal in ns["PALETTES"].items():
+            for key in "BSWKENMZP":
+                if key not in pal:
+                    return False, (f"Palette '{pname}' is missing "
+                                   f"color {key!r}")
+        for fn in ("apply_pattern", "add_halo", "render_frame",
+                   "render_icon"):
+            if not callable(ns.get(fn)):
+                return False, f"Function {fn}() is missing"
+        # dry-run one render to be extra safe
+        img = ns["render_frame"](frames["sit_a"],
+                                 ns["PALETTES"]["orange tabby"], 2)
+        if img.width() != W * 2:
+            return False, "render_frame produced a wrong-sized image"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+    return True, "ok"
+
+
+def reload_sprites():
+    """Re-read sprites.py from disk; swap it in only if fully valid."""
+    path = os.path.abspath(sprites.__file__)
+    try:
+        src = open(path, encoding="utf-8").read()
+    except Exception as e:
+        return False, f"Couldn't read sprites.py: {e}"
+    ns = {"__file__": path, "__name__": "sprites"}
+    try:
+        exec(compile(src, path, "exec"), ns)
+    except SyntaxError as e:
+        return False, f"Syntax error at line {e.lineno}: {e.msg}"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+    ok, msg = validate_sprites(ns)
+    if not ok:
+        return False, msg
+    for k, v in ns.items():
+        if not k.startswith("__"):
+            setattr(sprites, k, v)
+    return True, "ok"
+
+
 # ------------------------------------------------------------------ meow -----
 
 class Meow:
@@ -543,6 +629,11 @@ class Manager(QObject):
         super().__init__()
         self.app = app
         self.cfg = load_config()
+        self.sprites_reloads = 0
+        self._watch = None
+        self._watch_timer = None
+        if self.cfg["global"].get("watch_sprites"):
+            QTimer.singleShot(500, self._start_watch)
         self._bridge = _InputBridge()
         self._bridge.poked.connect(self._on_input_event)
         self.inputs = InputWatcher(on_event=self._bridge.poked.emit)
@@ -662,6 +753,84 @@ class Manager(QObject):
             self.celebrate(self._named(f"{label} is done! 🎉"))
         elif self.agent_working:
             self.agent_working = False
+
+    # ------------------------------------------- live animation editing --
+    def sprites_path(self):
+        return os.path.abspath(sprites.__file__)
+
+    def open_sprites(self):
+        path = self.sprites_path()
+        try:
+            if platform.system() == "Windows":
+                os.startfile(path)
+            elif platform.system() == "Darwin":
+                subprocess.Popen(["open", path])
+            else:
+                subprocess.Popen(["xdg-open", path])
+            self.say_primary("Edit me! Save the file and I'll update 🎨", 4)
+        except Exception:
+            self.say_primary(f"My art lives at: {path}", 8)
+
+    def do_reload_sprites(self, announce=True):
+        ok, msg = reload_sprites()
+        if ok:
+            self.sprites_reloads += 1
+            for c in self.cats:
+                c._frame_cache = {}
+                c._resize_to_sprite()
+                c.update()
+            self._make_tray()
+            if announce:
+                self.say_primary("Animations reloaded! 🎨", 3)
+        else:
+            QMessageBox.warning(
+                None, "SondeR cat — animation edit rejected",
+                "Your last edit to sprites.py has a problem, so I'm "
+                "keeping the previous art (nothing crashed!).\n\n"
+                f"Problem: {msg}\n\n"
+                "Fix that line, save again, and I'll retry.")
+        return ok
+
+    def _start_watch(self):
+        try:
+            from PySide6.QtCore import QFileSystemWatcher
+            if self._watch is None:
+                self._watch = QFileSystemWatcher()
+                self._watch.fileChanged.connect(self._sprites_changed)
+            if self.sprites_path() not in self._watch.files():
+                self._watch.addPath(self.sprites_path())
+        except Exception:
+            pass
+
+    def _stop_watch(self):
+        try:
+            if self._watch:
+                for f in self._watch.files():
+                    self._watch.removePath(f)
+        except Exception:
+            pass
+
+    def _sprites_changed(self, _path):
+        # editors replace the file on save: debounce, reload, re-arm watch
+        if self._watch_timer is None:
+            self._watch_timer = QTimer(self)
+            self._watch_timer.setSingleShot(True)
+            self._watch_timer.timeout.connect(self._watched_reload)
+        self._watch_timer.start(350)
+
+    def _watched_reload(self):
+        self.do_reload_sprites(announce=True)
+        self._start_watch()
+
+    def toggle_watch_sprites(self):
+        g = self.cfg["global"]
+        g["watch_sprites"] = not g.get("watch_sprites", False)
+        save_config(self.cfg)
+        if g["watch_sprites"]:
+            self._start_watch()
+            self.say_primary("Watching sprites.py — save to update me!", 4)
+        else:
+            self._stop_watch()
 
     def _on_input_event(self):
         """A key/scroll just happened — react NOW, don't wait for the timer."""
@@ -1187,6 +1356,19 @@ class CatWindow(QWidget):
         nm = QAction("Tell the cat your name…", menu)
         nm.triggered.connect(mgr.set_name)
         msgs.addAction(nm)
+
+        anim = menu.addMenu("Animations")
+        aopen = QAction("Open animations file (sprites.py)…", menu)
+        aopen.triggered.connect(mgr.open_sprites)
+        anim.addAction(aopen)
+        areload = QAction("Reload animations now", menu)
+        areload.triggered.connect(lambda _=False: mgr.do_reload_sprites())
+        anim.addAction(areload)
+        awatch = QAction("Auto-reload on save", menu)
+        awatch.setCheckable(True)
+        awatch.setChecked(self.gcfg.get("watch_sprites", False))
+        awatch.triggered.connect(mgr.toggle_watch_sprites)
+        anim.addAction(awatch)
 
         about = QAction("About", menu)
         about.triggered.connect(self.show_about)

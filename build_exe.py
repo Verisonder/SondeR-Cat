@@ -7,7 +7,7 @@ import io, zipfile, subprocess, os, sys
 
 FILES = ["sondercat.py", "sprites.py", "sonder_agent.py", "requirements.txt",
          "install.bat", "debug.bat", "run.bat", "run.sh", "install.sh",
-         "README.md", "sondercat.ico", "meow.wav"]
+         "README.md", "ANIMATIONS.md", "sondercat.ico", "meow.wav"]
 buf = io.BytesIO()
 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
     for f in FILES:
