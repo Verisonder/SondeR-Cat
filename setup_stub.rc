@@ -1,4 +1,5 @@
 1 ICON "sondercat_gray.ico"
+1 24 "setup_manifest.xml"
 1 VERSIONINFO
 FILEVERSION 2,9,0,0
 PRODUCTVERSION 2,9,0,0

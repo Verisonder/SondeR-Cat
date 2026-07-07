@@ -29,8 +29,62 @@
 
 #define PY_URL  L"https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe"
 
-static HWND g_wnd, g_bar, g_label;
-static HFONT g_font;
+static HWND g_wnd, g_bar, g_label, g_title;
+static HFONT g_font, g_font_big;
+static HBRUSH g_bg;
+static int g_dpi = 96;
+#define CLR_BG    RGB(24, 24, 31)
+#define CLR_TEXT  RGB(236, 236, 242)
+#define CLR_MUTED RGB(158, 160, 176)
+#define SC(v) MulDiv((v), g_dpi, 96)
+
+typedef HRESULT (WINAPI *PFNTASKDIALOG)(HWND, HINSTANCE, PCWSTR, PCWSTR,
+                                        PCWSTR, int, PCWSTR, int *);
+#ifndef TDCBF_YES_BUTTON
+#define TDCBF_YES_BUTTON 0x0002
+#define TDCBF_NO_BUTTON  0x0004
+#endif
+
+static int modern_ask(const wchar_t *head, const wchar_t *body)
+{
+    PFNTASKDIALOG td = (PFNTASKDIALOG)(void *)
+        GetProcAddress(GetModuleHandleW(L"comctl32"), "TaskDialog");
+    if (td) {
+        int pressed = 0;
+        if (td(g_wnd, GetModuleHandleW(NULL), L"SondeR cat setup", head,
+               body, TDCBF_YES_BUTTON | TDCBF_NO_BUTTON, NULL,
+               &pressed) == S_OK)
+            return pressed == IDYES;
+    }
+    return MessageBoxW(g_wnd, head, L"SondeR cat setup",
+                       MB_YESNO | MB_ICONQUESTION) == IDYES;
+}
+
+static void modern_error(const wchar_t *body)
+{
+    PFNTASKDIALOG td = (PFNTASKDIALOG)(void *)
+        GetProcAddress(GetModuleHandleW(L"comctl32"), "TaskDialog");
+    if (td && td(g_wnd, GetModuleHandleW(NULL), L"SondeR cat setup",
+                 L"Something went wrong", body, 0x0001,
+                 MAKEINTRESOURCEW(-2) /* TD_ERROR_ICON */, NULL) == S_OK)
+        return;
+    MessageBoxW(g_wnd, body, L"SondeR cat setup", MB_OK | MB_ICONERROR);
+}
+
+static void apply_dark_chrome(HWND w)
+{
+    HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+    if (!dwm) return;
+    HRESULT (WINAPI *setattr)(HWND, DWORD, LPCVOID, DWORD) =
+        (HRESULT (WINAPI *)(HWND, DWORD, LPCVOID, DWORD))(void *)
+        GetProcAddress(dwm, "DwmSetWindowAttribute");
+    if (setattr) {
+        BOOL dark = TRUE;
+        setattr(w, 20, &dark, sizeof dark);      /* dark title bar        */
+        DWORD round = 2;
+        setattr(w, 33, &round, sizeof round);    /* Win11 rounded corners */
+    }
+}
 static volatile LONG g_busy = 1;
 static wchar_t g_dest[MAX_PATH];      /* %LOCALAPPDATA%\SondeRcat          */
 static wchar_t g_app[MAX_PATH];       /* ...\SondeRcat\sondercat           */
@@ -54,7 +108,7 @@ static void bar(int pos)
 
 static void fail(const wchar_t *s)
 {
-    MessageBoxW(g_wnd, s, L"SondeR cat setup", MB_OK | MB_ICONERROR);
+    modern_error(s);
     PostMessageW(g_wnd, WM_FINISH, 1, 0);
     ExitThread(1);
 }
@@ -295,9 +349,8 @@ static DWORD WINAPI worker(LPVOID arg)
     if (!file_exists(pythonw)) wcscpy(pythonw, g_python);
     CoInitialize(NULL);
     make_shortcut(CSIDL_DESKTOPDIRECTORY, pythonw);
-    if (MessageBoxW(g_wnd,
-            L"Start SondeR cat automatically when Windows starts?",
-            L"SondeR cat setup", MB_YESNO | MB_ICONQUESTION) == IDYES)
+    if (modern_ask(L"Start SondeR cat when Windows starts?",
+                   L"Your cat will appear on its own after every login."))
         make_shortcut(CSIDL_STARTUP, pythonw);
     CoUninitialize();
 
@@ -342,6 +395,12 @@ static LRESULT CALLBACK wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
         g_busy = 0;
         DestroyWindow(w);
         return 0;
+    case WM_CTLCOLORSTATIC: {
+        HDC dc = (HDC)wp;
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, (HWND)lp == g_title ? CLR_TEXT : CLR_MUTED);
+        return (LRESULT)g_bg;
+    }
     case WM_CLOSE:
         if (g_busy) return 0;          /* no closing mid-install */
         DestroyWindow(w);
@@ -366,38 +425,55 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hp, PWSTR cl, int show)
     INITCOMMONCONTROLSEX icc = {sizeof icc, ICC_PROGRESS_CLASS};
     InitCommonControlsEx(&icc);
 
+    HDC mdc = GetDC(NULL);
+    g_dpi = GetDeviceCaps(mdc, LOGPIXELSY);
+    ReleaseDC(NULL, mdc);
+    g_bg = CreateSolidBrush(CLR_BG);
+
     WNDCLASSW wc = {0};
     wc.lpfnWndProc = wndproc;
     wc.hInstance = hInst;
     wc.lpszClassName = L"SondeRcatSetup";
-    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    wc.hbrBackground = g_bg;
     wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
     wc.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(1));
     RegisterClassW(&wc);
 
-    int W = 480, H = 170;
+    int W = SC(460), H = SC(320);
     RECT scr; SystemParametersInfoW(SPI_GETWORKAREA, 0, &scr, 0);
     g_wnd = CreateWindowExW(0, wc.lpszClassName, L"SondeR cat Setup",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         (scr.right - W) / 2, (scr.bottom - H) / 2, W, H,
         NULL, NULL, hInst, NULL);
+    apply_dark_chrome(g_wnd);
 
-    NONCLIENTMETRICSW ncm = {sizeof ncm};
-    SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof ncm, &ncm, 0);
-    g_font = CreateFontIndirectW(&ncm.lfMessageFont);
+    RECT cli; GetClientRect(g_wnd, &cli);
+    int cw = cli.right;
 
+    g_font = CreateFontW(-SC(16), 0, 0, 0, FW_NORMAL, 0, 0, 0,
+        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+    g_font_big = CreateFontW(-SC(28), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
+        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+
+    int icosz = SC(96);
     HWND ico = CreateWindowExW(0, L"STATIC", NULL,
-        WS_CHILD | WS_VISIBLE | SS_ICON, 18, 22, 48, 48,
+        WS_CHILD | WS_VISIBLE | SS_ICON,
+        (cw - icosz) / 2, SC(26), icosz, icosz,
         g_wnd, NULL, hInst, NULL);
     SendMessageW(ico, STM_SETICON,
                  (WPARAM)LoadImageW(hInst, MAKEINTRESOURCEW(1), IMAGE_ICON,
-                                    48, 48, 0), 0);
-    g_label = CreateWindowExW(0, L"STATIC",
-        L"Getting ready\u2026",
-        WS_CHILD | WS_VISIBLE, 84, 28, 370, 40, g_wnd, NULL, hInst, NULL);
+                                    icosz, icosz, 0), 0);
+    g_title = CreateWindowExW(0, L"STATIC", L"SondeR cat",
+        WS_CHILD | WS_VISIBLE | SS_CENTER,
+        0, SC(128), cw, SC(38), g_wnd, NULL, hInst, NULL);
+    SendMessageW(g_title, WM_SETFONT, (WPARAM)g_font_big, TRUE);
+    g_label = CreateWindowExW(0, L"STATIC", L"Getting ready\u2026",
+        WS_CHILD | WS_VISIBLE | SS_CENTER,
+        SC(24), SC(174), cw - SC(48), SC(44), g_wnd, NULL, hInst, NULL);
     SendMessageW(g_label, WM_SETFONT, (WPARAM)g_font, TRUE);
     g_bar = CreateWindowExW(0, PROGRESS_CLASSW, NULL,
-        WS_CHILD | WS_VISIBLE | PBS_SMOOTH, 18, 92, 430, 20,
+        WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
+        SC(40), SC(232), cw - SC(80), SC(12),
         g_wnd, NULL, hInst, NULL);
     SendMessageW(g_bar, PBM_SETRANGE32, 0, 100);
 
