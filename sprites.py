@@ -403,35 +403,6 @@ PEEK = [
     "........................",
 ]
 
-SLEEP_B = [
-    "........................",
-    "........................",
-    "........................",
-    "........................",
-    "......KK........KK......",
-    ".....KBBK......KBBK.....",
-    ".....KBZBK....KBZBK.....",
-    "....KBBBBBKKKKBBBBBK....",
-    "....KBBBBBBBBBBBBBBK....",
-    "...KBBBBBBBBBBBBBBBBK...",
-    "...KBKKKBBBBBBBBKKKBK...",
-    "HHKBBBBBBBNNBBBBBBBBBK..",
-    "..KBBBBBBBMMBBBBBBBBBKK.",
-    "HHKBBBBBBBBBBBBBBBBBBBBK",
-    ".KBBBBBBBBBBBBBBBBBBBBBK",
-    ".KBBBBBBBBBBBBBBBBBBBBBK",
-    ".KBBBBBBBBBBBBBBBBBBBBK.",
-    ".KBBBBBBBBBBBBBBBBBBBK..",
-    ".KBKKKBBBBBBBBBBBBBBBK..",
-    ".KKBBBKKBBBBBBBBBBBBK...",
-    "..KBBBBBKKKKKKKKKKKK....",
-    "...KKKKKKKKKKKKKKK......",
-    "........................",
-    "........................",
-    "........................",
-    "........................",
-]
-
 YAWN = [
     "........................",
     ".....KK........KK.......",
@@ -554,7 +525,7 @@ FRAMES = {
     "knead_a": KNEAD_A, "knead_b": KNEAD_B,
     "sleep": SLEEP, "run_a": RUN_A, "run_b": RUN_B,
     "stretch": STRETCH, "dangle": DANGLE, "peek": PEEK,
-    "sleep_b": SLEEP_B, "yawn": YAWN,
+    "yawn": YAWN,
     "groom_a": GROOM_A, "groom_b": GROOM_B, "knead_c": KNEAD_C,
 }
 

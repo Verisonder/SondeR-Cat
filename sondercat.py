@@ -1820,7 +1820,7 @@ class CatWindow(QWidget):
         if self.state == SLEEP:
             if now < self.yawn_until:
                 return "yawn"
-            return "sleep" if int(now / 1.3) % 2 else "sleep_b"
+            return "sleep"
         if self.state == STRETCH:
             return "stretch"
         if self.state == PEEK:
@@ -1847,7 +1847,7 @@ class CatWindow(QWidget):
                self.ccfg.get("custom_body"), self.scale)
         img = self._frame_cache.get(key)
         if img is None:
-            fallback = {"sleep_b": "sleep", "yawn": "blink",
+            fallback = {"yawn": "blink",
                         "groom_a": "sit_a", "groom_b": "sit_a",
                         "knead_c": "knead_b"}
             base = sprites.FRAMES.get(name)
