@@ -160,7 +160,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "name": "", "pinned": "", "reminders": [], "sounds": True, "laser_only": True, "wiggle_hide": True,
                    "wiggle_sens": "medium",
                    "force_sleep": False, "watch_sprites": False,
-                   "window_perch": True}
+                   "window_perch": True, "auto_update": True}
 
 (IDLE, KNEAD, SLEEP, CHASE, DRAG, STRETCH,
  OVERHEAT, SCROLLPLAY, PEEK, THINK) = range(10)
@@ -646,6 +646,10 @@ class Manager(QObject):
         self.first_run = not os.path.exists(CONFIG_PATH)
         self._call_bridge = _CallBridge()
         QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
+        self._auto_timer = QTimer()
+        self._auto_timer.timeout.connect(
+            lambda: self.check_updates(manual=False))
+        self._auto_timer.start(6 * 3600 * 1000)
         self.sprites_reloads = 0
         self._watch = None
         self._watch_timer = None
@@ -857,14 +861,16 @@ class Manager(QObject):
                         return
                 if not changed:
                     return
-                if not getattr(self, "first_run", False):
+                auto = self.cfg["global"].get("auto_update", True)
+                if not (auto or getattr(self, "first_run", False)):
                     ui(lambda: self.say_primary(
                         f"{label} is available! menu → Check for updates",
                         6))
                     return
-                # first run after a fresh install: bring it fully current
                 ui(lambda: self.say_primary(
-                    "getting the freshest version… ⤓", 6))
+                    "getting the freshest version… ⤓"
+                    if getattr(self, "first_run", False)
+                    else f"auto-updating to {label}… ⤓", 6))
             try:
                 # cheap verdict first: the two files every update touches
                 blobs = {"sondercat.py": main_bytes,
@@ -1144,6 +1150,11 @@ class Manager(QObject):
         save_config(self.cfg)
         self.say_primary("I only hunt wiggles now!" if g["laser_only"]
                          else "I'll chase any fast cursor!", 2.5)
+
+    def toggle_auto_update(self):
+        g = self.cfg["global"]
+        g["auto_update"] = not g.get("auto_update", True)
+        save_config(self.cfg)
 
     def toggle_window_perch(self):
         g = self.cfg["global"]
@@ -1558,6 +1569,11 @@ class CatWindow(QWidget):
         prc.setChecked(self.gcfg.get("window_perch", True))
         prc.triggered.connect(mgr.toggle_window_perch)
         beh.addAction(prc)
+        aup = QAction("Install updates automatically ⤓", menu)
+        aup.setCheckable(True)
+        aup.setChecked(self.gcfg.get("auto_update", True))
+        aup.triggered.connect(mgr.toggle_auto_update)
+        beh.addAction(aup)
         snd = QAction("Meow sounds", menu)
         snd.setCheckable(True)
         snd.setChecked(self.gcfg.get("sounds", True))
