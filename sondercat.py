@@ -1247,6 +1247,7 @@ class CatWindow(QWidget):
         self._shake_quiet_until = 0.0
         self._shake_strikes = 0
         self._falling = False
+        self._cover_miss = 0
         self.wobble = 0.0
         self._last_drag_x = 0
         self._last_drag_dir = 0
@@ -2044,6 +2045,10 @@ class CatWindow(QWidget):
         u.GetWindowRect.argtypes = [wintypes.HWND,
                                     ctypes.POINTER(wintypes.RECT)]
         u.GetWindowRect.restype = wintypes.BOOL
+        u.WindowFromPoint.argtypes = [wintypes.POINT]
+        u.WindowFromPoint.restype = wintypes.HWND
+        u.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+        u.GetAncestor.restype = wintypes.HWND
         WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND,
                                          wintypes.LPARAM)
         u.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
@@ -2070,7 +2075,7 @@ class CatWindow(QWidget):
             return val.value != 0
         return False
 
-    def _win_rect(self, hwnd):
+    def _win_rect_raw(self, hwnd):
         ctypes, wintypes, u, d, _ = self._win32()
         r = wintypes.RECT()
         ok = False
@@ -2079,9 +2084,41 @@ class CatWindow(QWidget):
                                          ctypes.sizeof(r)) == 0
         if not ok and not u.GetWindowRect(hwnd, ctypes.byref(r)):
             return None
+        return (r.left, r.top, r.right, r.bottom)
+
+    def _win_rect(self, hwnd):
+        raw = self._win_rect_raw(hwnd)
+        if raw is None:
+            return None
         dpr = self._dpr()
-        return (int(r.left / dpr), int(r.top / dpr),
-                int(r.right / dpr), int(r.bottom / dpr))
+        return tuple(int(v / dpr) for v in raw)
+
+    def _showing_at(self, hwnd, px, py):
+        """Is `hwnd` the window actually visible at physical point (px,py)?
+        Returns True/False, or None when our own cat covers the point."""
+        try:
+            ctypes, wintypes, u, d, _ = self._win32()
+            pt = wintypes.POINT(int(px), int(py))
+            top = u.WindowFromPoint(pt)
+            if not top:
+                return False
+            root = u.GetAncestor(top, 2) or top
+            if int(root) in {int(c.winId()) for c in self.mgr.cats}:
+                return None
+            return int(root) == int(hwnd)
+        except Exception:
+            return True          # never evict on probe errors
+
+    def _visible_top_xs(self, hwnd, raw):
+        """Logical x positions along the window top that are truly showing."""
+        l, t, r, b = raw
+        dpr = self._dpr()
+        out = []
+        for frac in (0.2, 0.5, 0.8):
+            px = l + (r - l) * frac
+            if self._showing_at(hwnd, px, t + 8 * max(1, dpr)):
+                out.append(int(px / dpr))
+        return out
     def _feet_offset(self):
         return TOP_MARGIN + int((sprites.GRID_H - 2) * self.scale)
 
@@ -2116,15 +2153,20 @@ class CatWindow(QWidget):
                         return True          # ghost: not really on screen
                     if u.getlong(hwnd, -20) & 0x00000080:
                         return True          # WS_EX_TOOLWINDOW
-                    rect = self._win_rect(hwnd)
-                    if rect is None:
+                    raw = self._win_rect_raw(hwnd)
+                    if raw is None:
                         return True
+                    dpr = self._dpr()
+                    rect = tuple(int(v / dpr) for v in raw)
                     l_, t_, r_, b_ = rect
                     if r_ - l_ < 380 or b_ - t_ < 260:
                         return True
                     if t_ - self._feet_offset() < 8:
                         return True          # no headroom for the cat
-                    out.append((int(hwnd), rect))
+                    xs = self._visible_top_xs(hwnd, raw)
+                    if not xs:
+                        return True          # buried under other windows
+                    out.append((int(hwnd), rect, xs))
                 except Exception:
                     pass
                 return True
@@ -2162,6 +2204,20 @@ class CatWindow(QWidget):
         gy = scr.bottom() - self._feet_offset()
         return QPoint(gx, gy)
 
+    def _perch_covered(self, l, t, r, b):
+        """Probe beside the cat: is our window's top edge still showing?"""
+        if platform.system() != "Windows" or self.perch_hwnd is None:
+            return False
+        dpr = self._dpr()
+        # a point next to the cat (never under it), just inside the top edge
+        px = self.x() - 50
+        if px < l + 10:
+            px = self.x() + self.width() + 50
+        px = max(l + 10, min(px, r - 10))
+        res = self._showing_at(self.perch_hwnd, px * dpr,
+                               (t + 8) * dpr)
+        return res is False          # None (our own cat) never counts
+
     def try_perch(self, announce=False):
         targets = self._perch_targets()
         if not targets:
@@ -2176,8 +2232,14 @@ class CatWindow(QWidget):
             self.sleep_at = time.time()
             self.next_perch_try = time.time() + random.uniform(240, 480)
             return False
-        hwnd, (l, t, r, b) = random.choice(targets)
-        x = random.randint(l + 20, max(l + 20, r - self.width() - 20))
+        choice = random.choice(targets)
+        hwnd, (l, t, r, b) = choice[0], choice[1]
+        xs = choice[2] if len(choice) > 2 else None
+        if xs:
+            x = random.choice(xs) + random.randint(-30, 30)
+            x = max(l + 20, min(x, r - self.width() - 20))
+        else:
+            x = random.randint(l + 20, max(l + 20, r - self.width() - 20))
         y = t - self._feet_offset()
         self.perch_home = self.pos()
         self.perch_pending = hwnd
@@ -2212,6 +2274,7 @@ class CatWindow(QWidget):
             self.perch_pending = None
             self.perch_until = now + random.uniform(90, 240)
             self._shake_strikes = 0
+            self._cover_miss = 0
             if random.random() < 0.7:
                 self.say(random.choice(["nice view up here", "mine now.",
                                         "🪟🐾"]), 2.5)
@@ -2240,6 +2303,21 @@ class CatWindow(QWidget):
             self.next_perch_try = now + random.uniform(180, 420)
             return
         _, (l, t, r, b) = q
+        if self._perch_covered(l, t, r, b):
+            self._cover_miss += 1
+            if self._cover_miss > 22:        # ~0.7s: not just a menu popup
+                self._end_perch(go_home=False)
+                try:
+                    g = self._ground_point()
+                    if abs(g.y() - self.y()) > 4:
+                        self._glide_to(g, speed=300)
+                except Exception:
+                    pass
+                self.sleep_at = now
+                self.next_perch_try = now + random.uniform(180, 420)
+                return
+        else:
+            self._cover_miss = 0
         x = max(l + 6, min(l + self.perch_offx, r - self.width() - 6))
         y = t - self._feet_offset()
         if (x, y) != (self.x(), self.y()):
@@ -2336,7 +2414,7 @@ class CatWindow(QWidget):
         img = self._frame_image(name, False, hot).copy()
 
         eyes = sprites.EYE_CELLS.get(name)
-        if eyes and self.state != SLEEP:
+        if eyes:
             if self.state == THINK:
                 offx, offy = -s // 3, -s // 2
             elif self.state == SCROLLPLAY:
