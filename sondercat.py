@@ -1431,14 +1431,19 @@ class CatWindow(QWidget):
         lil.setChecked(self.ccfg["palette"] == "lilly")
         lil.triggered.connect(lambda _=False: self.set_palette("lilly"))
         thm.addAction(lil)
+        jjt = QAction("JJ 💚", menu)
+        jjt.setCheckable(True)
+        jjt.setChecked(self.ccfg["palette"] == "jj")
+        jjt.triggered.connect(lambda _=False: self.set_palette("jj"))
+        thm.addAction(jjt)
         more = QAction("more coming…", menu)
         more.setEnabled(False)
         thm.addAction(more)
 
         fur = cust.addMenu("Fur color")
         for name in sprites.PALETTES:
-            if name == "lilly":
-                continue                     # lives under Themes
+            if name in ("lilly", "jj"):
+                continue                     # they live under Themes
             act = QAction(name.title(), menu)
             act.setCheckable(True)
             act.setChecked(self.ccfg["palette"] == name
@@ -1653,14 +1658,14 @@ class CatWindow(QWidget):
     def set_palette(self, name):
         self.ccfg["palette"] = name
         self.ccfg["custom_body"] = None
-        if name == "lilly":
-            self.ccfg["pattern"] = "lilly"   # her signature white chest
+        if name in ("lilly", "jj"):
+            self.ccfg["pattern"] = name      # theme cats bring their pattern
         save_config(self.mgr.cfg)
         self._frame_cache = {}
         if self.index == 0:
             self.mgr._make_tray()
-        self.say("Lilly! 🧡" if name == "lilly"
-                 else f"New fur: {name}!")
+        self.say({"lilly": "Lilly! 🧡", "jj": "JJ! 💚"}.get(
+            name, f"New fur: {name}!"))
 
     def set_pattern(self, name):
         self.ccfg["pattern"] = name
