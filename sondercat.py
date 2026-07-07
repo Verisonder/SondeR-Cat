@@ -488,6 +488,12 @@ def clear_agent_status():
 class Meow:
     def __init__(self):
         self.fx = None
+        self.wav = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "meow.wav")
+        self.use_winsound = (platform.system() == "Windows"
+                             and os.path.exists(self.wav))
+        if self.use_winsound:
+            return
         try:
             from PySide6.QtMultimedia import QSoundEffect
             from PySide6.QtCore import QUrl
@@ -502,7 +508,13 @@ class Meow:
 
     def play(self):
         try:
-            if self.fx:
+            if self.use_winsound:
+                import winsound
+                winsound.PlaySound(self.wav,
+                                   winsound.SND_FILENAME
+                                   | winsound.SND_ASYNC
+                                   | winsound.SND_NODEFAULT)
+            elif self.fx:
                 self.fx.play()
         except Exception:
             pass
