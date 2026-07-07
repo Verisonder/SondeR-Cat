@@ -60,9 +60,12 @@ SmartScreen may warn about a new unsigned app — click *More info → Run
 anyway*. The installer's full source code is right here in this repo
 (`setup_stub.c`), built by `build_exe.py`.
 
-**From source instead:** download the repo zip, extract it, and double-click
-**`CLICK_ME_TO_INSTALL.bat`** — it finds and runs the classic installer from
-wherever you extracted.
+**If Smart App Control / antivirus blocks the exe** (or you just prefer no
+exe): click the green **Code** button above → **Download ZIP** → right-click
+the downloaded zip → *Properties* → tick **Unblock** → OK → *Extract All* →
+double-click **`CLICK_ME_TO_INSTALL.bat`**. Everything is included in the
+zip — no pip, no downloads — and it only runs Windows' own signed programs,
+so it works even where the exe is blocked.
 
 ### Linux
 

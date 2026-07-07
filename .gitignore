@@ -8,7 +8,6 @@ Thumbs.db
 
 # build artifacts (rebuilt by build_exe.py)
 wheels/
-libs/
 payload.zip
 *.o
 start_sondercat.sh
