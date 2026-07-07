@@ -145,7 +145,7 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.6.0"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -767,8 +767,7 @@ class Manager(QObject):
         for c in self.cats:
             if kind == "sleep":
                 c.yawn_until = time.time() + 0.9
-            if kind == "stretch":
-                c._set_grow(True)
+
 
     # ------------------------------------------- live animation editing --
     def sprites_path(self):
@@ -1394,7 +1393,7 @@ class CatWindow(QWidget):
                             ("Grooming 🐾", "groom"),
                             ("Yawn + sleep 💤", "sleep"),
                             ("Running", "run"),
-                            ("Stretch (grows!)", "stretch"),
+                            ("Stretch", "stretch"),
                             ("Dangle (hanging)", "dangle"),
                             ("Peek pose", "peek")):
             act = QAction(label, menu)
@@ -1652,7 +1651,7 @@ class CatWindow(QWidget):
         # --- state selection (priority order) ---
         if now < mgr.stretch_until:
             self.state = STRETCH
-            self._set_grow(True)
+            pass
         elif overheat:
             if self.state != OVERHEAT and now - self.last_overheat_say > 8:
                 self.last_overheat_say = now
