@@ -625,6 +625,15 @@ class _InputBridge(QObject):
     poked = Signal()
 
 
+class _CallBridge(QObject):
+    """Marshal callables from worker threads onto the GUI thread."""
+    call = Signal(object)
+
+    def __init__(self):
+        super().__init__()
+        self.call.connect(lambda fn: fn())
+
+
 class Manager(QObject):
     """Shared services + global state for all cats: input hooks, fullscreen
     detection, agent status, Pomodoro, stretch reminders, tray icon."""
@@ -634,6 +643,7 @@ class Manager(QObject):
         self.app = app
         self.cfg = load_config()
         self.anim_test = None
+        self._call_bridge = _CallBridge()
         QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
         self.sprites_reloads = 0
         self._watch = None
@@ -786,7 +796,7 @@ class Manager(QObject):
             self.say_primary("checking for updates… 🌐", 4)
 
         def ui(fn):
-            QTimer.singleShot(0, fn)
+            self._call_bridge.call.emit(fn)
 
         def work():
             try:
