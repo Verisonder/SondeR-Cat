@@ -14,7 +14,7 @@ Free, open source, no telemetry, no accounts.
 
 **Reacts to you**
 - 👀 **Eye follow** — pupils track your cursor anywhere on screen
-- 🔴 **Laser hunt** — wiggle the cursor side-to-side like a laser dot and the cat gallops after it (sensitivity: high / medium / low)
+- 🔴 **Laser hunt** — wiggle the cursor side-to-side like a laser dot and the cat gallops after it (adjustable sensitivity); wiggle up-down at the bottom edge to send it to hide
 - 🐾 **Purring pets** — rub its head with the mouse → hearts + "purrr…"
 - 🍡 **Mochi drag** — grab it and it hangs from your cursor by its paws, stretching like mochi as you swing it; shake for wobble
 - 😾 **Startle** — buzz the cursor past it and it jumps
@@ -24,6 +24,7 @@ Free, open source, no telemetry, no accounts.
 
 **Being a good coworker**
 - 😴 Naps when you're idle; wakes with a "mrrp?"
+- 💤 **Deep sleep** toggle (main menu, above Quit) — sleeps until YOU say otherwise; nothing wakes it
 - 📺 **Peek mode** — auto-hides at the bottom edge during fullscreen video; or send it to hide by wiggling your cursor up-down at the bottom of the screen
 - 🧘 **Stretch reminders** — it *grows big* and stretches with you every 30/50/90 min
 - 🍅 **Pomodoro** — focus/break **loops** with a pixel timer floating next to the cat
