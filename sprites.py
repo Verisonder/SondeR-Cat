@@ -354,6 +354,7 @@ STRETCH = [
     ".....KBBBBBBBBBBBBK.......",
     ".....KBBBBBBBBBBBBK.......",
     ".....KBBBBBBBBBBBBK.......",
+    ".....KBBBBBBBBBBBBK.......",
     ".....KBBBBBBBBBBBBK.KK....",
     ".....KBBBBBBBBBBBBKKBBK...",
     ".....KBBBBBBBBBBBBKKBK....",
@@ -361,7 +362,6 @@ STRETCH = [
     ".....KWWBKBBBBKWWKKK......",
     "......KWWK....KWWK........",
     ".......KK......KK.........",
-    "..........................",
     "..........................",
 ]
 
