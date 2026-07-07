@@ -58,10 +58,13 @@ def _fatal(title, details):
 # bundled-libraries mode: the Windows installer ships PySide6/pynput
 # pre-extracted next to the app — no pip involved, ever
 if platform.system() == "Windows":
-    _LIBS = os.path.abspath(os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "libs"))
-    if os.path.isdir(_LIBS) and _LIBS not in sys.path:
-        sys.path.insert(0, _LIBS)
+    _here = os.path.dirname(os.path.abspath(__file__))
+    for _cand in (os.path.join(_here, "libs"),
+                  os.path.join(_here, "..", "libs")):
+        _cand = os.path.abspath(_cand)
+        if os.path.isdir(_cand) and _cand not in sys.path:
+            sys.path.insert(0, _cand)
+            break
 
 LINUX_DEPS_HINT = (
     "  Debian/Ubuntu:  sudo apt install libxcb-cursor0 libgl1 "
@@ -1645,7 +1648,7 @@ class CatWindow(QWidget):
         else:
             self.state = IDLE
             if now > self.next_blink:
-                self.blink_until = now + 0.28
+                self.blink_until = now + 0.18
                 self.next_blink = now + random.uniform(2.5, 7)
             if now > self.next_groom and now > self.groom_until:
                 self.groom_until = now + 2.6
@@ -1812,9 +1815,8 @@ class CatWindow(QWidget):
         now = time.time()
         slow = int(now / 0.36) % 2          # time-based: smooth at any fps
         fast = int(now / 0.18) % 2
-        gallop = ("run_b", "run_a", "run_c", "run_d")[int(now / 0.11) % 4]
         if self.glide_target is not None and self.state != DRAG:
-            return gallop
+            return "run_a" if fast else "run_b"
         if self.state == SLEEP:
             if now < self.yawn_until:
                 return "yawn"
@@ -1831,28 +1833,22 @@ class CatWindow(QWidget):
             return ("knead_c", "knead_b", "knead_a",
                     "knead_b")[int(now / 0.14) % 4]
         if self.state == CHASE:
-            return gallop
+            return "run_a" if fast else "run_b"
         if self.state == THINK:
             return "sit_a" if fast else "sit_b"
         if now < self.groom_until:
             return "groom_a" if fast else "groom_b"
         if now < self.blink_until:
-            ph = self.blink_until - now
-            if ph > 0.20 or ph < 0.08:
-                return "blink_half"
             return "blink"
-        sway = int(now / 0.36) % 4
-        return ("sit_a", "sit_c", "sit_b", "sit_c")[sway]
+        return "sit_a" if slow else "sit_b"
 
     def _frame_image(self, name, flip, hot=False):
         key = (name, flip, hot, self.ccfg["pattern"], self.ccfg["palette"],
                self.ccfg.get("custom_body"), self.scale)
         img = self._frame_cache.get(key)
         if img is None:
-            fallback = {"sit_c": "sit_a", "sleep_b": "sleep",
-                        "yawn": "blink", "groom_a": "sit_a",
-                        "groom_b": "sit_a", "blink_half": "blink",
-                        "run_c": "run_a", "run_d": "run_b",
+            fallback = {"sleep_b": "sleep", "yawn": "blink",
+                        "groom_a": "sit_a", "groom_b": "sit_a",
                         "knead_c": "knead_b"}
             base = sprites.FRAMES.get(name)
             if base is None:

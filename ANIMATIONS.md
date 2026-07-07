@@ -56,15 +56,13 @@ draw it yourself.
 | `TYPE_A` / `TYPE_B` | keyboard kneading (alternating paws) |
 | `KNEAD_A`–`KNEAD_C` | batting the paper while you scroll: strike, mid, raised |
 | `SLEEP` | sleeping loaf |
-| `RUN_A`–`RUN_D` | 4-phase gallop: extend, gather, airborne, contact (chasing + hiding runs) |
+| `RUN_A` / `RUN_B` | chasing the cursor + running to/from hiding |
 | `STRETCH` | the grow-big stretch reminder |
 | `DANGLE` | hanging from your cursor (mochi drag) |
 | `PEEK` | hiding at the bottom screen edge |
-| `SIT_C` | tail mid-swish (idle sways A → C → B → C) |
 | `SLEEP_B` | breathing (alternates with `SLEEP`) |
 | `YAWN` | shown for a moment when falling asleep |
 | `GROOM_A` / `GROOM_B` | licking a paw — plays occasionally while idle |
-| `BLINK_HALF` | half-lidded phase of each blink |
 
 ## Also editable in the same file
 
