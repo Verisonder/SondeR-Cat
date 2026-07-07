@@ -1154,8 +1154,6 @@ class CatWindow(QWidget):
         self.perch_until = 0.0
         self.perch_home = None
         self.next_perch_try = time.time() + random.uniform(120, 360)
-        self.perch_nap_until = 0.0
-        self._force_nap_next = False
         self.wobble = 0.0
         self._last_drag_x = 0
         self._last_drag_dir = 0
@@ -1427,11 +1425,6 @@ class CatWindow(QWidget):
         wtest.triggered.connect(
             lambda _=False: mgr.primary().try_perch(announce=True))
         tst.addAction(wtest)
-        wnap = QAction("Nap on a window 💤🪟", menu)
-        wnap.triggered.connect(
-            lambda _=False: mgr.primary().try_perch(announce=True,
-                                                    force_nap=True))
-        tst.addAction(wnap)
         tst.addSeparator()
         doctor = QAction("Scroll doctor (5s live test)", menu)
         doctor.triggered.connect(mgr.scroll_doctor)
@@ -1560,8 +1553,7 @@ class CatWindow(QWidget):
                 self.manual_peek = True
         if dist_moved > 2 or inputs.typing(1.2):
             self.sleep_at = now + self.gcfg["sleep_seconds"]
-            if self.state == SLEEP and not self.gcfg.get("force_sleep") \
-                    and now >= self.perch_nap_until:
+            if self.state == SLEEP and not self.gcfg.get("force_sleep"):
                 self.state = IDLE
                 self.say("mrrp?", 1.5)
         self.prev_cursor = cur
@@ -1648,20 +1640,6 @@ class CatWindow(QWidget):
                 self._unpeek(cancel=False)
             if self.state != SLEEP:
                 self.yawn_until = now + 0.9
-            self.state = SLEEP
-            if now > self.next_zzz and len(self.zzz) < 3:
-                self.next_zzz = now + 1.4
-                r = self.cat_rect()
-                self.zzz.append({"x": r.center().x() + 20, "y": r.top() + 10,
-                                 "vy": 0.7, "life": 2.5,
-                                 "seed": random.random() * 6})
-            self.wobble *= 0.92
-            self.mochi += (1.0 - self.mochi) * 0.35
-            self.update()
-            return
-
-        # window nap: sleeping on (or where it was left by) a window
-        if now < self.perch_nap_until:
             self.state = SLEEP
             if now > self.next_zzz and len(self.zzz) < 3:
                 self.next_zzz = now + 1.4
@@ -1789,8 +1767,9 @@ class CatWindow(QWidget):
         self.update()
 
     # ------------------------------------------------------------- peeking --
-    def _glide_to(self, pt):
+    def _glide_to(self, pt, speed=1100):
         self.glide_target = QPoint(pt)
+        self.glide_speed = speed
         self._sync_float()
 
     def _glide_step(self, dt):
@@ -1802,7 +1781,7 @@ class CatWindow(QWidget):
             self._sync_float()
             self.glide_target = None
             return
-        step = min(d, 1100 * dt)
+        step = min(d, getattr(self, 'glide_speed', 1100) * dt)
         self._fx += step * dx / d
         self._fy += step * dy / d
         if dx > 24:
@@ -1931,8 +1910,7 @@ class CatWindow(QWidget):
                     if random.random() < 0.3:
                         self.say(random.choice(["purrr…", "prrrp", "♥"]), 1.2)
                     if self.state == SLEEP \
-                            and not self.gcfg.get("force_sleep") \
-                            and now >= self.perch_nap_until:
+                            and not self.gcfg.get("force_sleep"):
                         self.sleep_at = now + self.gcfg["sleep_seconds"]
                         self.state = IDLE
 
@@ -2021,8 +1999,7 @@ class CatWindow(QWidget):
         except Exception:
             return "gone"
 
-    def try_perch(self, announce=False, force_nap=False):
-        self._force_nap_next = force_nap
+    def try_perch(self, announce=False):
         targets = self._perch_targets()
         if not targets:
             if announce:
@@ -2034,28 +2011,22 @@ class CatWindow(QWidget):
         self.perch_home = self.pos()
         self.perch_pending = hwnd
         self.perch_offx = x - l
-        self._glide_to(QPoint(x, y))
+        self._glide_to(QPoint(x, y), speed=300)   # walk, don't run
         return True
 
     def _end_perch(self, go_home):
         self.perch_hwnd = None
         self.perch_pending = None
         if go_home and self.perch_home is not None:
-            self._glide_to(self.perch_home)
+            self._glide_to(self.perch_home, speed=300)
         self.perch_home = None
 
     def _perch_tick(self, now):
         if self.perch_pending is not None and self.glide_target is None:
             self.perch_hwnd = self.perch_pending
             self.perch_pending = None
-            self.perch_until = now + random.uniform(60, 180)
-            if self._force_nap_next or random.random() < 0.4:
-                self._force_nap_next = False
-                self.perch_nap_until = now + random.uniform(45, 120)
-                self.perch_until = max(self.perch_until,
-                                       self.perch_nap_until + 8)
-                self.yawn_until = now + 0.9
-            elif random.random() < 0.5:
+            self.perch_until = now + random.uniform(90, 240)
+            if random.random() < 0.7:
                 self.say(random.choice(["nice view up here", "mine now.",
                                         "🪟🐾"]), 2.5)
         if self.perch_hwnd is None:
@@ -2063,9 +2034,6 @@ class CatWindow(QWidget):
         q = self._perch_query(self.perch_hwnd)
         if q == "minimized" or q == "gone":
             self._end_perch(go_home=False)   # just stands where it is
-            if now >= self.perch_nap_until and random.random() < 0.5:
-                self.perch_nap_until = now + random.uniform(40, 90)
-                self.yawn_until = now + 0.9
             self.next_perch_try = now + random.uniform(180, 420)
             return
         _, (l, t, r, b) = q
@@ -2084,6 +2052,8 @@ class CatWindow(QWidget):
         slow = int(now / 0.36) % 2          # time-based: smooth at any fps
         fast = int(now / 0.18) % 2
         if self.glide_target is not None and self.state != DRAG:
+            if getattr(self, "glide_speed", 1100) <= 600:
+                return "run_a" if int(now / 0.34) % 2 else "run_b"
             return "run_a" if fast else "run_b"
         if self.state == SLEEP:
             if now < self.yawn_until:
