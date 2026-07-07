@@ -210,6 +210,19 @@ static void make_shortcut(int csidl, const wchar_t *pythonw)
 /* ------------------------------------------------------------ worker ----- */
 static DWORD WINAPI worker(LPVOID arg)
 {
+    /* 0. stop any running cats so the update actually takes effect */
+    status(L"Stopping any running cats\u2026");
+    {
+        wchar_t kill[512];
+        _snwprintf(kill, 512,
+            L"powershell -NoProfile -Command \"Get-CimInstance "
+            L"Win32_Process | Where-Object { $_.Name -like 'python*' -and "
+            L"$_.CommandLine -match 'sondercat' } | ForEach-Object "
+            L"{ Stop-Process -Id $_.ProcessId -Force }\"");
+        run_hidden(NULL, kill, 60 * 1000);
+        Sleep(400);
+    }
+
     /* 1. unpack embedded payload (RCDATA resource) */
     status(L"Unpacking SondeR cat\u2026");
     HRSRC rc = FindResourceW(NULL, MAKEINTRESOURCEW(2),
