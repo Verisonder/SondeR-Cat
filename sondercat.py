@@ -2285,9 +2285,20 @@ class CatWindow(QWidget):
             self.perch_until = now + random.uniform(90, 240)
             self._shake_strikes = 0
             self._cover_miss = 0
-            if random.random() < 0.7:
-                self.say(random.choice(["nice view up here", "mine now.",
-                                        "🪟🐾"]), 2.5)
+            if random.random() < 0.5:
+                # nap half: dozes off the moment things go quiet
+                self.sleep_at = now
+                if random.random() < 0.7:
+                    self.say(random.choice(["perfect nap spot 💤",
+                                            "zzz spot acquired",
+                                            "mine now. 💤"]), 2.5)
+            else:
+                # watch half: stays alert up there, keeping an eye on you
+                self.sleep_at = now + self.gcfg["sleep_seconds"]
+                if random.random() < 0.7:
+                    self.say(random.choice(["nice view up here",
+                                            "mine now.", "👀",
+                                            "supervising."]), 2.5)
         if self.perch_hwnd is None:
             return
         q = self._perch_query(self.perch_hwnd)
