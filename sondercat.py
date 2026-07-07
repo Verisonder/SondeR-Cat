@@ -2033,7 +2033,18 @@ class CatWindow(QWidget):
             return
         q = self._perch_query(self.perch_hwnd)
         if q == "minimized" or q == "gone":
-            self._end_perch(go_home=False)   # just stands where it is
+            self._end_perch(go_home=False)
+            # walk down to the bottom of the screen and settle for a nap
+            try:
+                scr = self.screen().availableGeometry()
+                gx = max(scr.left() + 8,
+                         min(self.x(), scr.right() - self.width() - 8))
+                gy = scr.bottom() - self._feet_offset()
+                if abs(gy - self.y()) > 4:
+                    self._glide_to(QPoint(gx, gy), speed=300)
+            except Exception:
+                pass
+            self.sleep_at = now               # doze off once settled
             self.next_perch_try = now + random.uniform(180, 420)
             return
         _, (l, t, r, b) = q
