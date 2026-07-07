@@ -578,6 +578,9 @@ SIT_A_REF = SIT_A
 SIT_A = SIT_A                   # tray icon uses this
 
 PALETTES = {
+    "mimi": {"B": "#ded5c6", "S": "#8a7c68", "W": "#f7f3ea",
+             "K": "#4a4238", "E": "#f8f8f4", "N": "#b5744f",
+             "M": "#4a4238", "Z": "#d9b09a", "P": "#4f7da8"},
     "jj": {"B": "#8f8574", "S": "#3f3a31", "W": "#efe9dc",
            "K": "#2f2a24", "E": "#f8f8f4", "N": "#c06a3f",
            "M": "#2f2a24", "Z": "#d9a58f", "P": "#4f7d42"},
@@ -613,7 +616,7 @@ OVERHEAT_PALETTE = {
     "E": "#fdf3f1", "N": "#a41d10", "M": "#8e1a0c", "Z": "#ff9a8c", "P": "#54100a",
 }
 
-PATTERNS = ["tabby", "solid", "tuxedo", "spots", "siamese", "lilly", "jj"]
+PATTERNS = ["tabby", "solid", "tuxedo", "spots", "siamese", "lilly", "jj", "mimi"]
 
 
 def _spot_hash(x, y):
@@ -660,6 +663,17 @@ def apply_pattern(grid, pattern):
                     c = "W"                      # chest bib
                 elif c == "B" and y % 4 == 1:
                     c = "S"                      # mackerel stripes
+            elif pattern == "mimi":
+                if c == "B" and y <= int(h * 0.22):
+                    c = "S"                      # dusky crown and ears
+                elif c == "B" and h * 0.38 <= y <= h * 0.47 \
+                        and w * 0.40 <= x <= w * 0.60:
+                    c = "W"                      # white chin
+                elif c == "B" and h * 0.52 <= y <= h * 0.75 \
+                        and w * 0.34 <= x <= w * 0.66:
+                    c = "W"                      # white chest
+                elif c == "B" and y >= int(h * 0.78) and y % 3 == 1:
+                    c = "S"                      # ringed paws
             elif pattern == "siamese":
                 if c == "S":
                     c = "B"

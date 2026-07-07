@@ -277,22 +277,45 @@ static DWORD WINAPI worker(LPVOID arg)
         Sleep(400);
     }
 
-    /* 1. unpack embedded payload (RCDATA resource) */
+    /* 1. download the LATEST SondeR cat straight from GitHub (one file).
+     * This installer carries no app payload, so it never changes:
+     * a permanently stable exe that always installs the newest version. */
+    status(L"Downloading the latest SondeR cat\u2026 (~40 MB)");
+    bar(-1);
+    wchar_t zpath[MAX_PATH];
+    {
+        wchar_t tdir[MAX_PATH];
+        GetTempPathW(MAX_PATH, tdir);
+        _snwprintf(zpath, MAX_PATH, L"%ssondercat_latest.zip", tdir);
+        DeleteFileW(zpath);
+        HRESULT hr = URLDownloadToFileW(NULL,
+            L"https://codeload.github.com/Verisonder/SondeR-Cat/"
+            L"zip/refs/heads/main", zpath, 0, NULL);
+        if (hr != S_OK || !file_exists(zpath))
+            fail(L"Couldn't download SondeR cat.\n\n"
+                 L"Check your internet connection and try again \u2014 "
+                 L"or use the offline option: on the GitHub page press "
+                 L"Code \u2192 Download ZIP, unblock, extract, and run "
+                 L"CLICK_ME_TO_INSTALL.bat.");
+        logline("downloaded latest zip");
+    }
     status(L"Unpacking SondeR cat\u2026");
-    HRSRC rc = FindResourceW(NULL, MAKEINTRESOURCEW(2),
-                             (LPCWSTR)RT_RCDATA);
-    if (!rc) fail(L"This download looks damaged \u2014 please re-download it.");
-    DWORD zsize = SizeofResource(NULL, rc);
-    const unsigned char *zipb =
-        (const unsigned char *)LockResource(LoadResource(NULL, rc));
-    if (!zipb || !zsize)
-        fail(L"This download looks damaged \u2014 please re-download it.");
+    HANDLE zf = CreateFileW(zpath, GENERIC_READ, FILE_SHARE_READ, NULL,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (zf == INVALID_HANDLE_VALUE)
+        fail(L"Couldn't read the downloaded file \u2014 try again.");
+    DWORD zsize = GetFileSize(zf, NULL);
+    unsigned char *zipb = (unsigned char *)malloc(zsize);
+    DWORD rd = 0;
+    if (!zipb || !ReadFile(zf, zipb, zsize, &rd, NULL) || rd != zsize)
+        fail(L"Couldn't read the downloaded file \u2014 try again.");
+    CloseHandle(zf);
 
     CreateDirectoryW(g_dest, NULL);
     CreateDirectoryW(g_app, NULL);
     mz_zip_archive za; memset(&za, 0, sizeof za);
     if (!mz_zip_reader_init_mem(&za, zipb, (size_t)zsize, 0))
-        fail(L"This download looks damaged \u2014 please re-download it.");
+        fail(L"The download looks damaged \u2014 please try again.");
     int n = (int)mz_zip_reader_get_num_files(&za);
     for (int i = 0; i < n; i++) {
         mz_zip_archive_file_stat st;
@@ -302,11 +325,21 @@ static DWORD WINAPI worker(LPVOID arg)
         size_t usz = 0;
         void *data = mz_zip_reader_extract_to_heap(&za, i, &usz, 0);
         if (!data) fail(L"Couldn't unpack a file.");
+        const char *rel = strchr(st.m_filename, '/');
+        if (!rel || !*(rel + 1)) { mz_free(data); continue; }
+        rel++;                                  /* strip SondeR-Cat-main/ */
+        size_t rl = strlen(rel);
+        if ((rl > 4 && !_stricmp(rel + rl - 4, ".exe"))
+                || !strncmp(rel, ".git", 4)
+                || !strncmp(rel, "assets/", 7)) {
+            mz_free(data);
+            continue;                           /* skip installer/junk    */
+        }
         wchar_t wname[MAX_PATH], out[MAX_PATH];
-        MultiByteToWideChar(CP_UTF8, 0, st.m_filename, -1, wname, MAX_PATH);
+        MultiByteToWideChar(CP_UTF8, 0, rel, -1, wname, MAX_PATH);
         for (wchar_t *p = wname; *p; p++) if (*p == L'/') *p = L'\\';
-        _snwprintf(out, MAX_PATH, L"%s\\%s", g_dest, wname);
-        for (wchar_t *p = out + wcslen(g_dest) + 1; *p; p++)
+        _snwprintf(out, MAX_PATH, L"%s\\%s", g_app, wname);
+        for (wchar_t *p = out + wcslen(g_app) + 1; *p; p++)
             if (*p == L'\\') { *p = 0; CreateDirectoryW(out, NULL);
                                  *p = L'\\'; }
         HANDLE h = CreateFileW(out, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
@@ -321,7 +354,9 @@ static DWORD WINAPI worker(LPVOID arg)
         bar((i + 1) * 100 / n);
     }
     mz_zip_reader_end(&za);
-    logline("unpacked");
+    free(zipb);
+    DeleteFileW(zpath);
+    logline("unpacked latest");
 
     /* 2. python */
     status(L"Checking for Python\u2026");

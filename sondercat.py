@@ -145,7 +145,7 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "2.9.0"
+APP_VERSION = "3.1.0"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1436,13 +1436,18 @@ class CatWindow(QWidget):
         jjt.setChecked(self.ccfg["palette"] == "jj")
         jjt.triggered.connect(lambda _=False: self.set_palette("jj"))
         thm.addAction(jjt)
+        mmt = QAction("Mimi 💙", menu)
+        mmt.setCheckable(True)
+        mmt.setChecked(self.ccfg["palette"] == "mimi")
+        mmt.triggered.connect(lambda _=False: self.set_palette("mimi"))
+        thm.addAction(mmt)
         more = QAction("more coming…", menu)
         more.setEnabled(False)
         thm.addAction(more)
 
         fur = cust.addMenu("Fur color")
         for name in sprites.PALETTES:
-            if name in ("lilly", "jj"):
+            if name in ("lilly", "jj", "mimi"):
                 continue                     # they live under Themes
             act = QAction(name.title(), menu)
             act.setCheckable(True)
@@ -1658,14 +1663,14 @@ class CatWindow(QWidget):
     def set_palette(self, name):
         self.ccfg["palette"] = name
         self.ccfg["custom_body"] = None
-        if name in ("lilly", "jj"):
+        if name in ("lilly", "jj", "mimi"):
             self.ccfg["pattern"] = name      # theme cats bring their pattern
         save_config(self.mgr.cfg)
         self._frame_cache = {}
         if self.index == 0:
             self.mgr._make_tray()
-        self.say({"lilly": "Lilly! 🧡", "jj": "JJ! 💚"}.get(
-            name, f"New fur: {name}!"))
+        self.say({"lilly": "Lilly! 🧡", "jj": "JJ! 💚",
+                  "mimi": "Mimi! 💙"}.get(name, f"New fur: {name}!"))
 
     def set_pattern(self, name):
         self.ccfg["pattern"] = name

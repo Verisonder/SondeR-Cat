@@ -1,30 +1,15 @@
 #!/usr/bin/env python3
-"""Build SondeR_cat_setup.exe: payload as an RCDATA resource (no overlay).
+"""Build SondeR_cat_setup.exe — the ONLINE installer.
+
+This exe carries NO app payload: at install time it downloads the latest
+repo zip from GitHub and unpacks it. That means it NEVER needs rebuilding
+for app changes — its hash stays permanently stable so Smart App Control /
+SmartScreen reputation can accumulate. Rebuild ONLY if setup_stub.* change.
+
 Needs mingw-w64:  apt install gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
 and miniz sources in ./miniz or /home/claude/miniz-master.
 """
-import io, zipfile, subprocess, os, sys
-
-# NOTE: the shipped SondeR_cat_setup.exe is HASH-FROZEN for Smart App
-# Control reputation. Do NOT rebuild/commit the exe for app-code changes —
-# the self-updater (incl. first-run auto-update) delivers current code.
-# Rebuild the exe ONLY when the installer itself (setup_stub.*) changes.
-FILES = ["sondercat.py", "sprites.py", "sonder_agent.py", "requirements.txt",
-         "install.bat", "debug.bat", "run.bat", "run.sh", "install.sh",
-         "README.md", "ANIMATIONS.md", "sondercat_gray.ico", "meow.wav"]
-buf = io.BytesIO()
-with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-    for f in FILES:
-        z.write(f, f"sondercat/{f}")
-    nlibs = 0
-    for root, _dirs, files in os.walk("libs"):
-        for fn in files:
-            p = os.path.join(root, fn)
-            z.write(p, p.replace(os.sep, "/"))
-            nlibs += 1
-    assert nlibs > 100, "libs/ tree missing — extract wheels first"
-open("payload.zip", "wb").write(buf.getvalue())
-print(f"payload: {len(FILES)} app files + {nlibs} bundled library files")
+import subprocess, os
 
 mz = "miniz" if os.path.isdir("miniz") else "/home/claude/miniz-master"
 subprocess.check_call(["x86_64-w64-mingw32-windres", "setup_stub.rc",
@@ -36,5 +21,5 @@ subprocess.check_call(["x86_64-w64-mingw32-gcc", "-municode", "-mwindows",
     f"{mz}/miniz_tdef.c", "-I", mz,
     "-luser32", "-lshell32", "-lcomctl32", "-lole32", "-luuid",
     "-lurlmon", "-ladvapi32"])
-os.remove("payload.zip")
-print("built SondeR_cat_setup.exe (resource payload)")
+sz = os.path.getsize("SondeR_cat_setup.exe")
+print(f"built SondeR_cat_setup.exe (online installer, {sz//1024} KB)")
