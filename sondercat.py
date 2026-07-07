@@ -1091,6 +1091,9 @@ class CatWindow(QWidget):
         self.state = IDLE
         self.flip = False
         self.blink_until = 0.0
+        self.yawn_until = 0.0
+        self.groom_until = 0.0
+        self.next_groom = time.time() + random.uniform(25, 70)
         self.next_blink = time.time() + random.uniform(2, 6)
         self.sleep_at = time.time() + self.gcfg["sleep_seconds"]
         self.zzz, self.hearts, self.steam = [], [], []
@@ -1540,6 +1543,8 @@ class CatWindow(QWidget):
         if self.gcfg.get("force_sleep"):
             if self.peeking:
                 self._unpeek(cancel=False)
+            if self.state != SLEEP:
+                self.yawn_until = now + 0.9
             self.state = SLEEP
             if now > self.next_zzz and len(self.zzz) < 3:
                 self.next_zzz = now + 1.4
@@ -1628,6 +1633,8 @@ class CatWindow(QWidget):
                 self.say(random.choice(["…", "thinking along…", "hmmm",
                                         f"go {mgr.agent_label}!"]), 1.8)
         elif now > self.sleep_at:
+            if self.state != SLEEP:
+                self.yawn_until = now + 0.9
             self.state = SLEEP
             if now > self.next_zzz and len(self.zzz) < 3:
                 self.next_zzz = now + 1.4
@@ -1638,8 +1645,11 @@ class CatWindow(QWidget):
         else:
             self.state = IDLE
             if now > self.next_blink:
-                self.blink_until = now + 0.18
+                self.blink_until = now + 0.28
                 self.next_blink = now + random.uniform(2.5, 7)
+            if now > self.next_groom and now > self.groom_until:
+                self.groom_until = now + 2.6
+                self.next_groom = now + random.uniform(30, 80)
 
         if self.state != PEEK and self.peeking:
             self._unpeek(cancel=True)
@@ -1805,7 +1815,9 @@ class CatWindow(QWidget):
         if self.glide_target is not None and self.state != DRAG:
             return "run_a" if fast else "run_b"
         if self.state == SLEEP:
-            return "sleep"
+            if now < self.yawn_until:
+                return "yawn"
+            return "sleep" if int(now / 1.3) % 2 else "sleep_b"
         if self.state == STRETCH:
             return "stretch"
         if self.state == PEEK:
@@ -1820,17 +1832,28 @@ class CatWindow(QWidget):
             return "run_a" if fast else "run_b"
         if self.state == THINK:
             return "sit_a" if fast else "sit_b"
+        if now < self.groom_until:
+            return "groom_a" if fast else "groom_b"
         if now < self.blink_until:
+            ph = self.blink_until - now
+            if ph > 0.20 or ph < 0.08:
+                return "blink_half"
             return "blink"
-        return "sit_a" if slow else "sit_b"
+        sway = int(now / 0.36) % 4
+        return ("sit_a", "sit_c", "sit_b", "sit_c")[sway]
 
     def _frame_image(self, name, flip, hot=False):
         key = (name, flip, hot, self.ccfg["pattern"], self.ccfg["palette"],
                self.ccfg.get("custom_body"), self.scale)
         img = self._frame_cache.get(key)
         if img is None:
-            grid = sprites.apply_pattern(sprites.FRAMES[name],
-                                         self.ccfg["pattern"])
+            fallback = {"sit_c": "sit_a", "sleep_b": "sleep",
+                        "yawn": "blink", "groom_a": "sit_a",
+                        "groom_b": "sit_a", "blink_half": "blink"}
+            base = sprites.FRAMES.get(name)
+            if base is None:
+                base = sprites.FRAMES[fallback.get(name, "sit_a")]
+            grid = sprites.apply_pattern(base, self.ccfg["pattern"])
             pal = sprites.OVERHEAT_PALETTE if hot else self.palette()
             img = sprites.render_frame(grid, pal, self.scale, flip)
             self._frame_cache[key] = img

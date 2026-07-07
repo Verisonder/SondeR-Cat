@@ -60,6 +60,11 @@ draw it yourself.
 | `STRETCH` | the grow-big stretch reminder |
 | `DANGLE` | hanging from your cursor (mochi drag) |
 | `PEEK` | hiding at the bottom screen edge |
+| `SIT_C` | tail mid-swish (idle sways A → C → B → C) |
+| `SLEEP_B` | breathing (alternates with `SLEEP`) |
+| `YAWN` | shown for a moment when falling asleep |
+| `GROOM_A` / `GROOM_B` | licking a paw — plays occasionally while idle |
+| `BLINK_HALF` | half-lidded phase of each blink |
 
 ## Also editable in the same file
 
