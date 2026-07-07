@@ -2040,11 +2040,26 @@ class CatWindow(QWidget):
         except Exception:
             return "gone"
 
+    def _ground_point(self):
+        scr = self.screen().availableGeometry()
+        gx = max(scr.left() + 8,
+                 min(self.x(), scr.right() - self.width() - 8))
+        gy = scr.bottom() - self._feet_offset()
+        return QPoint(gx, gy)
+
     def try_perch(self, announce=False):
         targets = self._perch_targets()
         if not targets:
             if announce:
-                self.say("no window to climb 🪟", 2.5)
+                self.say("no window… nap time then 💤", 2.5)
+            try:
+                g = self._ground_point()
+                if abs(g.y() - self.y()) > 4 or abs(g.x() - self.x()) > 4:
+                    self._glide_to(g, speed=300)
+            except Exception:
+                pass
+            self.sleep_at = time.time()
+            self.next_perch_try = time.time() + random.uniform(240, 480)
             return False
         hwnd, (l, t, r, b) = random.choice(targets)
         x = random.randint(l + 20, max(l + 20, r - self.width() - 20))
@@ -2058,11 +2073,7 @@ class CatWindow(QWidget):
     def _fall_off(self, now):
         self._end_perch(go_home=False)
         try:
-            scr = self.screen().availableGeometry()
-            gx = max(scr.left() + 8,
-                     min(self.x(), scr.right() - self.width() - 8))
-            gy = scr.bottom() - self._feet_offset()
-            self._glide_to(QPoint(gx, gy), speed=1900)   # drop, don't walk
+            self._glide_to(self._ground_point(), speed=1900)  # drop!
             self._falling = True
         except Exception:
             pass
@@ -2105,12 +2116,9 @@ class CatWindow(QWidget):
             self._end_perch(go_home=False)
             # walk down to the bottom of the screen and settle for a nap
             try:
-                scr = self.screen().availableGeometry()
-                gx = max(scr.left() + 8,
-                         min(self.x(), scr.right() - self.width() - 8))
-                gy = scr.bottom() - self._feet_offset()
-                if abs(gy - self.y()) > 4:
-                    self._glide_to(QPoint(gx, gy), speed=300)
+                g = self._ground_point()
+                if abs(g.y() - self.y()) > 4:
+                    self._glide_to(g, speed=300)
             except Exception:
                 pass
             self.sleep_at = now               # doze off once settled
