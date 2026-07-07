@@ -782,6 +782,9 @@ class Manager(QObject):
 
     def check_updates(self, manual=True):
         """Runs in a worker thread; UI messages go through the bridge."""
+        if manual:
+            self.say_primary("checking for updates… 🌐", 4)
+
         def ui(fn):
             QTimer.singleShot(0, fn)
 
@@ -802,7 +805,8 @@ class Manager(QObject):
                 ui(lambda: self.say_primary(
                     f"v{ver} is available! menu → Check for updates", 6))
                 return
-            ui(lambda: self.say_primary(f"updating to v{ver}…", 6))
+            ui(lambda: self.say_primary(
+                f"found v{ver}! downloading… ⤓", 8))
             try:
                 # download everything first
                 blobs = {"sondercat.py": remote_main.encode("utf-8")}
@@ -824,7 +828,9 @@ class Manager(QObject):
                 ui(lambda: self.say_primary(
                     f"update failed, nothing changed ({err})", 6))
                 return
-            ui(self._restart)
+            ui(lambda: self.say_primary(
+                f"installed v{ver}! restarting ✨", 3))
+            ui(lambda: QTimer.singleShot(1200, self._restart))
 
         import threading
         threading.Thread(target=work, daemon=True).start()
@@ -2022,6 +2028,14 @@ class CatWindow(QWidget):
         u.IsIconic.restype = wintypes.BOOL
         u.IsZoomed.argtypes = [wintypes.HWND]
         u.IsZoomed.restype = wintypes.BOOL
+        try:
+            u.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
+            u.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+            u.getlong = u.GetWindowLongPtrW
+        except AttributeError:
+            u.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+            u.GetWindowLongW.restype = ctypes.c_long
+            u.getlong = u.GetWindowLongW
         u.GetWindowTextLengthW.argtypes = [wintypes.HWND]
         u.GetWindowTextLengthW.restype = ctypes.c_int
         u.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR,
@@ -2045,6 +2059,16 @@ class CatWindow(QWidget):
             d = None
         cls._WIN32 = (ctypes, wintypes, u, d, WNDENUMPROC)
         return cls._WIN32
+
+    def _win_cloaked(self, hwnd):
+        ctypes, wintypes, u, d, _ = self._win32()
+        if d is None:
+            return False
+        val = wintypes.DWORD(0)
+        if d.DwmGetWindowAttribute(hwnd, 14, ctypes.byref(val),
+                                   ctypes.sizeof(val)) == 0:
+            return val.value != 0
+        return False
 
     def _win_rect(self, hwnd):
         ctypes, wintypes, u, d, _ = self._win32()
@@ -2088,6 +2112,10 @@ class CatWindow(QWidget):
                     if cls.value in ("Progman", "WorkerW", "Shell_TrayWnd",
                                      "SondeRcatSetup"):
                         return True
+                    if self._win_cloaked(hwnd):
+                        return True          # ghost: not really on screen
+                    if u.getlong(hwnd, -20) & 0x00000080:
+                        return True          # WS_EX_TOOLWINDOW
                     rect = self._win_rect(hwnd)
                     if rect is None:
                         return True
@@ -2118,6 +2146,8 @@ class CatWindow(QWidget):
                 return "minimized"
             if u.IsZoomed(hwnd):
                 return "maximized"
+            if self._win_cloaked(hwnd):
+                return "minimized"
             rect = self._win_rect(hwnd)
             if rect is None:
                 return "gone"
