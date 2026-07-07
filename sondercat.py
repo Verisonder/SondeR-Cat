@@ -632,6 +632,7 @@ class Manager(QObject):
         super().__init__()
         self.app = app
         self.cfg = load_config()
+        self.anim_test = None
         self.sprites_reloads = 0
         self._watch = None
         self._watch_timer = None
@@ -756,6 +757,18 @@ class Manager(QObject):
             self.celebrate(self._named(f"{label} is done! 🎉"))
         elif self.agent_working:
             self.agent_working = False
+
+    # --------------------------------------------------- animation tests --
+    def start_anim_test(self, kind, secs=4.0):
+        if kind == "paper":
+            self.test_scroll()
+            return
+        self.anim_test = {"kind": kind, "until": time.time() + secs}
+        for c in self.cats:
+            if kind == "sleep":
+                c.yawn_until = time.time() + 0.9
+            if kind == "stretch":
+                c._set_grow(True)
 
     # ------------------------------------------- live animation editing --
     def sprites_path(self):
@@ -1317,12 +1330,6 @@ class CatWindow(QWidget):
             act.triggered.connect(lambda _=False, k=key:
                                   mgr.set_wiggle_sens(k))
             sens.addAction(act)
-        tscroll = QAction("Test: scroll animation", menu)
-        tscroll.triggered.connect(mgr.test_scroll)
-        beh.addAction(tscroll)
-        doctor = QAction("Scroll doctor (5s live test)", menu)
-        doctor.triggered.connect(mgr.scroll_doctor)
-        beh.addAction(doctor)
         snd = QAction("Meow sounds", menu)
         snd.setCheckable(True)
         snd.setChecked(self.gcfg.get("sounds", True))
@@ -1379,6 +1386,26 @@ class CatWindow(QWidget):
         about = QAction("About", menu)
         about.triggered.connect(self.show_about)
         menu.addAction(about)
+        tst = menu.addMenu("Test animations")
+        for label, kind in (("Blink", "blink"),
+                            ("Typing (kneading)", "knead"),
+                            ("Overheat 🔥", "overheat"),
+                            ("Paper scroll play 📜", "paper"),
+                            ("Grooming 🐾", "groom"),
+                            ("Yawn + sleep 💤", "sleep"),
+                            ("Running", "run"),
+                            ("Stretch (grows!)", "stretch"),
+                            ("Dangle (hanging)", "dangle"),
+                            ("Peek pose", "peek")):
+            act = QAction(label, menu)
+            act.triggered.connect(
+                lambda _=False, k=kind: mgr.start_anim_test(k))
+            tst.addAction(act)
+        tst.addSeparator()
+        doctor = QAction("Scroll doctor (5s live test)", menu)
+        doctor.triggered.connect(mgr.scroll_doctor)
+        tst.addAction(doctor)
+
         slp = QAction("Deep sleep 💤", menu)
         slp.setCheckable(True)
         slp.setChecked(self.gcfg.get("force_sleep", False))
@@ -1541,6 +1568,44 @@ class CatWindow(QWidget):
 
         if self.glide_target is not None:
             self._glide_step(dt)
+
+        # manual animation test (from the Test menu) overrides everything
+        t = mgr.anim_test
+        if t is not None:
+            if now < t["until"]:
+                kind = t["kind"]
+                self.state = {"blink": IDLE, "groom": IDLE,
+                              "knead": KNEAD, "overheat": OVERHEAT,
+                              "sleep": SLEEP, "run": CHASE,
+                              "stretch": STRETCH, "dangle": DRAG,
+                              "peek": PEEK}.get(kind, IDLE)
+                if kind == "blink":
+                    self.blink_until = now + 0.4
+                elif kind == "groom":
+                    self.groom_until = t["until"]
+                elif kind == "sleep":
+                    if now > self.next_zzz and len(self.zzz) < 3:
+                        self.next_zzz = now + 1.4
+                        r = self.cat_rect()
+                        self.zzz.append({"x": r.center().x() + 20,
+                                         "y": r.top() + 10, "vy": 0.7,
+                                         "life": 2.5,
+                                         "seed": random.random() * 6})
+                elif kind == "overheat" and random.random() < 0.25:
+                    r = self.cat_rect()
+                    self.steam.append({
+                        "x": r.left() + random.randint(20, r.width() - 20),
+                        "y": r.top() + 6, "vy": 1.3, "life": 1.2,
+                        "seed": random.random() * 6})
+                self.wobble *= 0.92
+                self.mochi += (1.0 - self.mochi) * 0.35
+                self.update()
+                return
+            mgr.anim_test = None
+            self.state = IDLE
+            self.groom_until = 0
+            if self.grow > 1.0:
+                self._set_grow(False)
 
         # deep sleep: stays asleep no matter what, until toggled off
         if self.gcfg.get("force_sleep"):

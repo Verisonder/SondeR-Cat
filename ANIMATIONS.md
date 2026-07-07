@@ -15,6 +15,10 @@ the cat.
 No restarting, no reinstalling while you experiment. If you prefer manual
 control, use **Reload animations now** instead of the auto toggle.
 
+To preview any pose on demand, use **Test animations** in the main
+right-click menu — every animation can be triggered manually for a few
+seconds, even while Deep sleep is on.
+
 ## You cannot break the cat
 
 Every save is checked before it's used. If an edit has a problem, the cat
