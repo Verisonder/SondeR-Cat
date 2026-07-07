@@ -778,11 +778,22 @@ class Manager(QObject):
                     "meow.wav", "sondercat_gray.ico"]
 
     def _fetch(self, name):
-        import urllib.request
-        req = urllib.request.Request(self.UPDATE_BASE + name,
-                                     headers={"User-Agent": "SondeRcat"})
-        with urllib.request.urlopen(req, timeout=25) as r:
-            return r.read()
+        import urllib.request, urllib.error
+        last = None
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(
+                    self.UPDATE_BASE + name,
+                    headers={"User-Agent": "SondeRcat"})
+                with urllib.request.urlopen(req, timeout=25) as r:
+                    return r.read()
+            except urllib.error.HTTPError as e:
+                last = e
+                if e.code == 429 or e.code >= 500:
+                    time.sleep(4 * (attempt + 1))   # back off, then retry
+                    continue
+                raise
+        raise last
 
     def _local(self, name):
         try:
@@ -801,6 +812,11 @@ class Manager(QObject):
 
     def check_updates(self, manual=True):
         """Runs in a worker thread; UI messages go through the bridge."""
+        if getattr(self, "_update_busy", False):
+            if manual:
+                self.say_primary("still checking… 🐾", 3)
+            return
+        self._update_busy = True
         if manual:
             self.say_primary("checking for updates… 🌐", 4)
 
@@ -809,11 +825,22 @@ class Manager(QObject):
 
         def work():
             try:
+                self._work_updates(manual, ui)
+            finally:
+                self._update_busy = False
+
+        import threading
+        threading.Thread(target=work, daemon=True).start()
+
+    def _work_updates(self, manual, ui):
+            try:
                 ver, remote_main = self._remote_version()
-            except Exception:
+            except Exception as e:
                 if manual:
-                    ui(lambda: self.say_primary(
-                        "couldn't reach GitHub — try later 🌐", 4))
+                    msg = ("GitHub is rate-limiting — wait a few minutes "
+                           "and try again 🐢") if "429" in str(e) \
+                        else "couldn't reach GitHub — try later 🌐"
+                    ui(lambda: self.say_primary(msg, 5))
                 return
             main_bytes = remote_main.encode("utf-8")
             label = f"v{ver}" if ver and ver != APP_VERSION \
@@ -833,16 +860,19 @@ class Manager(QObject):
                         6))
                 return
             try:
-                # full check: download everything, diff against local files
-                blobs = {"sondercat.py": main_bytes}
-                for name in self.UPDATE_FILES[1:]:
-                    blobs[name] = self._fetch(name)
-                changed = {n: d for n, d in blobs.items()
-                           if d != self._local(n)}
-                if not changed:
+                # cheap verdict first: the two files every update touches
+                blobs = {"sondercat.py": main_bytes,
+                         "sprites.py": self._fetch("sprites.py")}
+                if all(blobs[n] == self._local(n) for n in blobs):
                     ui(lambda: self.say_primary(
                         f"you're up to date! (v{APP_VERSION})", 4))
                     return
+                # something changed: now fetch the rest and diff everything
+                for name in self.UPDATE_FILES:
+                    if name not in blobs:
+                        blobs[name] = self._fetch(name)
+                changed = {n: d for n, d in blobs.items()
+                           if d != self._local(n)}
                 ui(lambda: self.say_primary(
                     f"found {label}! downloading… ⤓", 8))
                 # validate BEFORE touching anything
@@ -864,9 +894,6 @@ class Manager(QObject):
             ui(lambda: self.say_primary(
                 f"installed {label}! restarting ✨", 3))
             ui(lambda: QTimer.singleShot(1200, self._restart))
-
-        import threading
-        threading.Thread(target=work, daemon=True).start()
 
     def _restart(self):
         save_config(self.cfg)
