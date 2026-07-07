@@ -54,9 +54,9 @@ draw it yourself.
 | `SIT_A` / `SIT_B` | idle sitting (B = tail flicked) |
 | `BLINK` | blinking |
 | `TYPE_A` / `TYPE_B` | keyboard kneading (alternating paws) |
-| `KNEAD_A` / `KNEAD_B` | paper-unroll pose while you scroll |
+| `KNEAD_A`–`KNEAD_C` | batting the paper while you scroll: strike, mid, raised |
 | `SLEEP` | sleeping loaf |
-| `RUN_A` / `RUN_B` | chasing the cursor + running to/from hiding |
+| `RUN_A`–`RUN_D` | 4-phase gallop: extend, gather, airborne, contact (chasing + hiding runs) |
 | `STRETCH` | the grow-big stretch reminder |
 | `DANGLE` | hanging from your cursor (mochi drag) |
 | `PEEK` | hiding at the bottom screen edge |

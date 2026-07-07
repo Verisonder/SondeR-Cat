@@ -1812,8 +1812,9 @@ class CatWindow(QWidget):
         now = time.time()
         slow = int(now / 0.36) % 2          # time-based: smooth at any fps
         fast = int(now / 0.18) % 2
+        gallop = ("run_b", "run_a", "run_c", "run_d")[int(now / 0.11) % 4]
         if self.glide_target is not None and self.state != DRAG:
-            return "run_a" if fast else "run_b"
+            return gallop
         if self.state == SLEEP:
             if now < self.yawn_until:
                 return "yawn"
@@ -1827,9 +1828,10 @@ class CatWindow(QWidget):
         if self.state in (KNEAD, OVERHEAT):
             return "type_a" if fast else "type_b"
         if self.state == SCROLLPLAY:
-            return "knead_a" if fast else "knead_b"
+            return ("knead_c", "knead_b", "knead_a",
+                    "knead_b")[int(now / 0.14) % 4]
         if self.state == CHASE:
-            return "run_a" if fast else "run_b"
+            return gallop
         if self.state == THINK:
             return "sit_a" if fast else "sit_b"
         if now < self.groom_until:
@@ -1849,7 +1851,9 @@ class CatWindow(QWidget):
         if img is None:
             fallback = {"sit_c": "sit_a", "sleep_b": "sleep",
                         "yawn": "blink", "groom_a": "sit_a",
-                        "groom_b": "sit_a", "blink_half": "blink"}
+                        "groom_b": "sit_a", "blink_half": "blink",
+                        "run_c": "run_a", "run_d": "run_b",
+                        "knead_c": "knead_b"}
             base = sprites.FRAMES.get(name)
             if base is None:
                 base = sprites.FRAMES[fallback.get(name, "sit_a")]
@@ -1873,6 +1877,8 @@ class CatWindow(QWidget):
         if eyes and self.state != SLEEP:
             if self.state == THINK:
                 offx, offy = -s // 3, -s // 2
+            elif self.state == SCROLLPLAY:
+                offx, offy = -(s * 3) // 4, (s * 3) // 4
             else:
                 cur = QCursor.pos()
                 c = self.mapToGlobal(self.cat_rect().center())
