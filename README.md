@@ -43,23 +43,37 @@ Free, open source, no telemetry, no accounts.
 
 ## Install
 
-**Windows (one click):** download
-[`SondeR_cat_setup.bat`](../../releases/latest) and double-click it.
-It installs everything, creates a Desktop shortcut, offers autostart, and
-launches the cat. (SmartScreen may warn about an unrecognized file —
-*More info → Run anyway*.)
+### Windows — one file, everything inside
 
-**Windows (from source):** download the repo zip, extract it, and
-double-click **`CLICK_ME_TO_INSTALL.bat`** — it finds and runs the installer
-for you wherever you extracted it.
+**[Download SondeR_cat_setup.exe](https://github.com/Verisonder/SondeR-Cat/raw/main/SondeR_cat_setup.exe)** (71 MB) and double-click it.
 
-**Linux:**
+A graphical installer (no terminal, ever) does the rest:
+- unpacks the cat and **installs all components offline** — they're bundled
+  inside the exe, so this step needs no internet
+- if your PC has no Python at all, it fetches that one piece automatically
+  (via Windows' package manager)
+- creates a Desktop shortcut with the cat icon, offers start-with-Windows,
+  and launches your cat
+
+SmartScreen may warn about a new unsigned app — click *More info → Run
+anyway*. The installer's full source code is right here in this repo
+(`setup_stub.c`), built by `build_exe.py`.
+
+**From source instead:** download the repo zip, extract it, and double-click
+**`CLICK_ME_TO_INSTALL.bat`** — it finds and runs the classic installer from
+wherever you extracted.
+
+### Linux
+
 ```bash
-git clone https://github.com/Verisonder/sondercat.git
-cd sondercat && ./install.sh
+git clone https://github.com/Verisonder/SondeR-Cat.git
+cd SondeR-Cat && ./install.sh
 ```
 
-Requires Python 3.9+. Dependencies: PySide6, pynput.
+`install.sh` detects your package manager (apt / dnf / pacman / zypper /
+apk), checks system libraries, and offers to fix anything missing.
+
+Requires Python 3.9+ · Dependencies: PySide6 (Essentials), pynput
 
 ## Hooking up AI agents
 
@@ -114,11 +128,16 @@ command for your distro. If the window ever fails to open:
 
 ## Troubleshooting
 
-- **Shortcut does nothing** → run `debug.bat` to see the error; crashes are
-  also logged to `sondercat_error.log` in your home folder.
-- **No reaction to scrolling** → right-click → *Behavior → Scroll doctor*
-  runs a 5-second live test and tells you whether global mouse hooks are
-  being blocked (usually antivirus). Scrolling while hovering the cat
+- **The graphical installer failed** → it saves logs you can send to the
+  developer: `%TEMP%\SondeRcat_setup.log` (steps) and
+  `%TEMP%\SondeRcat_pip.log` (component details). Paste `%TEMP%` into the
+  Explorer address bar to get there.
+- **Shortcut does nothing** → run `debug.bat` from the install folder
+  (`%LOCALAPPDATA%\SondeRcat\sondercat`) to see the error; crashes are also
+  logged to `sondercat_error.log` in your home folder.
+- **No reaction to scrolling** → right-click the cat → *Behavior → Scroll
+  doctor* runs a 5-second live test and tells you whether global mouse hooks
+  are being blocked (usually antivirus). Scrolling while hovering the cat
   always works.
 - **Linux** — see the support matrix above; `install.sh` diagnoses most
   issues, and the app prints exact package commands if display libraries
