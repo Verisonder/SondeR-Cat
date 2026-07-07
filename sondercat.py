@@ -133,6 +133,7 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
+APP_VERSION = "1.3.0"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1242,6 +1243,7 @@ class CatWindow(QWidget):
     def show_about(self):
         QMessageBox.information(
             None, APP_NAME,
+            f"Version {APP_VERSION}\n"
             "Pixel cats for your desktop.\n\n"
             "• Eyes follow your cursor; they chase fast moves\n"
             "• Kneading when you type; overheat when you type FAST\n"
