@@ -1157,6 +1157,8 @@ class CatWindow(QWidget):
         self._perch_miss = 0
         self._perch_hist = deque(maxlen=40)
         self._shake_quiet_until = 0.0
+        self._shake_strikes = 0
+        self._falling = False
         self.wobble = 0.0
         self._last_drag_x = 0
         self._last_drag_dir = 0
@@ -1933,6 +1935,8 @@ class CatWindow(QWidget):
         u.IsWindowVisible.restype = wintypes.BOOL
         u.IsIconic.argtypes = [wintypes.HWND]
         u.IsIconic.restype = wintypes.BOOL
+        u.IsZoomed.argtypes = [wintypes.HWND]
+        u.IsZoomed.restype = wintypes.BOOL
         u.GetWindowTextLengthW.argtypes = [wintypes.HWND]
         u.GetWindowTextLengthW.restype = ctypes.c_int
         u.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR,
@@ -2027,6 +2031,8 @@ class CatWindow(QWidget):
                 return "gone"
             if u.IsIconic(hwnd):
                 return "minimized"
+            if u.IsZoomed(hwnd):
+                return "maximized"
             rect = self._win_rect(hwnd)
             if rect is None:
                 return "gone"
@@ -2049,6 +2055,19 @@ class CatWindow(QWidget):
         self._glide_to(QPoint(x, y), speed=300)   # walk, don't run
         return True
 
+    def _fall_off(self, now):
+        self._end_perch(go_home=False)
+        try:
+            scr = self.screen().availableGeometry()
+            gx = max(scr.left() + 8,
+                     min(self.x(), scr.right() - self.width() - 8))
+            gy = scr.bottom() - self._feet_offset()
+            self._glide_to(QPoint(gx, gy), speed=1900)   # drop, don't walk
+            self._falling = True
+        except Exception:
+            pass
+        self.next_perch_try = now + random.uniform(240, 480)
+
     def _end_perch(self, go_home):
         self.perch_hwnd = None
         self.perch_pending = None
@@ -2057,10 +2076,16 @@ class CatWindow(QWidget):
         self.perch_home = None
 
     def _perch_tick(self, now):
+        if self._falling and self.glide_target is None:
+            self._falling = False
+            self.wobble = max(self.wobble, 3.0)
+            self.say(random.choice(["oouch!!", "oof.", "😾 rude.",
+                                    "I meant to do that."]), 2.2)
         if self.perch_pending is not None and self.glide_target is None:
             self.perch_hwnd = self.perch_pending
             self.perch_pending = None
             self.perch_until = now + random.uniform(90, 240)
+            self._shake_strikes = 0
             if random.random() < 0.7:
                 self.say(random.choice(["nice view up here", "mine now.",
                                         "🪟🐾"]), 2.5)
@@ -2073,7 +2098,10 @@ class CatWindow(QWidget):
                 return                      # transient hiccup: hold on
         else:
             self._perch_miss = 0
-        if q == "minimized" or q == "gone":
+        if q == "gone" or q == "maximized":
+            self._fall_off(now)              # dropped! (closed / maximized)
+            return
+        if q == "minimized":
             self._end_perch(go_home=False)
             # walk down to the bottom of the screen and settle for a nap
             try:
@@ -2110,6 +2138,10 @@ class CatWindow(QWidget):
         if flips >= 3 and now > self._shake_quiet_until:
             self._shake_quiet_until = now + 5
             self._perch_hist.clear()
+            self._shake_strikes += 1
+            if self._shake_strikes >= 2:     # shaken again: loses its grip
+                self._fall_off(now)
+                return
             self.wobble = max(self.wobble, 3.0)
             self.say(random.choice(["stop shaking!!", "hey!! stop moving",
                                     "woOoOah", "earthquake!! 🙀"]), 2.2)
@@ -2122,6 +2154,8 @@ class CatWindow(QWidget):
         now = time.time()
         slow = int(now / 0.36) % 2          # time-based: smooth at any fps
         fast = int(now / 0.18) % 2
+        if getattr(self, "_falling", False) and self.glide_target is not None:
+            return "dangle"
         if self.glide_target is not None and self.state != DRAG:
             if getattr(self, "glide_speed", 1100) <= 600:
                 return "run_a" if int(now / 0.34) % 2 else "run_b"
