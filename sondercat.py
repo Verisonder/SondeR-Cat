@@ -784,6 +784,15 @@ class Manager(QObject):
         with urllib.request.urlopen(req, timeout=25) as r:
             return r.read()
 
+    def _local(self, name):
+        try:
+            p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             name)
+            with open(p, "rb") as f:
+                return f.read()
+        except Exception:
+            return b""
+
     def _remote_version(self):
         import re
         src = self._fetch("sondercat.py").decode("utf-8")
@@ -806,22 +815,36 @@ class Manager(QObject):
                     ui(lambda: self.say_primary(
                         "couldn't reach GitHub — try later 🌐", 4))
                 return
-            if not ver or ver == APP_VERSION:
-                if manual:
-                    ui(lambda: self.say_primary(
-                        f"you're up to date! (v{APP_VERSION})", 4))
-                return
+            main_bytes = remote_main.encode("utf-8")
+            label = f"v{ver}" if ver and ver != APP_VERSION \
+                else f"v{APP_VERSION} refresh"
             if not manual:
-                ui(lambda: self.say_primary(
-                    f"v{ver} is available! menu → Check for updates", 6))
+                # quiet startup probe: compare the two files that change
+                changed = main_bytes != self._local("sondercat.py")
+                if not changed:
+                    try:
+                        changed = (self._fetch("sprites.py")
+                                   != self._local("sprites.py"))
+                    except Exception:
+                        return
+                if changed:
+                    ui(lambda: self.say_primary(
+                        f"{label} is available! menu → Check for updates",
+                        6))
                 return
-            ui(lambda: self.say_primary(
-                f"found v{ver}! downloading… ⤓", 8))
             try:
-                # download everything first
-                blobs = {"sondercat.py": remote_main.encode("utf-8")}
+                # full check: download everything, diff against local files
+                blobs = {"sondercat.py": main_bytes}
                 for name in self.UPDATE_FILES[1:]:
                     blobs[name] = self._fetch(name)
+                changed = {n: d for n, d in blobs.items()
+                           if d != self._local(n)}
+                if not changed:
+                    ui(lambda: self.say_primary(
+                        f"you're up to date! (v{APP_VERSION})", 4))
+                    return
+                ui(lambda: self.say_primary(
+                    f"found {label}! downloading… ⤓", 8))
                 # validate BEFORE touching anything
                 compile(blobs["sondercat.py"], "sondercat.py", "exec")
                 ns = {"__file__": "sprites.py", "__name__": "sprites"}
@@ -830,7 +853,7 @@ class Manager(QObject):
                 if not ok:
                     raise ValueError(f"bad sprites in update: {msg}")
                 app_dir = os.path.dirname(os.path.abspath(__file__))
-                for name, data in blobs.items():
+                for name, data in changed.items():
                     with open(os.path.join(app_dir, name), "wb") as f:
                         f.write(data)
             except Exception as e:
@@ -839,7 +862,7 @@ class Manager(QObject):
                     f"update failed, nothing changed ({err})", 6))
                 return
             ui(lambda: self.say_primary(
-                f"installed v{ver}! restarting ✨", 3))
+                f"installed {label}! restarting ✨", 3))
             ui(lambda: QTimer.singleShot(1200, self._restart))
 
         import threading
@@ -1258,6 +1281,7 @@ class CatWindow(QWidget):
         self._shake_strikes = 0
         self._falling = False
         self._cover_miss = 0
+        self.perch_asleep = False
         self.wobble = 0.0
         self._last_drag_x = 0
         self._last_drag_dir = 0
@@ -1660,7 +1684,8 @@ class CatWindow(QWidget):
                 self.manual_peek = True
         if dist_moved > 2 or inputs.typing(1.2):
             self.sleep_at = now + self.gcfg["sleep_seconds"]
-            if self.state == SLEEP and not self.gcfg.get("force_sleep"):
+            if self.state == SLEEP and not self.gcfg.get("force_sleep") \
+                    and not self.perch_asleep:
                 self.state = IDLE
                 self.say("mrrp?", 1.5)
         self.prev_cursor = cur
@@ -1747,6 +1772,23 @@ class CatWindow(QWidget):
                 self._unpeek(cancel=False)
             if self.state != SLEEP:
                 self.yawn_until = now + 0.9
+            self.state = SLEEP
+            if now > self.next_zzz and len(self.zzz) < 3:
+                self.next_zzz = now + 1.4
+                r = self.cat_rect()
+                self.zzz.append({"x": r.center().x() + 20, "y": r.top() + 10,
+                                 "vy": 0.7, "life": 2.5,
+                                 "seed": random.random() * 6})
+            self.wobble *= 0.92
+            self.mochi += (1.0 - self.mochi) * 0.35
+            self.update()
+            return
+
+        # committed window nap: only shake/close/maximize (or grabbing
+        # the cat) can end it
+        if self.perch_asleep and self.perch_hwnd is not None:
+            if self.state != SLEEP:
+                self.yawn_until = max(self.yawn_until, now + 0.9)
             self.state = SLEEP
             if now > self.next_zzz and len(self.zzz) < 3:
                 self.next_zzz = now + 1.4
@@ -2017,7 +2059,8 @@ class CatWindow(QWidget):
                     if random.random() < 0.3:
                         self.say(random.choice(["purrr…", "prrrp", "♥"]), 1.2)
                     if self.state == SLEEP \
-                            and not self.gcfg.get("force_sleep"):
+                            and not self.gcfg.get("force_sleep") \
+                            and not self.perch_asleep:
                         self.sleep_at = now + self.gcfg["sleep_seconds"]
                         self.state = IDLE
 
@@ -2267,6 +2310,7 @@ class CatWindow(QWidget):
         self.next_perch_try = now + random.uniform(240, 480)
 
     def _end_perch(self, go_home):
+        self.perch_asleep = False
         self.perch_hwnd = None
         self.perch_pending = None
         if go_home and self.perch_home is not None:
@@ -2286,8 +2330,9 @@ class CatWindow(QWidget):
             self._shake_strikes = 0
             self._cover_miss = 0
             if random.random() < 0.5:
-                # nap half: dozes off the moment things go quiet
-                self.sleep_at = now
+                # nap half: commits to sleeping until physically disturbed
+                self.perch_asleep = True
+                self.yawn_until = now + 0.9
                 if random.random() < 0.7:
                     self.say(random.choice(["perfect nap spot 💤",
                                             "zzz spot acquired",
@@ -2364,10 +2409,13 @@ class CatWindow(QWidget):
             if self._shake_strikes >= 2:     # shaken again: loses its grip
                 self._fall_off(now)
                 return
+            self.perch_asleep = False        # rude awakening
+            self.perch_until = max(self.perch_until,
+                                   now + random.uniform(20, 60))
             self.wobble = max(self.wobble, 3.0)
             self.say(random.choice(["stop shaking!!", "hey!! stop moving",
                                     "woOoOah", "earthquake!! 🙀"]), 2.2)
-        if now > self.perch_until:
+        if now > self.perch_until and not self.perch_asleep:
             self._end_perch(go_home=True)
             self.next_perch_try = now + random.uniform(180, 420)
 
