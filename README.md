@@ -45,11 +45,11 @@ Free, open source, no telemetry, no accounts.
 
 ### Windows — one file, everything inside
 
-**[Download SondeR_cat_setup.exe](https://github.com/Verisonder/SondeR-Cat/raw/main/SondeR_cat_setup.exe)** (71 MB) and double-click it.
+**[Download SondeR_cat_setup.exe](https://github.com/Verisonder/SondeR-Cat/raw/main/SondeR_cat_setup.exe)** (20 MB) and double-click it.
 
 A graphical installer (no terminal, ever) does the rest:
-- unpacks the cat and **installs all components offline** — they're bundled
-  inside the exe, so this step needs no internet
+- unpacks the cat with **all components pre-extracted inside the exe** —
+  no pip, no downloads, nothing to install for this step
 - if your PC has no Python at all, it fetches that one piece automatically
   (via Windows' package manager)
 - creates a Desktop shortcut with the cat icon, offers start-with-Windows,

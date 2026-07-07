@@ -12,13 +12,15 @@ buf = io.BytesIO()
 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
     for f in FILES:
         z.write(f, f"sondercat/{f}")
-    import glob
-    whls = sorted(glob.glob("wheels/*.whl"))
-    assert whls, "wheels/ is empty — run pip download first (see README)"
-    for w in whls:
-        z.write(w, f"sondercat/wheels/{os.path.basename(w)}")
+    nlibs = 0
+    for root, _dirs, files in os.walk("libs"):
+        for fn in files:
+            p = os.path.join(root, fn)
+            z.write(p, p.replace(os.sep, "/"))
+            nlibs += 1
+    assert nlibs > 100, "libs/ tree missing — extract wheels first"
 open("payload.zip", "wb").write(buf.getvalue())
-print(f"payload: {len(FILES)} app files + {len(whls)} bundled wheels")
+print(f"payload: {len(FILES)} app files + {nlibs} bundled library files")
 
 mz = "miniz" if os.path.isdir("miniz") else "/home/claude/miniz-master"
 subprocess.check_call(["x86_64-w64-mingw32-windres", "setup_stub.rc",

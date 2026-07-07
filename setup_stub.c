@@ -2,9 +2,10 @@
  *
  * What it does, all with hidden child processes:
  *   1. unpack the app files embedded in this .exe (progress bar)
- *   2. find Python 3; if absent, download python.org's installer and run it
- *      silently (per-user, no admin)
- *   3. pip-install PySide6-Essentials + pynput, hidden
+ *   2. find a WORKING Python 3.9+ (validated by executing it); if none,
+ *      install one silently via winget or python.org (per-user, no admin)
+ *   3. components (PySide6/pynput) ship PRE-EXTRACTED inside this exe —
+ *      no pip, nothing to install, just a health check
  *   4. create a Desktop shortcut (cat icon), offer autostart
  *   5. launch the cat
  *
@@ -74,6 +75,18 @@ static int run_hidden(const wchar_t *exe, wchar_t *cmdline, DWORD timeout_ms)
     return (int)code;
 }
 
+static int python_ok(const wchar_t *exe)
+{
+    if (wcsstr(exe, L"WindowsApps"))
+        return 0;                     /* Microsoft Store alias trap */
+    wchar_t c[MAX_PATH + 160];
+    _snwprintf(c, MAX_PATH + 160,
+        L"\"%s\" -c \"import struct,sys;"
+        L"sys.exit(0 if struct.calcsize('P')==8 and "
+        L"sys.version_info>=(3,9) else 3)\"", exe);
+    return run_hidden((wchar_t *)exe, c, 60 * 1000) == 0;
+}
+
 static int file_exists(const wchar_t *p)
 {
     DWORD a = GetFileAttributesW(p);
@@ -106,7 +119,7 @@ static int reg_python(HKEY root, DWORD view)
                     == ERROR_SUCCESS) {
                 _snwprintf(g_python, MAX_PATH, L"%s%spython.exe", path,
                            path[wcslen(path) - 1] == L'\\' ? L"" : L"\\");
-                ok = file_exists(g_python);
+                ok = python_ok(g_python);
             }
             RegCloseKey(k);
         }
@@ -121,7 +134,8 @@ static int find_python(void)
     if (reg_python(HKEY_LOCAL_MACHINE, 0)) return 1;
     if (reg_python(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY)) return 1;
     wchar_t found[MAX_PATH];
-    if (SearchPathW(NULL, L"python.exe", NULL, MAX_PATH, found, NULL)) {
+    if (SearchPathW(NULL, L"python.exe", NULL, MAX_PATH, found, NULL)
+            && python_ok(found)) {
         wcscpy(g_python, found);
         return 1;
     }
@@ -247,45 +261,17 @@ static DWORD WINAPI worker(LPVOID arg)
     bar(-1);
     ensure_python();
 
-    /* 3. dependencies: installed OFFLINE from wheels inside this exe */
-    status(L"Setting up components (bundled \u2014 no download needed)\u2026");
-    wchar_t cmd[2048], piplog[MAX_PATH], tmpd[MAX_PATH];
-    GetTempPathW(MAX_PATH, tmpd);
-    _snwprintf(piplog, MAX_PATH, L"%sSondeRcat_pip.log", tmpd);
-    DeleteFileW(piplog);
-    /* make sure pip itself exists (some Pythons ship without it) */
-    _snwprintf(cmd, 2048, L"\"%s\" -m pip --version", g_python);
-    if (run_hidden(g_python, cmd, 2 * 60 * 1000) != 0) {
-        logline("pip missing -> ensurepip");
-        _snwprintf(cmd, 2048, L"\"%s\" -m ensurepip --user", g_python);
-        run_hidden(g_python, cmd, 5 * 60 * 1000);
-    }
-    _snwprintf(cmd, 2048,
-        L"\"%s\" -m pip install --user --disable-pip-version-check "
-        L"--no-index --find-links \"%s\\wheels\" --log \"%s\" "
-        L"PySide6-Essentials pynput", g_python, g_app, piplog);
-    int code = run_hidden(g_python, cmd, 30 * 60 * 1000);
-    logline(code == 0 ? "offline pip ok" : "offline pip FAILED");
-    if (code != 0) {
-        /* last resort: try online */
-        status(L"Retrying components online\u2026");
-        _snwprintf(cmd, 2048,
-            L"\"%s\" -m pip install --user --disable-pip-version-check "
-            L"--log \"%s\" \"PySide6-Essentials>=6.5\" \"pynput>=1.7\"",
-            g_python, piplog);
-        code = run_hidden(g_python, cmd, 30 * 60 * 1000);
-    }
-    if (code != 0)
-        fail(L"Couldn't set up the components.\n\n"
-             L"A detailed log was saved to:\n"
-             L"%TEMP%\\SondeRcat_pip.log\n\n"
-             L"Send that file to the developer and this gets fixed fast.");
+    /* 3. components are pre-extracted into libs\ — just prove they load */
     status(L"Checking everything works\u2026");
-    _snwprintf(cmd, 1024,
-        L"\"%s\" -c \"import PySide6.QtWidgets, pynput\"", g_python);
+    wchar_t cmd[2048];
+    _snwprintf(cmd, 2048,
+        L"\"%s\" -c \"import sys; sys.path.insert(0, r'%s\\libs'); "
+        L"import PySide6.QtWidgets, pynput\"", g_python, g_dest);
     if (run_hidden(g_python, cmd, 5 * 60 * 1000) != 0)
-        fail(L"Components installed but failed a health check.\n"
-             L"Run this installer once more.");
+        fail(L"The bundled components failed to load with your Python.\n\n"
+             L"A log was saved to %TEMP%\\SondeRcat_setup.log \u2014 "
+             L"send it to the developer and this gets fixed fast.");
+    logline("health check ok");
 
     /* 4. shortcuts */
     status(L"Creating shortcuts\u2026");

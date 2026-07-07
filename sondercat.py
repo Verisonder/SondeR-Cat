@@ -54,6 +54,14 @@ def _fatal(title, details):
         sys.stderr.write(msg)
 
 
+# bundled-libraries mode: the Windows installer ships PySide6/pynput
+# pre-extracted next to the app — no pip involved, ever
+if platform.system() == "Windows":
+    _LIBS = os.path.abspath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "libs"))
+    if os.path.isdir(_LIBS) and _LIBS not in sys.path:
+        sys.path.insert(0, _LIBS)
+
 LINUX_DEPS_HINT = (
     "  Debian/Ubuntu:  sudo apt install libxcb-cursor0 libgl1 "
     "libxkbcommon-x11-0 libegl1\n"
@@ -133,7 +141,7 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
