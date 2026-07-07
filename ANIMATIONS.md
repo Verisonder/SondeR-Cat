@@ -46,8 +46,8 @@ draw it yourself.
 
 ## The two hard rules
 
-1. Every row must be **exactly 24 characters**
-2. Every frame must be **exactly 26 rows**
+1. Every row must be **exactly 26 characters**
+2. Every frame must be **exactly 28 rows**
 
 (The validator enforces both, so worst case you get a helpful message.)
 
