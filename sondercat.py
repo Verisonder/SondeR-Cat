@@ -2751,18 +2751,24 @@ class CatWindow(QWidget):
             ew_x, ew_y = sprites.EYE_W * s, sprites.EYE_H * s
             pw = 2 * s                     # pupil size (px)
             pp = QPainter(img)
-            if self.state == DANCE:
+            wearing = (self.state == DANCE
+                       or (self.state in (KNEAD, OVERHEAT)
+                           and self.mgr.music_on
+                           and self.gcfg.get("dance_music", True)))
+            if wearing:
                 dark = QColor("#2a2a33")
                 lite = QColor("#7d7d94")
-                band = [(6, 4), (7, 3), (8, 3), (9, 2), (10, 2), (11, 2),
-                        (12, 2), (13, 2), (14, 2), (15, 2), (16, 3),
-                        (17, 3), (18, 4)]
-                cups = [(cx, cy) for cy in range(7, 11)
-                        for cx in (2, 3, 22, 23)]
+                arc = [(6, 4), (7, 3), (8, 3), (9, 2), (10, 2), (11, 2),
+                       (12, 2), (13, 2), (14, 2), (15, 2), (16, 3),
+                       (17, 3), (18, 4)]
+                band = arc + [(hx, hy + 1) for (hx, hy) in arc]
+                cups = [(cx, cy) for cy in range(6, 11)
+                        for cx in (1, 2, 3, 22, 23, 24)]
                 for (hx, hy) in band + cups:
                     fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
                     pp.fillRect(fx * s, hy * s, s, s, dark)
-                for (hx, hy) in ((3, 8), (22, 8), (6, 4), (18, 4)):
+                for (hx, hy) in ((2, 7), (23, 7), (2, 8), (23, 8),
+                                 (6, 5), (18, 5)):
                     fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
                     pp.fillRect(fx * s, hy * s, s, s, lite)
             for (ex, ey) in eyes:
