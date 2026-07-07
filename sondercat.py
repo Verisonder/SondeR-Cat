@@ -1154,6 +1154,9 @@ class CatWindow(QWidget):
         self.perch_until = 0.0
         self.perch_home = None
         self.next_perch_try = time.time() + random.uniform(120, 360)
+        self._perch_miss = 0
+        self._perch_hist = deque(maxlen=40)
+        self._shake_quiet_until = 0.0
         self.wobble = 0.0
         self._last_drag_x = 0
         self._last_drag_dir = 0
@@ -1915,6 +1918,57 @@ class CatWindow(QWidget):
                         self.state = IDLE
 
     # ------------------------------------------------- window perching ------
+    _WIN32 = None
+
+    @classmethod
+    def _win32(cls):
+        if cls._WIN32 is not None:
+            return cls._WIN32
+        import ctypes
+        from ctypes import wintypes
+        u = ctypes.WinDLL("user32", use_last_error=True)
+        u.IsWindow.argtypes = [wintypes.HWND]
+        u.IsWindow.restype = wintypes.BOOL
+        u.IsWindowVisible.argtypes = [wintypes.HWND]
+        u.IsWindowVisible.restype = wintypes.BOOL
+        u.IsIconic.argtypes = [wintypes.HWND]
+        u.IsIconic.restype = wintypes.BOOL
+        u.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+        u.GetWindowTextLengthW.restype = ctypes.c_int
+        u.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR,
+                                    ctypes.c_int]
+        u.GetClassNameW.restype = ctypes.c_int
+        u.GetWindowRect.argtypes = [wintypes.HWND,
+                                    ctypes.POINTER(wintypes.RECT)]
+        u.GetWindowRect.restype = wintypes.BOOL
+        WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND,
+                                         wintypes.LPARAM)
+        u.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
+        u.EnumWindows.restype = wintypes.BOOL
+        try:
+            d = ctypes.WinDLL("dwmapi")
+            d.DwmGetWindowAttribute.argtypes = [wintypes.HWND,
+                                                wintypes.DWORD,
+                                                ctypes.c_void_p,
+                                                wintypes.DWORD]
+            d.DwmGetWindowAttribute.restype = ctypes.c_long
+        except Exception:
+            d = None
+        cls._WIN32 = (ctypes, wintypes, u, d, WNDENUMPROC)
+        return cls._WIN32
+
+    def _win_rect(self, hwnd):
+        ctypes, wintypes, u, d, _ = self._win32()
+        r = wintypes.RECT()
+        ok = False
+        if d is not None:
+            ok = d.DwmGetWindowAttribute(hwnd, 9, ctypes.byref(r),
+                                         ctypes.sizeof(r)) == 0
+        if not ok and not u.GetWindowRect(hwnd, ctypes.byref(r)):
+            return None
+        dpr = self._dpr()
+        return (int(r.left / dpr), int(r.top / dpr),
+                int(r.right / dpr), int(r.bottom / dpr))
     def _feet_offset(self):
         return TOP_MARGIN + int((sprites.GRID_H - 2) * self.scale)
 
@@ -1929,18 +1983,13 @@ class CatWindow(QWidget):
         if platform.system() != "Windows":
             return []
         try:
-            import ctypes
-            from ctypes import wintypes
-            u = ctypes.windll.user32
+            ctypes, wintypes, u, d, WNDENUMPROC = self._win32()
             own = {int(c.winId()) for c in self.mgr.cats}
-            dpr = self._dpr()
             out = []
-            proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND,
-                                      wintypes.LPARAM)
 
             def cb(hwnd, _l):
                 try:
-                    if hwnd in own or not u.IsWindowVisible(hwnd) \
+                    if int(hwnd) in own or not u.IsWindowVisible(hwnd) \
                             or u.IsIconic(hwnd):
                         return True
                     if u.GetWindowTextLengthW(hwnd) == 0:
@@ -1950,26 +1999,20 @@ class CatWindow(QWidget):
                     if cls.value in ("Progman", "WorkerW", "Shell_TrayWnd",
                                      "SondeRcatSetup"):
                         return True
-                    r = wintypes.RECT()
-                    try:
-                        ctypes.windll.dwmapi.DwmGetWindowAttribute(
-                            wintypes.HWND(hwnd), 9, ctypes.byref(r),
-                            ctypes.sizeof(r))
-                    except Exception:
-                        u.GetWindowRect(hwnd, ctypes.byref(r))
-                    l_, t_, r_, b_ = (int(r.left / dpr), int(r.top / dpr),
-                                      int(r.right / dpr),
-                                      int(r.bottom / dpr))
+                    rect = self._win_rect(hwnd)
+                    if rect is None:
+                        return True
+                    l_, t_, r_, b_ = rect
                     if r_ - l_ < 380 or b_ - t_ < 260:
                         return True
                     if t_ - self._feet_offset() < 8:
                         return True          # no headroom for the cat
-                    out.append((int(hwnd), (l_, t_, r_, b_)))
+                    out.append((int(hwnd), rect))
                 except Exception:
                     pass
                 return True
 
-            u.EnumWindows(proc(cb), 0)
+            u.EnumWindows(WNDENUMPROC(cb), 0)
             return out
         except Exception:
             return []
@@ -1979,23 +2022,15 @@ class CatWindow(QWidget):
         if platform.system() != "Windows":
             return "gone"
         try:
-            import ctypes
-            from ctypes import wintypes
-            u = ctypes.windll.user32
+            _c, _w, u, _d, _p = self._win32()
             if not u.IsWindow(hwnd) or not u.IsWindowVisible(hwnd):
                 return "gone"
             if u.IsIconic(hwnd):
                 return "minimized"
-            r = wintypes.RECT()
-            try:
-                ctypes.windll.dwmapi.DwmGetWindowAttribute(
-                    wintypes.HWND(hwnd), 9, ctypes.byref(r),
-                    ctypes.sizeof(r))
-            except Exception:
-                u.GetWindowRect(hwnd, ctypes.byref(r))
-            dpr = self._dpr()
-            return ("ok", (int(r.left / dpr), int(r.top / dpr),
-                           int(r.right / dpr), int(r.bottom / dpr)))
+            rect = self._win_rect(hwnd)
+            if rect is None:
+                return "gone"
+            return ("ok", rect)
         except Exception:
             return "gone"
 
@@ -2032,6 +2067,12 @@ class CatWindow(QWidget):
         if self.perch_hwnd is None:
             return
         q = self._perch_query(self.perch_hwnd)
+        if q == "gone":
+            self._perch_miss += 1
+            if self._perch_miss < 3:
+                return                      # transient hiccup: hold on
+        else:
+            self._perch_miss = 0
         if q == "minimized" or q == "gone":
             self._end_perch(go_home=False)
             # walk down to the bottom of the screen and settle for a nap
@@ -2053,6 +2094,25 @@ class CatWindow(QWidget):
         if (x, y) != (self.x(), self.y()):
             self.move(x, y)
             self._sync_float()
+        # shaking the window under the cat: it objects
+        self._perch_hist.append((now, l))
+        pts = [(t_, l_) for (t_, l_) in self._perch_hist if now - t_ < 0.8]
+        flips = 0
+        last_dir = 0
+        for i in range(1, len(pts)):
+            d = pts[i][1] - pts[i - 1][1]
+            if abs(d) < 12:
+                continue
+            direc = 1 if d > 0 else -1
+            if last_dir and direc != last_dir:
+                flips += 1
+            last_dir = direc
+        if flips >= 3 and now > self._shake_quiet_until:
+            self._shake_quiet_until = now + 5
+            self._perch_hist.clear()
+            self.wobble = max(self.wobble, 3.0)
+            self.say(random.choice(["stop shaking!!", "hey!! stop moving",
+                                    "woOoOah", "earthquake!! 🙀"]), 2.2)
         if now > self.perch_until:
             self._end_perch(go_home=True)
             self.next_perch_try = now + random.uniform(180, 420)
