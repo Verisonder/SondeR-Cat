@@ -225,6 +225,9 @@ static DWORD WINAPI worker(LPVOID arg)
         MultiByteToWideChar(CP_UTF8, 0, st.m_filename, -1, wname, MAX_PATH);
         for (wchar_t *p = wname; *p; p++) if (*p == L'/') *p = L'\\';
         _snwprintf(out, MAX_PATH, L"%s\\%s", g_dest, wname);
+        for (wchar_t *p = out + wcslen(g_dest) + 1; *p; p++)
+            if (*p == L'\\') { *p = 0; CreateDirectoryW(out, NULL);
+                                 *p = L'\\'; }
         HANDLE h = CreateFileW(out, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
                                FILE_ATTRIBUTE_NORMAL, NULL);
         DWORD wr = 0;
@@ -244,18 +247,39 @@ static DWORD WINAPI worker(LPVOID arg)
     bar(-1);
     ensure_python();
 
-    /* 3. dependencies (hidden pip) */
-    status(L"Installing components (~120 MB, one time)\u2026 "
-           L"this can take a few minutes");
-    wchar_t cmd[1024];
-    _snwprintf(cmd, 1024,
-        L"\"%s\" -m pip install --user --quiet --disable-pip-version-check "
-        L"\"PySide6-Essentials>=6.5\" \"pynput>=1.7\"", g_python);
+    /* 3. dependencies: installed OFFLINE from wheels inside this exe */
+    status(L"Setting up components (bundled \u2014 no download needed)\u2026");
+    wchar_t cmd[2048], piplog[MAX_PATH], tmpd[MAX_PATH];
+    GetTempPathW(MAX_PATH, tmpd);
+    _snwprintf(piplog, MAX_PATH, L"%sSondeRcat_pip.log", tmpd);
+    DeleteFileW(piplog);
+    /* make sure pip itself exists (some Pythons ship without it) */
+    _snwprintf(cmd, 2048, L"\"%s\" -m pip --version", g_python);
+    if (run_hidden(g_python, cmd, 2 * 60 * 1000) != 0) {
+        logline("pip missing -> ensurepip");
+        _snwprintf(cmd, 2048, L"\"%s\" -m ensurepip --user", g_python);
+        run_hidden(g_python, cmd, 5 * 60 * 1000);
+    }
+    _snwprintf(cmd, 2048,
+        L"\"%s\" -m pip install --user --disable-pip-version-check "
+        L"--no-index --find-links \"%s\\wheels\" --log \"%s\" "
+        L"PySide6-Essentials pynput", g_python, g_app, piplog);
     int code = run_hidden(g_python, cmd, 30 * 60 * 1000);
-    logline("pip done");
+    logline(code == 0 ? "offline pip ok" : "offline pip FAILED");
+    if (code != 0) {
+        /* last resort: try online */
+        status(L"Retrying components online\u2026");
+        _snwprintf(cmd, 2048,
+            L"\"%s\" -m pip install --user --disable-pip-version-check "
+            L"--log \"%s\" \"PySide6-Essentials>=6.5\" \"pynput>=1.7\"",
+            g_python, piplog);
+        code = run_hidden(g_python, cmd, 30 * 60 * 1000);
+    }
     if (code != 0)
-        fail(L"Couldn't install the components.\n\nCheck your internet "
-             L"connection and run this installer again.");
+        fail(L"Couldn't set up the components.\n\n"
+             L"A detailed log was saved to:\n"
+             L"%TEMP%\\SondeRcat_pip.log\n\n"
+             L"Send that file to the developer and this gets fixed fast.");
     status(L"Checking everything works\u2026");
     _snwprintf(cmd, 1024,
         L"\"%s\" -c \"import PySide6.QtWidgets, pynput\"", g_python);
