@@ -634,6 +634,7 @@ class Manager(QObject):
         self.app = app
         self.cfg = load_config()
         self.anim_test = None
+        QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
         self.sprites_reloads = 0
         self._watch = None
         self._watch_timer = None
@@ -758,6 +759,87 @@ class Manager(QObject):
             self.celebrate(self._named(f"{label} is done! 🎉"))
         elif self.agent_working:
             self.agent_working = False
+
+    # ------------------------------------------------------ self updater --
+    UPDATE_BASE = ("https://raw.githubusercontent.com/"
+                   "Verisonder/SondeR-Cat/main/")
+    UPDATE_FILES = ["sondercat.py", "sprites.py", "sonder_agent.py",
+                    "ANIMATIONS.md", "README.md", "requirements.txt",
+                    "meow.wav", "sondercat_gray.ico"]
+
+    def _fetch(self, name):
+        import urllib.request
+        req = urllib.request.Request(self.UPDATE_BASE + name,
+                                     headers={"User-Agent": "SondeRcat"})
+        with urllib.request.urlopen(req, timeout=25) as r:
+            return r.read()
+
+    def _remote_version(self):
+        import re
+        src = self._fetch("sondercat.py").decode("utf-8")
+        m = re.search(r'APP_VERSION = "([^"]+)"', src)
+        return (m.group(1) if m else None), src
+
+    def check_updates(self, manual=True):
+        """Runs in a worker thread; UI messages go through the bridge."""
+        def ui(fn):
+            QTimer.singleShot(0, fn)
+
+        def work():
+            try:
+                ver, remote_main = self._remote_version()
+            except Exception:
+                if manual:
+                    ui(lambda: self.say_primary(
+                        "couldn't reach GitHub — try later 🌐", 4))
+                return
+            if not ver or ver == APP_VERSION:
+                if manual:
+                    ui(lambda: self.say_primary(
+                        f"you're up to date! (v{APP_VERSION})", 4))
+                return
+            if not manual:
+                ui(lambda: self.say_primary(
+                    f"v{ver} is available! menu → Check for updates", 6))
+                return
+            ui(lambda: self.say_primary(f"updating to v{ver}…", 6))
+            try:
+                # download everything first
+                blobs = {"sondercat.py": remote_main.encode("utf-8")}
+                for name in self.UPDATE_FILES[1:]:
+                    blobs[name] = self._fetch(name)
+                # validate BEFORE touching anything
+                compile(blobs["sondercat.py"], "sondercat.py", "exec")
+                ns = {"__file__": "sprites.py", "__name__": "sprites"}
+                exec(compile(blobs["sprites.py"], "sprites.py", "exec"), ns)
+                ok, msg = validate_sprites(ns)
+                if not ok:
+                    raise ValueError(f"bad sprites in update: {msg}")
+                app_dir = os.path.dirname(os.path.abspath(__file__))
+                for name, data in blobs.items():
+                    with open(os.path.join(app_dir, name), "wb") as f:
+                        f.write(data)
+            except Exception as e:
+                err = str(e)[:120]
+                ui(lambda: self.say_primary(
+                    f"update failed, nothing changed ({err})", 6))
+                return
+            ui(self._restart)
+
+        import threading
+        threading.Thread(target=work, daemon=True).start()
+
+    def _restart(self):
+        save_config(self.cfg)
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "sondercat.py")
+        try:
+            subprocess.Popen([sys.executable, script],
+                             cwd=os.path.dirname(script))
+        except Exception:
+            self.say_primary("updated! restart me to finish 🐾", 8)
+            return
+        QApplication.instance().quit()
 
     # --------------------------------------------------- animation tests --
     def start_anim_test(self, kind, secs=4.0):
@@ -1411,6 +1493,9 @@ class CatWindow(QWidget):
         about = QAction("About", menu)
         about.triggered.connect(self.show_about)
         menu.addAction(about)
+        upd = QAction("Check for updates ⤓", menu)
+        upd.triggered.connect(lambda _=False: mgr.check_updates(manual=True))
+        menu.addAction(upd)
         tst = menu.addMenu("Test animations")
         for label, kind in (("Blink", "blink"),
                             ("Typing (kneading)", "knead"),
