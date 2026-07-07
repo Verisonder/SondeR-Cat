@@ -363,12 +363,16 @@ static DWORD WINAPI worker(LPVOID arg)
     bar(-1);
     ensure_python();
 
-    /* 3. components are pre-extracted into libs\ — just prove they load */
+    /* 3. components live in <app>\libs — prove they load (also try the
+     * legacy <dest>\libs location for older installs) */
     status(L"Checking everything works\u2026");
     wchar_t cmd[2048];
     _snwprintf(cmd, 2048,
-        L"\"%s\" -c \"import sys; sys.path.insert(0, r'%s\\libs'); "
-        L"import PySide6.QtWidgets, pynput\"", g_python, g_dest);
+        L"\"%s\" -c \"import sys; "
+        L"sys.path.insert(0, r'%s\\libs'); "
+        L"sys.path.insert(0, r'%s\\libs'); "
+        L"import PySide6.QtWidgets, pynput\"",
+        g_python, g_dest, g_app);
     if (run_hidden(g_python, cmd, 5 * 60 * 1000) != 0)
         fail(L"The bundled components failed to load with your Python.\n\n"
              L"A log was saved to %TEMP%\\SondeRcat_setup.log \u2014 "
