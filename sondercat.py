@@ -1400,9 +1400,15 @@ class CatWindow(QWidget):
 
     def palette(self):
         if self.ccfg.get("custom_body"):
-            return custom_palette(self.ccfg["custom_body"])
-        return sprites.PALETTES.get(self.ccfg["palette"],
-                                    sprites.PALETTES["orange tabby"])
+            pal = custom_palette(self.ccfg["custom_body"])
+        else:
+            pal = sprites.PALETTES.get(self.ccfg["palette"],
+                                       sprites.PALETTES["orange tabby"])
+        eye = self.ccfg.get("eye_color")
+        if eye:
+            pal = dict(pal)
+            pal["P"] = eye
+        return pal
 
     def say(self, text, secs=3.0, color=None):
         self.bubble_text = text
@@ -1418,8 +1424,21 @@ class CatWindow(QWidget):
         menu = QMenu(self)
         mgr = self.mgr
 
-        fur = menu.addMenu("Fur color")
+        cust = menu.addMenu("Customization 🎨")
+        thm = cust.addMenu("Themes ✨")
+        lil = QAction("Lilly 🧡", menu)
+        lil.setCheckable(True)
+        lil.setChecked(self.ccfg["palette"] == "lilly")
+        lil.triggered.connect(lambda _=False: self.set_palette("lilly"))
+        thm.addAction(lil)
+        more = QAction("more coming…", menu)
+        more.setEnabled(False)
+        thm.addAction(more)
+
+        fur = cust.addMenu("Fur color")
         for name in sprites.PALETTES:
+            if name == "lilly":
+                continue                     # lives under Themes
             act = QAction(name.title(), menu)
             act.setCheckable(True)
             act.setChecked(self.ccfg["palette"] == name
@@ -1430,7 +1449,7 @@ class CatWindow(QWidget):
         pick.triggered.connect(self.pick_color)
         fur.addAction(pick)
 
-        pat = menu.addMenu("Pattern")
+        pat = cust.addMenu("Pattern")
         for name in sprites.PATTERNS:
             act = QAction(name.title(), menu)
             act.setCheckable(True)
@@ -1438,7 +1457,25 @@ class CatWindow(QWidget):
             act.triggered.connect(lambda _=False, n=name: self.set_pattern(n))
             pat.addAction(act)
 
-        size = menu.addMenu("Size")
+        eye = cust.addMenu("Eye color 👁")
+        for label, hexv in (("Palette default", None),
+                            ("Midnight", "#2c3138"),
+                            ("Green", "#3c5240"),
+                            ("Hazel", "#6a5a2e"),
+                            ("Blue", "#3a5a7c"),
+                            ("Amber", "#8a5a20"),
+                            ("Pink", "#b06a7c")):
+            act = QAction(label, menu)
+            act.setCheckable(True)
+            act.setChecked(self.ccfg.get("eye_color") == hexv)
+            act.triggered.connect(
+                lambda _=False, h=hexv: self.set_eye_color(h))
+            eye.addAction(act)
+        ceye = QAction("Custom…", menu)
+        ceye.triggered.connect(self.pick_eye_color)
+        eye.addAction(ceye)
+
+        size = cust.addMenu("Size")
         for s in (2, 3, 4, 5, 6, 8, 10):
             act = QAction(f"{s}×", menu)
             act.setCheckable(True)
@@ -1632,6 +1669,21 @@ class CatWindow(QWidget):
         if self.index == 0:
             self.mgr._make_tray()
         self.say(f"{name.title()} pattern!")
+
+    def set_eye_color(self, hexv):
+        self.ccfg["eye_color"] = hexv
+        save_config(self.mgr.cfg)
+        self._frame_cache = {}
+        if self.index == 0:
+            self.mgr._make_tray()
+        self.say("new eyes! 👁" if hexv else "eyes back to normal")
+        self.update()
+
+    def pick_eye_color(self):
+        col = QColorDialog.getColor(QColor(self.palette()["P"]), None,
+                                    "Eye color")
+        if col.isValid():
+            self.set_eye_color(col.name())
 
     def pick_color(self):
         col = QColorDialog.getColor(QColor(self.palette()["B"]), None,
