@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.4.0"
-APP_BUILD = "0708r"
+APP_BUILD = "0708s"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -755,7 +755,6 @@ class BubbleWindow(QWidget):
                          | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.text = ""
         self.color = None
         self.until = 0.0
@@ -862,7 +861,20 @@ class AskBox(QWidget):
         self.show()
         self.raise_()
         self.activateWindow()
-        self.edit.setFocus()
+        self.setFocus(Qt.OtherFocusReason)
+        self.edit.setFocus(Qt.OtherFocusReason)
+        # some window managers hand focus to a brand-new tool window late;
+        # re-grab on the next event-loop turns so the first keystroke lands
+        for delay in (0, 30, 90, 180):
+            QTimer.singleShot(delay, self._grab_focus)
+
+    def _grab_focus(self):
+        if not self.isVisible():
+            return
+        self.raise_()
+        self.activateWindow()
+        self.edit.setFocus(Qt.OtherFocusReason)
+        self.edit.setCursorPosition(len(self.edit.text()))
 
     def reposition(self):
         cat = self.cat
