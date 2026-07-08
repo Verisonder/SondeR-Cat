@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "3.4.0"
-APP_BUILD = "0708e"
+APP_BUILD = "0708f"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1510,6 +1510,7 @@ class CatWindow(QWidget):
 
         # peek
         self.manual_peek = False
+        self._peek_x = None
         self.peeking = False
         self._saved_pos = None
         self.grow = 1.0
@@ -1992,6 +1993,7 @@ class CatWindow(QWidget):
                     and len(self._wigv_times) >= flips_req):
                 self._wigv_times.clear()
                 self._hide_wig_cd = now + 4.0
+                self._peek_x = cur.x()          # hide where the wiggle was
                 self.manual_peek = True
         if dist_moved > 2 or inputs.typing(1.2):
             self.sleep_at = now + self.gcfg["sleep_seconds"]
@@ -2275,9 +2277,18 @@ class CatWindow(QWidget):
             return
         self.peeking = True
         self._saved_pos = self.pos()
-        scr = self.screen() or QGuiApplication.primaryScreen()
-        g = scr.geometry()
-        x = max(g.left(), min(self.x(), g.right() - self.width()))
+        tx = self._peek_x
+        self._peek_x = None
+        if tx is not None:
+            scr = QGuiApplication.screenAt(QPoint(tx, 0)) \
+                or self.screen() or QGuiApplication.primaryScreen()
+            g = scr.geometry()
+            x = max(g.left(), min(tx - self.width() // 2,
+                                  g.right() - self.width()))
+        else:
+            scr = self.screen() or QGuiApplication.primaryScreen()
+            g = scr.geometry()
+            x = max(g.left(), min(self.x(), g.right() - self.width()))
         self._glide_to(QPoint(x, g.bottom() - self.height() + 1))
 
     def _stand_up_here(self):
