@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.0.0"
-APP_BUILD = "0709z"
+APP_BUILD = "0710a"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1950,6 +1950,13 @@ class Manager(QObject):
 
     def open_ask_box(self):
         p = self.primary()
+        if self.cfg["global"].get("guard_mode", False):
+            # on patrol — no chit-chat
+            p.say(random.choice([
+                "not now — I'm on duty. 🫡", "busy guarding! ask me later.",
+                "can't talk, patrolling. 🔦", "at my post — off duty for Q&A."
+            ]), 2.5)
+            return
         name = (p.ccfg.get("name") or "").strip()
         if not name:
             p.say("I need a name first! ✏️", 3)
