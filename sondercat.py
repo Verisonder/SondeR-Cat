@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.0.0"
-APP_BUILD = "0708o"
+APP_BUILD = "0708p"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -824,6 +824,7 @@ class AskBox(QWidget):
 
     _PAD = 13
     _TAIL = 15
+    _GLOW = 10                             # transparent halo margin
 
     def __init__(self, mgr):
         super().__init__(None, Qt.FramelessWindowHint
@@ -849,59 +850,82 @@ class AskBox(QWidget):
         w = max(268, fm.horizontalAdvance(
             self.edit.placeholderText()) + 46)
         eh = fm.height() + 12
-        self.resize(w + self._PAD * 2,
-                    eh + self._PAD * 2 + self._TAIL)
-        self.edit.setGeometry(self._PAD + 4, self._PAD,
+        g = self._GLOW
+        self.resize(w + self._PAD * 2 + g * 2,
+                    eh + self._PAD * 2 + self._TAIL + g * 2)
+        self.edit.setGeometry(g + self._PAD + 4, g + self._PAD,
                               w - 8, eh)
-        scr = (cat.screen() or QGuiApplication.primaryScreen()).geometry()
-        x = cat.x() + cat.width() // 2 - self.width() // 2
-        y = cat.y() - self.height() + int(TOP_MARGIN * 0.8)
-        x = max(scr.left() + 4, min(x, scr.right() - self.width() - 4))
-        y = max(scr.top() + 4, y)
-        self.move(x, y)
+        self.reposition()
         self.show()
         self.raise_()
         self.activateWindow()
         self.edit.setFocus()
 
+    def reposition(self):
+        cat = self.cat
+        if cat is None:
+            return
+        scr = (cat.screen() or QGuiApplication.primaryScreen()).geometry()
+        x = cat.x() + cat.width() // 2 - self.width() // 2
+        y = cat.y() - self.height() + int(TOP_MARGIN * 0.8) + self._GLOW
+        x = max(scr.left() + 4, min(x, scr.right() - self.width() - 4))
+        y = max(scr.top() + 4, y)
+        self.move(x, y)
+
+    def follow_tick(self):
+        if self.isVisible() and self.cat is not None:
+            self.reposition()
+
     _PX = 5                                # bubble pixel size (chunky)
 
     def paintEvent(self, _ev):
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing, False)   # crisp like the cat
         paper = QColor("#fbf6ea")
-        edge = QColor("#c8a06a")           # warm tan, the cat's outline color
+        edge = QColor("#1c1c22")           # thin near-black border
         px = self._PX
-        W, H = self.width(), self.height() - self._TAIL
+        g = self._GLOW
+        W = self.width() - g * 2
+        H = self.height() - self._TAIL - g * 2
         gw, gh = W // px, H // px
         cxg = gw // 2
-        # rounded-corner mask on the low-res grid (chunky pixel corners)
         corner = 3
 
         def inside(gx, gy):
             if corner <= gx < gw - corner or corner <= gy < gh - corner:
                 return 0 <= gx < gw and 0 <= gy < gh
-            # within a corner region: keep cells inside the quarter circle
             cxr = corner if gx < corner else gw - 1 - corner
             cyr = corner if gy < corner else gh - 1 - corner
             return (gx - cxr) ** 2 + (gy - cyr) ** 2 <= corner ** 2 + 1
 
+        def is_edge(gx, gy):
+            return inside(gx, gy) and not (
+                inside(gx - 1, gy) and inside(gx + 1, gy)
+                and inside(gx, gy - 1) and inside(gx, gy + 1))
+
+        # 1) soft blue glow: smooth rounded halo behind the box (like eyes)
+        p.setRenderHint(QPainter.Antialiasing, True)
         p.setPen(Qt.NoPen)
+        for i, a in ((5, 26), (3, 40), (1, 70)):
+            gl = QColor("#3ec8ff"); gl.setAlpha(a)
+            p.setBrush(gl)
+            p.drawRoundedRect(g - i, g - i,
+                              W + i * 2, H + i * 2,
+                              corner * px + i, corner * px + i)
+        # 2) crisp pixel box on top
+        p.setRenderHint(QPainter.Antialiasing, False)
+        tail_cells = []
         for gy in range(gh):
             for gx in range(gw):
                 if not inside(gx, gy):
                     continue
-                border = not (inside(gx - 1, gy) and inside(gx + 1, gy)
-                              and inside(gx, gy - 1) and inside(gx, gy + 1))
-                p.fillRect(gx * px, gy * px, px, px,
-                           edge if border else paper)
-        # blocky tail, same pixel grid
-        tail_top = gh
+                p.fillRect(g + gx * px, g + gy * px, px, px,
+                           edge if is_edge(gx, gy) else paper)
+        # thin blocky tail (near-black sides), same grid
         for i, half in enumerate((3, 2, 1)):
-            gy = tail_top + i
+            gy = gh + i
             for gx in range(cxg - half, cxg + half + 1):
                 onedge = gx in (cxg - half, cxg + half) or i == 2
-                p.fillRect(gx * px, gy * px, px, px,
+                p.fillRect(g + gx * px, g + gy * px, px, px,
                            edge if onedge else paper)
 
     def _send(self):
@@ -2411,6 +2435,9 @@ class CatWindow(QWidget):
         bw = getattr(self.mgr, "_bubble_win", None)
         if bw is not None and bw.cat is self:
             bw.tick()
+        ab = getattr(self.mgr, "_ask_box", None)
+        if ab is not None and ab.cat is self:
+            ab.follow_tick()
         dt = min(0.2, max(1e-3, now - self.prev_tick_t))
         self.prev_tick_t = now
         mgr = self.mgr
