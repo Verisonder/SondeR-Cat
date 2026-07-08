@@ -1249,6 +1249,23 @@ class Manager(QObject):
         elif self.music_on and loud <= int(len(h) * 0.15):
             self.music_on = False
 
+    def music_doctor(self):
+        t_end = time.time() + 5
+
+        def step():
+            if time.time() > t_end:
+                self.say_primary("music doctor done 🎧", 2)
+                return
+            pk = self._audio.peak()
+            c = self.primary()
+            self.say_primary(
+                f"peak {pk:.3f} | music {'ON' if self.music_on else 'off'}"
+                f" | state {c.state} | dance_cfg "
+                f"{'on' if self.cfg['global'].get('dance_music', True) else 'OFF'}",
+                0.6)
+            QTimer.singleShot(250, step)
+        step()
+
     def toggle_dance_music(self):
         g = self.cfg["global"]
         g["dance_music"] = not g.get("dance_music", True)
@@ -1764,6 +1781,9 @@ class CatWindow(QWidget):
             lambda _=False: mgr.primary().try_perch(announce=True))
         tst.addAction(wtest)
         tst.addSeparator()
+        mdoc = QAction("Music doctor 🎧 (5s live test)", menu)
+        mdoc.triggered.connect(mgr.music_doctor)
+        tst.addAction(mdoc)
         doctor = QAction("Scroll doctor (5s live test)", menu)
         doctor.triggered.connect(mgr.scroll_doctor)
         tst.addAction(doctor)
@@ -2752,7 +2772,7 @@ class CatWindow(QWidget):
             pw = 2 * s                     # pupil size (px)
             pp = QPainter(img)
             wearing = (self.state == DANCE
-                       or (self.state in (KNEAD, OVERHEAT)
+                       or (self.state in (KNEAD, OVERHEAT, SCROLLPLAY)
                            and self.mgr.music_on
                            and self.gcfg.get("dance_music", True)))
             if wearing:
