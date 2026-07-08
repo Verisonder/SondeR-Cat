@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.3.0"
-APP_BUILD = "0709i"
+APP_BUILD = "0709j"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -307,6 +307,9 @@ class InputWatcher:
         self.last_key = 0.0
         self.key_count = 0            # increments per real keypress
         self.key_times = deque(maxlen=80)
+        self._MODS = {"ctrl", "ctrl_l", "ctrl_r", "shift", "shift_l",
+                      "shift_r", "alt", "alt_l", "alt_r", "alt_gr",
+                      "cmd", "cmd_l", "cmd_r"}
         self.last_scroll = 0.0
         self.scroll_accum = 0.0
         self.kb_ok = self.mouse_ok = False
@@ -397,6 +400,16 @@ class InputWatcher:
                 self.on_event()
             except Exception:
                 pass
+
+    def key_held(self):
+        """True while a non-modifier key is physically pressed."""
+        try:
+            for k in self._down:
+                if getattr(k, "name", None) not in self._MODS:
+                    return True
+        except Exception:
+            pass
+        return False
 
     def typing(self, window):
         return (time.time() - self.last_key) < window
@@ -2819,9 +2832,11 @@ class CatWindow(QWidget):
 
         want_peek = (self.manual_peek or mgr.fullscreen_active
                      or self.gcfg.get("hide_mode", False))
-        # snappy to start (0.25s), but once typing, hold the pose ~1s past
-        # the last key so the paws freeze briefly instead of snapping away
-        typing_now = inputs.typing(1.0 if self.knead_hyst else 0.25)
+        # snappy to start (0.25s); once typing, hold the pose ~1s past the
+        # last key. And while a key is physically HELD, stay typing the whole
+        # time so the paw stays pressed on it until you let go.
+        typing_now = (inputs.key_held()
+                      or inputs.typing(1.0 if self.knead_hyst else 0.25))
         self.knead_hyst = typing_now
         overheat = (inputs.keys_per_sec() > 5.5 and typing_now)
 
@@ -3504,9 +3519,10 @@ class CatWindow(QWidget):
         if self.state == DRAG:
             return "dangle"
         if self.state in (KNEAD, OVERHEAT):
-            # paws tap in lockstep with your keystrokes: each key flips the
-            # frame (key #1 -> a, key #2 -> b, ...). When you stop, the last
-            # frame is held for ~1s so a brief pause doesn't reset it.
+            # paws tap in lockstep with your keystrokes: each key press flips
+            # the frame (key #1 -> a, key #2 -> b, ...). Holding a key keeps
+            # that paw pressed down until you release. A brief pause after
+            # the last key holds the frame ~1s before settling.
             return "type_a" if (self.mgr.inputs.key_count & 1) else "type_b"
         if self.state == SCROLLPLAY:
             return ("knead_c", "knead_b", "knead_a",
