@@ -58,8 +58,8 @@ jobs:
             & "$env:GITHUB_WORKSPACE\msix\build_msix.ps1" -IdentityName $id -Publisher $pub -PublisherName $name
           }
           catch {
-            Write-Host "BUILD FAILED: $($_.Exception.Message)"
-            Write-Host $_.ScriptStackTrace
+            $m = ($_.Exception.Message + " || " + $_.ScriptStackTrace) -replace "\r?\n"," // "
+            Write-Host "::error::MSIXBUILD $m"
             throw
           }
           finally { Stop-Transcript | Out-Null }
