@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.8.0"
-APP_BUILD = "0709s"
+APP_BUILD = "0709t"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -167,7 +167,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "auto_update": True,
                    "dance_music": True, "dance_on_sound": False,
                    "gemini_key": "", "screen_vision": False,
-                   "guard_mode": False,
+                   "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
 
 (IDLE, KNEAD, SLEEP, CHASE, DRAG, STRETCH,
@@ -1143,6 +1143,7 @@ class Manager(QObject):
         self._guard_timer.start(33)
         self._guard_say = 0.0
         self._guard_posted = False
+        self._guard_off_at = 0.0
         self._auto_timer = QTimer()
         self._auto_timer.timeout.connect(
             lambda: self.check_updates(manual=False))
@@ -1697,6 +1698,12 @@ class Manager(QObject):
 
     def _tick_guard(self):
         on = self.cfg["global"].get("guard_mode", False)
+        if on and self._guard_off_at and time.time() >= self._guard_off_at:
+            # patrol timer elapsed — stand down automatically
+            self._guard_off_at = 0.0
+            self._guard_timed_out = True
+            self.toggle_guard_mode()
+            return
         if on and not self._guard_posted:
             # take up position: top-center of the screen, best view 🔭
             self._guard_posted = True
@@ -1728,9 +1735,21 @@ class Manager(QObject):
         if g["guard_mode"]:
             for c in self.cats:
                 c.groom_until = 0.0     # no grooming on duty — focus.
-            self.say_primary("GUARD MODE ENGAGED. 🫡🔦", 3)
+            mins = int(g.get("guard_timer_min", 0) or 0)
+            if mins > 0:
+                self._guard_off_at = time.time() + mins * 60
+                self.say_primary(
+                    f"GUARD MODE ENGAGED — {mins} min patrol. 🫡🔦", 3)
+            else:
+                self._guard_off_at = 0.0
+                self.say_primary("GUARD MODE ENGAGED. 🫡🔦", 3)
         else:
-            self.say_primary("at ease. 😌", 3)
+            self._guard_off_at = 0.0
+            if getattr(self, "_guard_timed_out", False):
+                self._guard_timed_out = False
+                self.say_primary("patrol over — standing down. 😌🔦", 3)
+            else:
+                self.say_primary("at ease. 😌", 3)
             if self._guard_beam is not None:
                 self._guard_beam.hide()
             for c in self.cats:         # climb back down off the post
@@ -1741,7 +1760,38 @@ class Manager(QObject):
                 except Exception:
                     pass
 
-    def toggle_hide_mode(self):
+    def set_guard_timer(self, minutes):
+        """Set the auto-off duration (0 = manual). If guard mode is already
+        on, (re)arm the countdown from now."""
+        minutes = max(0, int(minutes))
+        self.cfg["global"]["guard_timer_min"] = minutes
+        save_config(self.cfg)
+        if self.cfg["global"].get("guard_mode", False):
+            self._guard_off_at = (time.time() + minutes * 60) if minutes else 0.0
+            if minutes:
+                self.say_primary(f"patrol timer set: {minutes} min. ⏱", 2.5)
+            else:
+                self.say_primary("patrol timer off — on duty until dismissed.",
+                                 2.5)
+        else:
+            if minutes:
+                self.say_primary(
+                    f"guard auto-off set to {minutes} min (next patrol). ⏱",
+                    2.5)
+
+    def pick_guard_timer(self):
+        try:
+            from PySide6.QtWidgets import QInputDialog
+        except Exception:
+            return
+        cur = int(self.cfg["global"].get("guard_timer_min", 0) or 0)
+        mins, ok = QInputDialog.getInt(
+            None, "Guard auto-off timer",
+            "Minutes on patrol before standing down\n(0 = stay on until "
+            "you switch it off):",
+            cur, 0, 720, 1)
+        if ok:
+            self.set_guard_timer(mins)
         g = self.cfg["global"]
         g["hide_mode"] = not g.get("hide_mode", False)
         save_config(self.cfg)
@@ -2286,6 +2336,7 @@ class CatWindow(QWidget):
         # smooth movement (float position)
         self._fx = self._fy = 0.0
         self.chase_cooldown = time.time() + random.uniform(0, 3)
+        self._guard_return_at = 0.0
         self.prev_cursor = QCursor.pos()
         self.prev_tick_t = time.time()
         self.cursor_speed = 0.0
@@ -2697,6 +2748,22 @@ class CatWindow(QWidget):
         guard.setChecked(self.gcfg.get("guard_mode", False))
         guard.triggered.connect(mgr.toggle_guard_mode)
         menu.addAction(guard)
+        gtimer = menu.addMenu("Guard auto-off ⏱")
+        cur_min = int(self.gcfg.get("guard_timer_min", 0) or 0)
+        presets = [("No timer (manual)", 0), ("5 minutes", 5),
+                   ("15 minutes", 15), ("30 minutes", 30),
+                   ("1 hour", 60), ("2 hours", 120)]
+        for label, m in presets:
+            a = QAction(label, gtimer)
+            a.setCheckable(True)
+            a.setChecked(cur_min == m)
+            a.triggered.connect(lambda _=False, mm=m: mgr.set_guard_timer(mm))
+            gtimer.addAction(a)
+        custom = QAction(
+            f"Custom…{f'  ({cur_min} min)' if cur_min and cur_min not in [p[1] for p in presets] else ''}",
+            gtimer)
+        custom.triggered.connect(lambda _=False: mgr.pick_guard_timer())
+        gtimer.addAction(custom)
         quit_act = QAction("Quit", menu)
         quit_act.triggered.connect(QApplication.instance().quit)
         menu.addAction(quit_act)
@@ -3092,6 +3159,17 @@ class CatWindow(QWidget):
                 self.blink_until = now + 0.18
                 self.next_blink = now + random.uniform(2.5, 7)
             guarding = self.gcfg.get("guard_mode", False)
+            if guarding and self._guard_return_at \
+                    and now >= self._guard_return_at \
+                    and self.glide_target is None:
+                # the hold-over-the-intruder pause is done: back to post
+                self._guard_return_at = 0.0
+                post = self._guard_post_point()
+                if abs(self.x() - post.x()) > 30 \
+                        or abs(self.y() - post.y()) > 30:
+                    self.say("back to my post. 🫡", 1.6)
+                    self._sync_float()
+                    self._glide_to(post, speed=700)
             if (now > self.next_groom and now > self.groom_until
                     and not guarding):        # no grooming on duty — focus.
                 self.groom_until = now + 2.6
@@ -3197,13 +3275,14 @@ class CatWindow(QWidget):
             self.state = IDLE
             self.chase_cooldown = now + 4
             if self.gcfg.get("guard_mode", False):
-                # intruder neutralised — back to the watchtower
+                # intruder neutralised — stand over it a moment, THEN march
+                # back to the watchtower (don't teleport back instantly)
                 self.say(random.choice([
-                    "intruder caught! back to my post. 🫡",
-                    "got you. resuming patrol.",
-                    "perimeter breach handled. 😼"]), 1.8)
-                self._sync_float()
-                self._glide_to(self._guard_post_point(), speed=700)
+                    "intruder caught! 😼", "got you. hold still…",
+                    "perimeter breach — detained. 🫡"]), 2.0)
+                hold = random.uniform(3.0, 5.0)
+                self._guard_return_at = now + hold
+                self.chase_cooldown = now + hold + 0.5   # no re-pounce yet
             else:
                 self.say(random.choice(["gotcha!", "hmph.", ":3"]), 1.5)
             return
