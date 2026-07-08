@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "3.3.2"
-APP_BUILD = "0708b"
+APP_BUILD = "0708c"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -163,7 +163,8 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "wiggle_sens": "medium",
                    "force_sleep": False, "watch_sprites": False,
                    "window_perch": True, "auto_update": True,
-                   "dance_music": True, "hide_mode": False}
+                   "dance_music": True, "dance_on_sound": False,
+                   "hide_mode": False}
 
 (IDLE, KNEAD, SLEEP, CHASE, DRAG, STRETCH,
  OVERHEAT, SCROLLPLAY, PEEK, THINK, DANCE) = range(11)
@@ -628,7 +629,6 @@ class _InputBridge(QObject):
     poked = Signal()
 
 
-_SMTC_CMD = "QQBkAGQALQBUAHkAcABlACAALQBBAHMAcwBlAG0AYgBsAHkATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AUgB1AG4AdABpAG0AZQAuAFcAaQBuAGQAbwB3AHMAUgB1AG4AdABpAG0AZQAKACQAZwA9ACgAWwBTAHkAcwB0AGUAbQAuAFcAaQBuAGQAbwB3AHMAUgB1AG4AdABpAG0AZQBTAHkAcwB0AGUAbQBFAHgAdABlAG4AcwBpAG8AbgBzAF0ALgBHAGUAdABNAGUAdABoAG8AZABzACgAKQB8AFcAaABlAHIAZQAtAE8AYgBqAGUAYwB0ACAAewAkAF8ALgBOAGEAbQBlACAALQBlAHEAIAAnAEEAcwBUAGEAcwBrACcAIAAtAGEAbgBkACAAJABfAC4ARwBlAHQAUABhAHIAYQBtAGUAdABlAHIAcwAoACkALgBDAG8AdQBuAHQAIAAtAGUAcQAgADEAIAAtAGEAbgBkACAAJABfAC4ARwBlAHQAUABhAHIAYQBtAGUAdABlAHIAcwAoACkAWwAwAF0ALgBQAGEAcgBhAG0AZQB0AGUAcgBUAHkAcABlAC4ATgBhAG0AZQAgAC0AZQBxACAAJwBJAEEAcwB5AG4AYwBPAHAAZQByAGEAdABpAG8AbgBgADEAJwB9ACkAWwAwAF0ACgBmAHUAbgBjAHQAaQBvAG4AIABBAHcAYQBpAHQAKAAkAHQALAAkAHIAdAApAHsAJABhAD0AJABnAC4ATQBhAGsAZQBHAGUAbgBlAHIAaQBjAE0AZQB0AGgAbwBkACgAJAByAHQAKQA7ACQAbgA9ACQAYQAuAEkAbgB2AG8AawBlACgAJABuAHUAbABsACwAQAAoACQAdAApACkAOwAkAG4ALgBXAGEAaQB0ACgALQAxACkAfABPAHUAdAAtAE4AdQBsAGwAOwAkAG4ALgBSAGUAcwB1AGwAdAB9AAoAWwBXAGkAbgBkAG8AdwBzAC4ATQBlAGQAaQBhAC4AQwBvAG4AdAByAG8AbAAuAEcAbABvAGIAYQBsAFMAeQBzAHQAZQBtAE0AZQBkAGkAYQBUAHIAYQBuAHMAcABvAHIAdABDAG8AbgB0AHIAbwBsAHMAUwBlAHMAcwBpAG8AbgBNAGEAbgBhAGcAZQByACwAVwBpAG4AZABvAHcAcwAuAE0AZQBkAGkAYQAuAEMAbwBuAHQAcgBvAGwALABDAG8AbgB0AGUAbgB0AFQAeQBwAGUAPQBXAGkAbgBkAG8AdwBzAFIAdQBuAHQAaQBtAGUAXQB8AE8AdQB0AC0ATgB1AGwAbAAKACQAbQA9AEEAdwBhAGkAdAAgACgAWwBXAGkAbgBkAG8AdwBzAC4ATQBlAGQAaQBhAC4AQwBvAG4AdAByAG8AbAAuAEcAbABvAGIAYQBsAFMAeQBzAHQAZQBtAE0AZQBkAGkAYQBUAHIAYQBuAHMAcABvAHIAdABDAG8AbgB0AHIAbwBsAHMAUwBlAHMAcwBpAG8AbgBNAGEAbgBhAGcAZQByAF0AOgA6AFIAZQBxAHUAZQBzAHQAQQBzAHkAbgBjACgAKQApACAAKABbAFcAaQBuAGQAbwB3AHMALgBNAGUAZABpAGEALgBDAG8AbgB0AHIAbwBsAC4ARwBsAG8AYgBhAGwAUwB5AHMAdABlAG0ATQBlAGQAaQBhAFQAcgBhAG4AcwBwAG8AcgB0AEMAbwBuAHQAcgBvAGwAcwBTAGUAcwBzAGkAbwBuAE0AYQBuAGEAZwBlAHIAXQApAAoAJABhAGwAbAA9ACQAbQAuAEcAZQB0AFMAZQBzAHMAaQBvAG4AcwAoACkACgBpAGYAKAAkAGEAbABsAC4AQwBvAHUAbgB0ACAALQBlAHEAIAAwACkAewBXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACIAbgBvAG4AZQAiAH0ACgBmAG8AcgBlAGEAYwBoACgAJABzACAAaQBuACAAJABhAGwAbAApAHsACgAkAGkAPQAkAHMALgBHAGUAdABQAGwAYQB5AGIAYQBjAGsASQBuAGYAbwAoACkACgAkAHAAdAA9ACIAIgA7ACQAdABpAD0AIgAiADsAJABhAHIAPQAiACIACgB0AHIAeQB7ACQAcAA9AEEAdwBhAGkAdAAgACgAJABzAC4AVAByAHkARwBlAHQATQBlAGQAaQBhAFAAcgBvAHAAZQByAHQAaQBlAHMAQQBzAHkAbgBjACgAKQApACAAKABbAFcAaQBuAGQAbwB3AHMALgBNAGUAZABpAGEALgBDAG8AbgB0AHIAbwBsAC4ARwBsAG8AYgBhAGwAUwB5AHMAdABlAG0ATQBlAGQAaQBhAFQAcgBhAG4AcwBwAG8AcgB0AEMAbwBuAHQAcgBvAGwAcwBTAGUAcwBzAGkAbwBuAE0AZQBkAGkAYQBQAHIAbwBwAGUAcgB0AGkAZQBzAF0AKQA7ACQAcAB0AD0AJABwAC4AUABsAGEAeQBiAGEAYwBrAFQAeQBwAGUAOwAkAHQAaQA9ACQAcAAuAFQAaQB0AGwAZQA7ACQAYQByAD0AJABwAC4AQQByAHQAaQBzAHQAfQBjAGEAdABjAGgAewB9AAoAVwByAGkAdABlAC0ATwB1AHQAcAB1AHQAIAAoACgAJABpAC4AUABsAGEAeQBiAGEAYwBrAFMAdABhAHQAdQBzACwAJABpAC4AUABsAGEAeQBiAGEAYwBrAFQAeQBwAGUALAAkAHAAdAAsACQAcwAuAFMAbwB1AHIAYwBlAEEAcABwAFUAcwBlAHIATQBvAGQAZQBsAEkAZAAsACQAdABpACwAJABhAHIAKQAgAC0AagBvAGkAbgAgAFsAYwBoAGEAcgBdADMAMQApAAoAfQA="  # base64(utf-16le) PowerShell: media session status|type
 
 
 class _AudioMeter:
@@ -730,12 +730,7 @@ class Manager(QObject):
         self._call_bridge = _CallBridge()
         QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
         self._audio = _AudioMeter()
-        self._smtc_state = "idle"
-        self._smtc_title = ""
         self.music_mode = "off"
-        if platform.system() == "Windows":
-            import threading
-            threading.Thread(target=self._smtc_loop, daemon=True).start()
         self._music_hist = deque(maxlen=24)
         self.music_on = False
         self._music_timer = QTimer()
@@ -1246,73 +1241,10 @@ class Manager(QObject):
         self.say_primary("I only hunt wiggles now!" if g["laser_only"]
                          else "I'll chase any fast cursor!", 2.5)
 
-    _BROWSERS = ("chrome", "msedge", "edge", "firefox", "opera", "brave",
-                 "vivaldi", "librewolf", "chromium")
-    _MUSIC_HINTS = re.compile(
-        r"official (music )?video|official audio|music video|\blyrics?\b|"
-        r"visuali[sz]er|\bm/?v\b|full album|\bremix\b|\bcover\b|"
-        r"karaoke|instrumental|sped up|slowed|8d audio|nightcore|"
-        r"\bfeat\.|\bft\.|\bprod\.|\(audio\)|- topic$", re.I)
-
-    @staticmethod
-    def _classify_line(line):
-        """One media session -> 'dance' (music app playing music),
-        'listen' (browser audio, or anything else playing), or None."""
-        sep = "\x1f" if "\x1f" in line else "|"
-        parts = line.split(sep)
-        if parts[0] != "Playing":
-            return None, ""
-        itype = parts[1] if len(parts) > 1 else ""
-        ptype = parts[2] if len(parts) > 2 else ""
-        appid = (parts[3] if len(parts) > 3 else "").lower()
-        title = parts[4] if len(parts) > 4 else ""
-        kind = ptype if ptype in ("Music", "Video") else itype
-        browser = any(b in appid for b in Manager._BROWSERS)
-        if kind == "Music" and not browser:
-            return "dance", title              # a real music app
-        return "listen", title                 # browser / video / unknown
-
-    @staticmethod
-    def _parse_smtc(out):
-        """All sessions -> overall verdict: 'dance' beats 'listen'."""
-        lines = [l.strip() for l in (out or "").strip().splitlines()
-                 if l.strip()]
-        if not lines or lines == ["none"]:
-            return "idle", ""
-        results = [Manager._classify_line(l) for l in lines]
-        # listen WINS: if a browser/video is playing you're watching —
-        # the cat only dances when a music app is the only thing playing
-        for want in ("listen", "dance"):
-            for st, ti in results:
-                if st == want:
-                    return st, ti
-        return "idle", ""
-
-    def _smtc_loop(self):
-        import subprocess
-        while True:
-            time.sleep(4)
-            if not self.cfg["global"].get("dance_music", True):
-                continue
-            try:
-                ps = os.path.join(
-                    os.environ.get("SystemRoot", r"C:\Windows"),
-                    "System32", "WindowsPowerShell", "v1.0",
-                    "powershell.exe")
-                r = subprocess.run(
-                    [ps, "-NoProfile", "-NonInteractive",
-                     "-ExecutionPolicy", "Bypass", "-EncodedCommand",
-                     _SMTC_CMD],
-                    capture_output=True, text=True, timeout=15,
-                    creationflags=0x08000000)      # CREATE_NO_WINDOW
-                self._smtc_state, self._smtc_title = \
-                    self._parse_smtc(r.stdout)
-            except Exception:
-                self._smtc_state = "idle"
-
     def _poll_music(self):
         if not self.cfg["global"].get("dance_music", True):
             self.music_on = False
+            self.music_mode = "off"
             return
         self._music_hist.append(self._audio.peak())
         h = list(self._music_hist)
@@ -1325,13 +1257,14 @@ class Manager(QObject):
         elif meter_on and loud <= int(len(h) * 0.15):
             meter_on = False
         self._meter_on = meter_on
-        # sound heard + a music app playing -> full dance;
-        # sound heard + browser/other audio -> quiet headphones;
-        # otherwise nothing
-        if not meter_on or self._smtc_state == "idle":
+        # sound playing -> headphones on; the full dance-with-notes show
+        # only if the user enabled it in Behavior
+        if not meter_on:
             self.music_mode = "off"
+        elif self.cfg["global"].get("dance_on_sound", False):
+            self.music_mode = "dance"
         else:
-            self.music_mode = self._smtc_state    # "dance" or "listen"
+            self.music_mode = "listen"
         self.music_on = self.music_mode == "dance"
 
     def music_doctor(self):
@@ -1343,10 +1276,9 @@ class Manager(QObject):
                 return
             pk = self._audio.peak()
             c = self.primary()
-            ti = self._smtc_title[:18]
             self.say_primary(
-                f"peak {pk:.3f} | sessions {self._smtc_state}"
-                f"{' ~' + ti if ti else ''}"
+                f"peak {pk:.3f} | sound "
+                f"{'ON' if getattr(self, '_meter_on', False) else 'off'}"
                 f" | mode {self.music_mode} | state {c.state}",
                 0.6)
             QTimer.singleShot(250, step)
@@ -1377,6 +1309,11 @@ class Manager(QObject):
                     pass
                 c.state = IDLE
         self.say_primary("mrrp! 🐾", 2)
+
+    def toggle_dance_on_sound(self):
+        g = self.cfg["global"]
+        g["dance_on_sound"] = not g.get("dance_on_sound", False)
+        save_config(self.cfg)
 
     def toggle_dance_music(self):
         g = self.cfg["global"]
@@ -1803,11 +1740,16 @@ class CatWindow(QWidget):
         prc.setChecked(self.gcfg.get("window_perch", True))
         prc.triggered.connect(mgr.toggle_window_perch)
         beh.addAction(prc)
-        dnc = QAction("Dance to music 🎧", menu)
+        dnc = QAction("Headphones when sound plays 🎧", menu)
         dnc.setCheckable(True)
         dnc.setChecked(self.gcfg.get("dance_music", True))
         dnc.triggered.connect(mgr.toggle_dance_music)
         beh.addAction(dnc)
+        dps = QAction("Dance + music notes 💃", menu)
+        dps.setCheckable(True)
+        dps.setChecked(self.gcfg.get("dance_on_sound", False))
+        dps.triggered.connect(mgr.toggle_dance_on_sound)
+        beh.addAction(dps)
         snd = QAction("Meow sounds", menu)
         snd.setCheckable(True)
         snd.setChecked(self.gcfg.get("sounds", True))
