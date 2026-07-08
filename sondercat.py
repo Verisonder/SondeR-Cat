@@ -729,8 +729,9 @@ class Manager(QObject):
         self._call_bridge = _CallBridge()
         QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
         self._audio = _AudioMeter()
-        self._smtc_state = "unknown"
+        self._smtc_state = "idle"
         self._smtc_title = ""
+        self.music_mode = "off"
         if platform.system() == "Windows":
             import threading
             threading.Thread(target=self._smtc_loop, daemon=True).start()
@@ -1254,47 +1255,35 @@ class Manager(QObject):
 
     @staticmethod
     def _classify_line(line):
+        """One media session -> 'dance' (music app playing music),
+        'listen' (browser audio, or anything else playing), or None."""
         sep = "\x1f" if "\x1f" in line else "|"
         parts = line.split(sep)
-        status = parts[0]
-        if status != "Playing":
-            return "not_playing", ""
+        if parts[0] != "Playing":
+            return None, ""
         itype = parts[1] if len(parts) > 1 else ""
         ptype = parts[2] if len(parts) > 2 else ""
         appid = (parts[3] if len(parts) > 3 else "").lower()
         title = parts[4] if len(parts) > 4 else ""
-        artist = parts[5] if len(parts) > 5 else ""
-        # the title knows best: "Official Music Video", "Lyrics", feat.,
-        # and YouTube's "Artist - Topic" channels are music even when the
-        # session type says Video or nothing
-        if Manager._MUSIC_HINTS.search(title) \
-                or Manager._MUSIC_HINTS.search(artist):
-            return "playing_music", title
         kind = ptype if ptype in ("Music", "Video") else itype
-        if kind == "Music":
-            return "playing_music", title
-        if kind == "Video":
-            return "playing_video", title
-        if any(b in appid for b in Manager._BROWSERS):
-            return "playing_video", title
-        return "unknown", title
+        browser = any(b in appid for b in Manager._BROWSERS)
+        if kind == "Music" and not browser:
+            return "dance", title              # a real music app
+        return "listen", title                 # browser / video / unknown
 
     @staticmethod
     def _parse_smtc(out):
-        """Classify ALL media sessions. A playing video anywhere blocks
-        the dance; a playing music session anywhere allows it (unless a
-        video is also playing — the video wins, you're watching)."""
+        """All sessions -> overall verdict: 'dance' beats 'listen'."""
         lines = [l.strip() for l in (out or "").strip().splitlines()
                  if l.strip()]
         if not lines or lines == ["none"]:
-            return "none", ""
+            return "idle", ""
         results = [Manager._classify_line(l) for l in lines]
-        for want in ("playing_video", "playing_music", "unknown",
-                     "not_playing"):
+        for want in ("dance", "listen"):
             for st, ti in results:
                 if st == want:
                     return st, ti
-        return "none", ""
+        return "idle", ""
 
     def _smtc_loop(self):
         import subprocess
@@ -1316,7 +1305,7 @@ class Manager(QObject):
                 self._smtc_state, self._smtc_title = \
                     self._parse_smtc(r.stdout)
             except Exception:
-                self._smtc_state = "unknown"
+                self._smtc_state = "idle"
 
     def _poll_music(self):
         if not self.cfg["global"].get("dance_music", True):
@@ -1333,9 +1322,14 @@ class Manager(QObject):
         elif meter_on and loud <= int(len(h) * 0.15):
             meter_on = False
         self._meter_on = meter_on
-        # strict: only dance on POSITIVE music evidence — unknown sessions,
-        # videos, or a broken probe all mean no dancing
-        self.music_on = meter_on and self._smtc_state == "playing_music"
+        # sound heard + a music app playing -> full dance;
+        # sound heard + browser/other audio -> quiet headphones;
+        # otherwise nothing
+        if not meter_on or self._smtc_state == "idle":
+            self.music_mode = "off"
+        else:
+            self.music_mode = self._smtc_state    # "dance" or "listen"
+        self.music_on = self.music_mode == "dance"
 
     def music_doctor(self):
         t_end = time.time() + 5
@@ -1348,10 +1342,9 @@ class Manager(QObject):
             c = self.primary()
             ti = self._smtc_title[:18]
             self.say_primary(
-                f"peak {pk:.3f} | media {self._smtc_state}"
+                f"peak {pk:.3f} | sessions {self._smtc_state}"
                 f"{' ~' + ti if ti else ''}"
-                f" | music {'ON' if self.music_on else 'off'}"
-                f" | state {c.state}",
+                f" | mode {self.music_mode} | state {c.state}",
                 0.6)
             QTimer.singleShot(250, step)
         step()
@@ -2920,6 +2913,23 @@ class CatWindow(QWidget):
         hot = (self.state == OVERHEAT)
         img = self._frame_image(name, False, hot).copy()
 
+        # headphones: music app playing = worn while dancing; browser
+        # audio = worn quietly on whatever the cat is doing
+        wearing = (self.gcfg.get("dance_music", True)
+                   and self.mgr.music_mode in ("listen", "dance"))
+        if wearing:
+            hp = QPainter(img)
+            dkc = QColor("#2a2a33")
+            ltc = QColor("#7d7d94")
+            dcells, lcells = self._headset_cells(name)
+            for (hx, hy) in dcells:
+                fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
+                hp.fillRect(fx * s, hy * s, s, s, dkc)
+            for (hx, hy) in lcells:
+                fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
+                hp.fillRect(fx * s, hy * s, s, s, ltc)
+            hp.end()
+
         eyes = sprites.EYE_CELLS.get(name)
         if eyes:
             if self.state == THINK:
@@ -2939,21 +2949,6 @@ class CatWindow(QWidget):
             ew_x, ew_y = sprites.EYE_W * s, sprites.EYE_H * s
             pw = 2 * s                     # pupil size (px)
             pp = QPainter(img)
-            wearing = (self.state == DANCE
-                       or (self.state in (KNEAD, OVERHEAT, SCROLLPLAY,
-                                          PEEK)
-                           and self.mgr.music_on
-                           and self.gcfg.get("dance_music", True)))
-            if wearing:
-                dark = QColor("#2a2a33")
-                lite = QColor("#7d7d94")
-                dcells, lcells = self._headset_cells(name)
-                for (hx, hy) in dcells:
-                    fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
-                    pp.fillRect(fx * s, hy * s, s, s, dark)
-                for (hx, hy) in lcells:
-                    fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
-                    pp.fillRect(fx * s, hy * s, s, s, lite)
             for (ex, ey) in eyes:
                 bx, by = ex * s, ey * s
                 px = max(bx, min(bx + offx + (ew_x - pw) // 2, bx + ew_x - pw))
