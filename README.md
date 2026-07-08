@@ -43,6 +43,12 @@ For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 - 🎉 **Agent done jump** — happy hop + meow when the task finishes
 - Hook up via `sonder_agent.py` (wrap any command) or Claude Code hooks — see below
 
+**🔦 Guard mode** (theatrical patrol — purely for fun, never blocks input)
+- Flip it on and the cat marches to the **top-center of the screen** — the high ground — puts on a **camo tactical helmet**, and stands watch with a **handheld flashlight** casting a sweeping red patrol beam (the torch rotates to follow the beam)
+- **All business on duty** — it won't groom, knead along with your typing, perch on windows, wiggle-hide, play with scroll-paper, or open the AI box (Ctrl+Space just gets "not now — I'm on duty. 🫡")
+- Wiggle the cursor and it **pounces on the "intruder"**, pins it for a beat, then marches back to its post; drag it away and it protests and returns; grab or pet it on duty and it snaps ("HEY! hands off! 😾")
+- ⏱️ **Auto-off timer** — set a patrol length (5 min–2 h presets or custom) and it stands down on its own when the shift ends
+
 **Make it yours**
 - 🐱 **Real-cat themes** — one-click looks modeled on real cats: **Lilly** (orange, white chest), **JJ** (striped tabby, green eyes), **Mimi** (lynx-point, blue eyes), with more to come
 - 🎨 10 fur colors + any custom color, patterns (tabby / solid / tuxedo / spots / siamese), and **custom eye color** (presets or any color you pick)
