@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.2.0"
-APP_BUILD = "0710i"
+APP_BUILD = "0710j"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -518,8 +518,22 @@ class FullscreenDetector:
         mi.cbSize = ctypes.sizeof(MONITORINFO)
         u.GetMonitorInfoW(mon, ctypes.byref(mi))
         m = mi.rcMonitor
-        return (rect.left <= m.left and rect.top <= m.top
-                and rect.right >= m.right and rect.bottom >= m.bottom)
+        rect_fs = (rect.left <= m.left and rect.top <= m.top
+                   and rect.right >= m.right and rect.bottom >= m.bottom)
+        if not rect_fs:
+            return False
+        # belt + suspenders: ask Windows itself. SHQueryUserNotificationState
+        # reports BUSY / D3D_FULL_SCREEN / PRESENTATION only for genuinely
+        # fullscreen apps — a maximized/borderless window that merely covers
+        # the monitor doesn't set these, which was causing phantom hides.
+        try:
+            state = ctypes.c_int(0)
+            if ctypes.windll.shell32.SHQueryUserNotificationState(
+                    ctypes.byref(state)) == 0:      # S_OK
+                return state.value in (2, 3, 4)     # BUSY / D3D FS / PRESENT
+        except Exception:
+            pass
+        return True                                  # API unavailable: rect only
 
     def _check_x11(self):
         if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland" \
@@ -2972,7 +2986,13 @@ class CatWindow(QWidget):
         if abs(dyc) > amp:
             dirv = 1 if dyc > 0 else -1
             if dirv != self._wigv_dir and self._wigv_dir != 0:
-                self._wigv_times.append(now)
+                # count a flip ONLY if it happens down in the bottom band —
+                # otherwise ordinary up-down mouse work anywhere on screen
+                # followed by a move toward the taskbar kept hiding the cat
+                scr_v = QGuiApplication.screenAt(cur) \
+                    or QGuiApplication.primaryScreen()
+                if cur.y() > scr_v.geometry().bottom() - 90:
+                    self._wigv_times.append(now)
             self._wigv_dir = dirv
         while self._wigv_times and now - self._wigv_times[0] > 1.5:
             self._wigv_times.popleft()
