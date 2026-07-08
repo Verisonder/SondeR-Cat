@@ -125,7 +125,7 @@ try:
                             Signal)
     from PySide6.QtGui import (QAction, QColor, QCursor, QFont,
                                QGuiApplication, QIcon, QPainter,
-                               QPainterPath, QPixmap)
+                               QPainterPath, QPixmap, QFontMetrics, QPolygonF)
     from PySide6.QtWidgets import (QApplication, QColorDialog, QInputDialog,
                                    QLineEdit, QMenu, QMessageBox,
                                    QSystemTrayIcon, QVBoxLayout, QWidget)
@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.0.0"
-APP_BUILD = "0708i"
+APP_BUILD = "0708j"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -741,6 +741,81 @@ class _AudioMeter:
             self._meter = None          # device changed: re-init later
             self._dead_until = now + 5
             return 0.0
+
+
+class BubbleWindow(QWidget):
+    """A speech bubble in its own window: stretches to fit long text
+    (AI answers), floats above the cat, follows it, ignores the mouse."""
+
+    def __init__(self):
+        super().__init__(None, Qt.FramelessWindowHint
+                         | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.text = ""
+        self.color = None
+        self.until = 0.0
+        self.cat = None
+        self._pad = 12
+        self._tail = 9
+
+    def show_for(self, cat, text, secs, color=None):
+        self.cat = cat
+        self.text = text
+        self.color = color
+        self.until = time.time() + secs
+        scr = (cat.screen() or QGuiApplication.primaryScreen()).geometry()
+        maxtext = min(400, scr.width() // 3)
+        fm = QFontMetrics(QFont("Arial", 10))
+        br = fm.boundingRect(QRect(0, 0, maxtext, 2000),
+                             Qt.TextWordWrap, text)
+        self._tr = QRect(self._pad, self._pad,
+                         br.width() + 2, br.height() + 2)
+        self.resize(br.width() + 2 + self._pad * 2,
+                    br.height() + 2 + self._pad * 2 + self._tail)
+        self.reposition()
+        self.show()
+        self.update()
+
+    def reposition(self):
+        c = self.cat
+        if c is None:
+            return
+        scr = (c.screen() or QGuiApplication.primaryScreen()).geometry()
+        x = c.x() + c.width() // 2 - self.width() // 2
+        x = max(scr.left() + 2, min(x, scr.right() - self.width() - 2))
+        y = c.y() - self.height() + int(TOP_MARGIN * 0.8)
+        y = max(scr.top() + 2, y)
+        self.move(x, y)
+
+    def tick(self):
+        if not self.isVisible():
+            return
+        if time.time() > self.until or self.cat is None:
+            self.hide()
+            self.cat = None
+            return
+        self.reposition()
+
+    def paintEvent(self, _ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        w, h = self.width(), self.height() - self._tail
+        bg = QColor(self.color) if self.color \
+            else QColor(255, 253, 246, 240)
+        fg = QColor("#ffffff") if self.color else QColor("#40342a")
+        p.setPen(QColor(0, 0, 0, 60))
+        p.setBrush(bg)
+        p.drawRoundedRect(1, 1, w - 2, h - 2, 9, 9)
+        cx = w // 2
+        tail = QPolygonF([QPointF(cx - 7, h - 1), QPointF(cx + 7, h - 1),
+                          QPointF(cx, h + self._tail - 1)])
+        p.setPen(Qt.NoPen)
+        p.drawPolygon(tail)
+        p.setPen(fg)
+        p.setFont(QFont("Arial", 10))
+        p.drawText(self._tr, Qt.TextWordWrap, self.text)
 
 
 class AskBox(QWidget):
@@ -1462,6 +1537,11 @@ class Manager(QObject):
             return time.time() + int(text) * 60
         return None
 
+    def show_big_bubble(self, cat, text, secs, color=None):
+        if getattr(self, "_bubble_win", None) is None:
+            self._bubble_win = BubbleWindow()
+        self._bubble_win.show_for(cat, text, secs, color)
+
     def open_ask_box(self):
         p = self.primary()
         name = (p.ccfg.get("name") or "").strip()
@@ -1566,8 +1646,8 @@ class Manager(QObject):
         def work():
             try:
                 ans = self._gemini_call(hist, persona).strip()
-                if len(ans) > 300:
-                    ans = ans[:297] + "…"
+                if len(ans) > 420:
+                    ans = ans[:417] + "…"
 
                 def done():
                     self.ai_busy = False
@@ -1859,6 +1939,12 @@ class CatWindow(QWidget):
         return pal
 
     def say(self, text, secs=3.0, color=None):
+        if len(text) > 60:
+            self.bubble_text = ""
+            self.bubble_until = 0
+            self.mgr.show_big_bubble(self, text, secs, color)
+            self.update()
+            return
         self.bubble_text = text
         self.bubble_until = time.time() + secs
         self.bubble_color = color
@@ -2254,6 +2340,9 @@ class CatWindow(QWidget):
     # ------------------------------------------------------------ main tick -
     def tick(self):
         now = time.time()
+        bw = getattr(self.mgr, "_bubble_win", None)
+        if bw is not None and bw.cat is self:
+            bw.tick()
         dt = min(0.2, max(1e-3, now - self.prev_tick_t))
         self.prev_tick_t = now
         mgr = self.mgr
