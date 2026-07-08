@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "6.4.0"
-APP_BUILD = "0708s"
+APP_VERSION = "6.8.0"
+APP_BUILD = "0708t"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -164,7 +164,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "force_sleep": False, "watch_sprites": False,
                    "window_perch": True, "auto_update": True,
                    "dance_music": True, "dance_on_sound": False,
-                   "gemini_key": "",
+                   "gemini_key": "", "screen_vision": False,
                    "hide_mode": False}
 
 (IDLE, KNEAD, SLEEP, CHASE, DRAG, STRETCH,
@@ -1670,6 +1670,15 @@ class Manager(QObject):
             self._ask_box = AskBox(self)
         self._ask_box.open_above(p, name)
 
+    def toggle_screen_vision(self):
+        g = self.cfg["global"]
+        g["screen_vision"] = not g.get("screen_vision", False)
+        save_config(self.cfg)
+        self.say_primary(
+            "I can peek at your screen when you ask about it now 👀"
+            if g["screen_vision"]
+            else "screen peeking off", 4)
+
     def set_gemini_key(self):
         cur = self.cfg["global"].get("gemini_key", "")
         key, ok = QInputDialog.getText(
@@ -1703,6 +1712,9 @@ class Manager(QObject):
                   "gemini-2.0-flash", "gemini-1.5-flash"):
             if m not in models:
                 models.append(m)
+        has_image = any("inline_data" in pt
+                        for msg in contents for pt in msg.get("parts", []))
+
         def make_body(model, grounded):
             b = {
                 "contents": contents,
@@ -1710,7 +1722,7 @@ class Manager(QObject):
                 "generationConfig": {"maxOutputTokens": 300,
                                      "temperature": 0.8},
             }
-            if grounded:
+            if grounded and not has_image:
                 # live Google Search: 2.x uses google_search,
                 # 1.5 uses the older google_search_retrieval
                 if model.startswith(("gemini-2", "gemini-3")):
@@ -1723,8 +1735,8 @@ class Manager(QObject):
         for m in models:
             url = ("https://generativelanguage.googleapis.com/v1beta/"
                    f"models/{m}:generateContent?key={key}")
-            # try WITH live search first, fall back to plain if unsupported
-            for grounded in (True, False):
+            # live search first, unless we're sending an image (can't mix)
+            for grounded in ((False,) if has_image else (True, False)):
                 body = make_body(m, grounded)
                 req = urllib.request.Request(
                     url, data=body,
@@ -1749,6 +1761,37 @@ class Manager(QObject):
             self._gemini_model = m         # this model worked; prefer it
         raise RuntimeError(last)
 
+    _SCREEN_HINTS = re.compile(
+        r"\bthis\b|\bscreen\b|\bhere\b|on (my|the) (screen|display)|"
+        r"\bshown?\b|\bshowing\b|what('?s| is) (this|on|that)|"
+        r"is (this|that) (true|real|correct|right|fake)|"
+        r"read (this|it|my)|look at|\bselected\b|\bhighlighted\b|"
+        r"\babove\b|\bbelow\b|\bpage\b|translate (this|it)", re.I)
+
+    def _wants_screen(self, q):
+        return bool(self._SCREEN_HINTS.search(q))
+
+    def _grab_screen_b64(self):
+        """Fast full-screen JPEG as base64, via Qt. None on failure."""
+        try:
+            from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+            scr = (self.primary().screen()
+                   or QGuiApplication.primaryScreen())
+            pm = scr.grabWindow(0)
+            # downscale big screens so the upload stays fast
+            maxw = 1280
+            if pm.width() > maxw:
+                pm = pm.scaledToWidth(maxw, Qt.SmoothTransformation)
+            ba = QByteArray()
+            buf = QBuffer(ba)
+            buf.open(QIODevice.WriteOnly)
+            pm.save(buf, "JPEG", 72)
+            buf.close()
+            import base64
+            return base64.b64encode(bytes(ba)).decode()
+        except Exception:
+            return None
+
     def ask_ai(self, question):
         import threading
         p = self.primary()
@@ -1766,11 +1809,20 @@ class Manager(QObject):
             "reach the internet. Keep answers under 70 words unless the "
             "question clearly needs more. Plain text only: no markdown, "
             "no lists, no asterisks.")
-        self._ai_hist.append({"role": "user",
-                              "parts": [{"text": question}]})
+        shot = None
+        if self.cfg["global"].get("screen_vision", False) \
+                and self._wants_screen(question):
+            shot = self._grab_screen_b64()
+        user_parts = [{"text": question}]
+        if shot:
+            user_parts.append({"inline_data": {
+                "mime_type": "image/jpeg", "data": shot}})
+            p.say("looking at your screen… 👀", 8)
+        else:
+            p.say("hmm… 🤔", 8)
+        self._ai_hist.append({"role": "user", "parts": user_parts})
         hist = list(self._ai_hist[-10:])
         self.ai_busy = True
-        p.say("hmm… 🤔", 8)
 
         def ui(fn):
             self._call_bridge.call.emit(fn)
@@ -1786,6 +1838,10 @@ class Manager(QObject):
                     self._ai_hist.append(
                         {"role": "model", "parts": [{"text": ans}]})
                     del self._ai_hist[:-12]
+                    for h in self._ai_hist[:-1]:
+                        h["parts"] = [pt for pt in h["parts"]
+                                      if "inline_data" not in pt] or \
+                            [{"text": ""}]
                     self.primary().say(ans,
                                        min(30.0, max(7.0, len(ans) / 9)))
                 ui(done)
@@ -2267,6 +2323,11 @@ class CatWindow(QWidget):
         gkey = QAction("Set Gemini API key 🔑…", menu)
         gkey.triggered.connect(mgr.set_gemini_key)
         agent.addAction(gkey)
+        sv = QAction("Let me check your screen 👀", menu)
+        sv.setCheckable(True)
+        sv.setChecked(self.gcfg.get("screen_vision", False))
+        sv.triggered.connect(mgr.toggle_screen_vision)
+        agent.addAction(sv)
         nmai = QAction("Name this cat ✏️", menu)
         nmai.triggered.connect(self.rename_cat)
         agent.addAction(nmai)
