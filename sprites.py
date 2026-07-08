@@ -581,7 +581,7 @@ PALETTES = {
     "mimi": {"B": "#ded5c6", "S": "#8a7c68", "W": "#f7f3ea",
              "K": "#4a4238", "E": "#f8f8f4", "N": "#b5744f",
              "M": "#4a4238", "Z": "#d9b09a", "P": "#4f7da8"},
-    "jj": {"B": "#8f8574", "S": "#3f3a31", "W": "#efe9dc",
+    "jj": {"B": "#96896e", "S": "#453e32", "W": "#f1ebdd",
            "K": "#2f2a24", "E": "#f8f8f4", "N": "#c06a3f",
            "M": "#2f2a24", "Z": "#d9a58f", "P": "#4f7d42"},
     "lilly": {"B": "#efa75a", "S": "#d8853a", "W": "#f7f2e8",
@@ -661,8 +661,8 @@ def apply_pattern(grid, pattern):
                 elif c == "B" and y >= int(h * 0.58) \
                         and w * 0.40 <= x <= w * 0.60:
                     c = "W"                      # chest bib
-                elif c == "B" and y % 4 == 1:
-                    c = "S"                      # mackerel stripes
+                elif c == "B" and (x + (y // 3)) % 3 == 0:
+                    c = "S"                      # vertical mackerel stripes
             elif pattern == "mimi":
                 if c == "B" and y <= int(h * 0.22):
                     c = "S"                      # dusky crown and ears
