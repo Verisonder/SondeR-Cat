@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.0.0"
-APP_BUILD = "0708k"
+APP_BUILD = "0708l"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -2142,12 +2142,6 @@ class CatWindow(QWidget):
         info = QAction("How to hook up (see README)", menu)
         info.triggered.connect(self.show_agent_help)
         agent.addAction(info)
-        t1 = QAction("Test: agent working", menu)
-        t1.triggered.connect(lambda: self._write_agent("working|Test agent"))
-        agent.addAction(t1)
-        t2 = QAction("Test: agent done", menu)
-        t2.triggered.connect(lambda: self._write_agent("done|Test agent"))
-        agent.addAction(t2)
 
         msgs = remm.addMenu("Messages")
         rem = QAction("Set a reminder…", menu)
