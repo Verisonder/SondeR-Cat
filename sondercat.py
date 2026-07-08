@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.0.0"
-APP_BUILD = "0710a"
+APP_BUILD = "0710b"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -4029,6 +4029,7 @@ class CatWindow(QWidget):
                 for x, c in enumerate(g[y]) if c != "."]
         L, R = (min(cols), max(cols)) if cols else (4, 21)
         dark, lite = [], []
+        OUT = 1              # nudge cups outward so they clear the eyes
         if L > 8 and R < 17:
             # topmost content is raised paws (dangle/stretch): anchor on
             # the ears at the sides instead, and skip the band — it would
@@ -4042,10 +4043,11 @@ class CatWindow(QWidget):
                   if c != "." and (x <= 8 or x >= 17)]
             L2, R2 = (min(sc), max(sc)) if sc else (4, 21)
             for cy in range(t2 + 3, t2 + 8):
-                for cx in (L2 - 3, L2 - 2, L2 - 1, R2 + 1, R2 + 2, R2 + 3):
+                for cx in (L2 - 3 - OUT, L2 - 2 - OUT, L2 - 1 - OUT,
+                           R2 + 1 + OUT, R2 + 2 + OUT, R2 + 3 + OUT):
                     dark.append((cx, cy))
-            lite += [(L2 - 2, t2 + 4), (R2 + 2, t2 + 4),
-                     (L2 - 2, t2 + 5), (R2 + 2, t2 + 5)]
+            lite += [(L2 - 2 - OUT, t2 + 4), (R2 + 2 + OUT, t2 + 4),
+                     (L2 - 2 - OUT, t2 + 5), (R2 + 2 + OUT, t2 + 5)]
             W, H = sprites.GRID_W, sprites.GRID_H
             dark = [(x, y) for (x, y) in dark if 0 <= x < W and 0 <= y < H]
             lite = [(x, y) for (x, y) in lite if 0 <= x < W and 0 <= y < H]
@@ -4056,17 +4058,17 @@ class CatWindow(QWidget):
         # head; front-facing poses (dancing) wear both cups fully
         tucked = name.startswith(("type_", "knead_"))
         for cy in range(top + 5, top + 10):
-            for cx in (R + 1, R + 2, R + 3):
+            for cx in (R + 1 + OUT, R + 2 + OUT, R + 3 + OUT):
                 dark.append((cx, cy))
         if tucked:
             for cy in range(top + 6, top + 10):
-                dark.append((L - 1, cy))
+                dark.append((L - 1 - OUT, cy))
         else:
             for cy in range(top + 5, top + 10):
-                for cx in (L - 3, L - 2, L - 1):
+                for cx in (L - 3 - OUT, L - 2 - OUT, L - 1 - OUT):
                     dark.append((cx, cy))
-            lite += [(L - 2, top + 6), (L - 2, top + 7)]
-        lite += [(R + 2, top + 6), (R + 2, top + 7)]
+            lite += [(L - 2 - OUT, top + 6), (L - 2 - OUT, top + 7)]
+        lite += [(R + 2 + OUT, top + 6), (R + 2 + OUT, top + 7)]
         mid = (L + R) / 2.0                        # band arcs between them
         for x in range(L - 1, R + 2):
             t = abs(x - mid) / max(1.0, mid - (L - 1))
