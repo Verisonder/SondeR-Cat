@@ -2797,12 +2797,20 @@ class CatWindow(QWidget):
                 for x, c in enumerate(g[y]) if c != "."]
         L, R = (min(cols), max(cols)) if cols else (4, 21)
         dark, lite = [], []
-        # near cup: full; far cup: slim sliver peeking from behind the head
+        # typing/kneading poses look sideways: far cup tucks behind the
+        # head; front-facing poses (dancing) wear both cups fully
+        tucked = name.startswith(("type_", "knead_"))
         for cy in range(top + 5, top + 10):
             for cx in (R + 1, R + 2, R + 3):
                 dark.append((cx, cy))
-        for cy in range(top + 6, top + 10):
-            dark.append((L - 1, cy))
+        if tucked:
+            for cy in range(top + 6, top + 10):
+                dark.append((L - 1, cy))
+        else:
+            for cy in range(top + 5, top + 10):
+                for cx in (L - 3, L - 2, L - 1):
+                    dark.append((cx, cy))
+            lite += [(L - 2, top + 6), (L - 2, top + 7)]
         lite += [(R + 2, top + 6), (R + 2, top + 7)]
         mid = (L + R) / 2.0                        # band arcs between them
         for x in range(L - 1, R + 2):
