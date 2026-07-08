@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.0.0"
-APP_BUILD = "0708n"
+APP_BUILD = "0708o"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1644,33 +1644,50 @@ class Manager(QObject):
                   "gemini-2.0-flash", "gemini-1.5-flash"):
             if m not in models:
                 models.append(m)
-        body = json.dumps({
-            "contents": contents,
-            "systemInstruction": {"parts": [{"text": persona}]},
-            "generationConfig": {"maxOutputTokens": 240,
-                                 "temperature": 0.8},
-        }).encode()
+        def make_body(model, grounded):
+            b = {
+                "contents": contents,
+                "systemInstruction": {"parts": [{"text": persona}]},
+                "generationConfig": {"maxOutputTokens": 300,
+                                     "temperature": 0.8},
+            }
+            if grounded:
+                # live Google Search: 2.x uses google_search,
+                # 1.5 uses the older google_search_retrieval
+                if model.startswith(("gemini-2", "gemini-3")):
+                    b["tools"] = [{"google_search": {}}]
+                else:
+                    b["tools"] = [{"google_search_retrieval": {}}]
+            return json.dumps(b).encode()
+
         last = "no reply"
         for m in models:
             url = ("https://generativelanguage.googleapis.com/v1beta/"
                    f"models/{m}:generateContent?key={key}")
-            req = urllib.request.Request(
-                url, data=body, headers={"Content-Type": "application/json"})
-            try:
-                with urllib.request.urlopen(req, timeout=30) as r:
-                    return self._gemini_parse(json.loads(r.read().decode()))
-            except urllib.error.HTTPError as e:
-                last = f"HTTP {e.code}"
-                if e.code in (400, 401, 403):
-                    raise RuntimeError(
-                        "the API key was rejected") from None
-                continue
-            except Exception as e:
-                last = str(e)[:60]
-                continue
-            finally:
-                if last == "no reply":
-                    self._gemini_model = m
+            # try WITH live search first, fall back to plain if unsupported
+            for grounded in (True, False):
+                body = make_body(m, grounded)
+                req = urllib.request.Request(
+                    url, data=body,
+                    headers={"Content-Type": "application/json"})
+                try:
+                    with urllib.request.urlopen(req, timeout=35) as r:
+                        return self._gemini_parse(
+                            json.loads(r.read().decode()))
+                except urllib.error.HTTPError as e:
+                    last = f"HTTP {e.code}"
+                    if e.code in (401, 403):
+                        raise RuntimeError(
+                            "the API key was rejected") from None
+                    if e.code == 400 and grounded:
+                        continue          # this model won't ground: retry raw
+                    break                 # other 400s: try the next model
+                except Exception as ex:
+                    last = str(ex)[:60]
+                    break
+            else:
+                continue                  # inner loop exhausted; next model
+            self._gemini_model = m         # this model worked; prefer it
         raise RuntimeError(last)
 
     def ask_ai(self, question):
@@ -1684,9 +1701,12 @@ class Manager(QObject):
             f"You are {name}, a tiny pixel-art desktop pet cat living at "
             f"the bottom of the user's screen. Your name is {name} and you "
             "know it. Be helpful, warm and a little playful, like a clever "
-            "cat. Keep answers under 70 words unless the question clearly "
-            "needs more. Plain text only: no markdown, no lists, no "
-            "asterisks.")
+            "cat. You CAN look things up on Google in real time, so you "
+            "can answer questions about current events, live scores, "
+            "weather and today's news — just do it, never say you can't "
+            "reach the internet. Keep answers under 70 words unless the "
+            "question clearly needs more. Plain text only: no markdown, "
+            "no lists, no asterisks.")
         self._ai_hist.append({"role": "user",
                               "parts": [{"text": question}]})
         hist = list(self._ai_hist[-10:])
