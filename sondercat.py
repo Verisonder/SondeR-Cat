@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.0.0"
-APP_BUILD = "0708m"
+APP_BUILD = "0708n"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -823,7 +823,7 @@ class AskBox(QWidget):
     paper, rounded, with a tail pointing down at the cat (Ctrl+Space)."""
 
     _PAD = 13
-    _TAIL = 10
+    _TAIL = 15
 
     def __init__(self, mgr):
         super().__init__(None, Qt.FramelessWindowHint
@@ -864,27 +864,45 @@ class AskBox(QWidget):
         self.activateWindow()
         self.edit.setFocus()
 
+    _PX = 5                                # bubble pixel size (chunky)
+
     def paintEvent(self, _ev):
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing, True)
-        w, h = self.width(), self.height() - self._TAIL
-        cx = w // 2
+        p.setRenderHint(QPainter.Antialiasing, False)   # crisp like the cat
         paper = QColor("#fbf6ea")
-        edge = QColor("#c8a06a")           # warm tan, like the cat's outline
-        # tail first, so the body border draws cleanly over its base
+        edge = QColor("#c8a06a")           # warm tan, the cat's outline color
+        px = self._PX
+        W, H = self.width(), self.height() - self._TAIL
+        gw, gh = W // px, H // px
+        cxg = gw // 2
+        # rounded-corner mask on the low-res grid (chunky pixel corners)
+        corner = 3
+
+        def inside(gx, gy):
+            if corner <= gx < gw - corner or corner <= gy < gh - corner:
+                return 0 <= gx < gw and 0 <= gy < gh
+            # within a corner region: keep cells inside the quarter circle
+            cxr = corner if gx < corner else gw - 1 - corner
+            cyr = corner if gy < corner else gh - 1 - corner
+            return (gx - cxr) ** 2 + (gy - cyr) ** 2 <= corner ** 2 + 1
+
         p.setPen(Qt.NoPen)
-        p.setBrush(edge)
-        p.drawPolygon(QPolygonF([
-            QPointF(cx - 9, h - 6), QPointF(cx + 9, h - 6),
-            QPointF(cx, h + self._TAIL - 1)]))
-        p.setBrush(paper)
-        p.drawPolygon(QPolygonF([
-            QPointF(cx - 6, h - 8), QPointF(cx + 6, h - 8),
-            QPointF(cx, h + self._TAIL - 4)]))
-        # chunky 3px rounded border + cream fill
-        p.setPen(QPen(edge, 3))
-        p.setBrush(paper)
-        p.drawRoundedRect(3, 3, w - 6, h - 6, 11, 11)
+        for gy in range(gh):
+            for gx in range(gw):
+                if not inside(gx, gy):
+                    continue
+                border = not (inside(gx - 1, gy) and inside(gx + 1, gy)
+                              and inside(gx, gy - 1) and inside(gx, gy + 1))
+                p.fillRect(gx * px, gy * px, px, px,
+                           edge if border else paper)
+        # blocky tail, same pixel grid
+        tail_top = gh
+        for i, half in enumerate((3, 2, 1)):
+            gy = tail_top + i
+            for gx in range(cxg - half, cxg + half + 1):
+                onedge = gx in (cxg - half, cxg + half) or i == 2
+                p.fillRect(gx * px, gy * px, px, px,
+                           edge if onedge else paper)
 
     def _send(self):
         t = self.edit.text().strip()
