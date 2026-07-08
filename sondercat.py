@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.2.0"
-APP_BUILD = "0709g"
+APP_BUILD = "0709h"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -305,6 +305,7 @@ class InputWatcher:
     def __init__(self, on_event=None):
         self.on_event = on_event
         self.last_key = 0.0
+        self.key_count = 0            # increments per real keypress
         self.key_times = deque(maxlen=80)
         self.last_scroll = 0.0
         self.scroll_accum = 0.0
@@ -367,6 +368,7 @@ class InputWatcher:
             pass
         now = time.time()
         self.last_key = now
+        self.key_count += 1          # drives the typing-paw alternation
         self.key_times.append(now)
         if self.on_event:
             try:
@@ -2817,7 +2819,9 @@ class CatWindow(QWidget):
 
         want_peek = (self.manual_peek or mgr.fullscreen_active
                      or self.gcfg.get("hide_mode", False))
-        typing_now = inputs.typing(0.30 if self.knead_hyst else 0.25)
+        # snappy to start (0.25s), but once typing, hold the pose ~1s past
+        # the last key so the paws freeze briefly instead of snapping away
+        typing_now = inputs.typing(1.0 if self.knead_hyst else 0.25)
         self.knead_hyst = typing_now
         overheat = (inputs.keys_per_sec() > 5.5 and typing_now)
 
@@ -3500,7 +3504,10 @@ class CatWindow(QWidget):
         if self.state == DRAG:
             return "dangle"
         if self.state in (KNEAD, OVERHEAT):
-            return "type_a" if fast else "type_b"
+            # paws tap in lockstep with your keystrokes: each key flips the
+            # frame (key #1 -> a, key #2 -> b, ...). When you stop, the last
+            # frame is held for ~1s so a brief pause doesn't reset it.
+            return "type_a" if (self.mgr.inputs.key_count & 1) else "type_b"
         if self.state == SCROLLPLAY:
             return ("knead_c", "knead_b", "knead_a",
                     "knead_b")[int(now / 0.14) % 4]
