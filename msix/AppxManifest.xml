@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SondeR cat — MSIX package manifest (template).
+
+  Three values MUST be filled in from Partner Center after you reserve the
+  app name "SondeR cat" (they are the same for every future submission):
+
+    1. Identity/@Name          -> Partner Center > your app > Product management
+                                  > Product identity > "Package/Identity/Name"
+                                  (looks like  1234ABCD.SondeRcat )
+    2. Identity/@Publisher     -> same page, "Package/Identity/Publisher"
+                                  (looks like  CN=XXXXXXXX-XXXX-...  )
+    3. PublisherDisplayName    -> your publisher display name
+
+  The build script (build_msix.ps1) auto-fills Identity/@Version from
+  APP_VERSION in sondercat.py (e.g. 8.3.0 -> 8.3.0.0; the 4th part must be 0,
+  the Store reserves it). Leave the placeholders below for the script to
+  replace, or edit them by hand.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="PUBLISHER.SondeRcat"
+    Publisher="CN=REPLACE-WITH-PARTNER-CENTER-PUBLISHER-ID"
+    Version="0.0.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>SondeR cat</DisplayName>
+    <PublisherDisplayName>REPLACE-WITH-PUBLISHER-DISPLAY-NAME</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>A cozy pixel-art desktop cat that lives on your screen — reacts to your typing, chases the cursor, naps, wears headphones to your music, and stands guard.</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop"
+                        MinVersion="10.0.19041.0"
+                        MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="SondeRcat"
+                 Executable="app\SondeRCat.exe"
+                 EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="SondeR cat"
+        Description="A cozy pixel-art desktop cat that lives on your screen."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile
+          Wide310x150Logo="Assets\Wide310x150Logo.png"
+          Square71x71Logo="Assets\Square71x71Logo.png"
+          Square310x310Logo="Assets\Square310x310Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- Full-trust desktop app: needed for the global keyboard/mouse hooks
+         (pynput) and reading the foreground window (ctypes) that make the
+         cat react to typing, music and fullscreen video. -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

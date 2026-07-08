@@ -42,7 +42,7 @@ exit /b 1
 echo [OK] Using Python: %PY%
 
 echo [..] Copying files...
-robocopy "%SRC%." "%DEST%\sondercat" /E /NFL /NDL /NJH /NJS /XD libs .git .venv __pycache__ wheels /XF SondeR_cat_setup.exe *.zip >nul
+robocopy "%SRC%." "%DEST%\sondercat" /E /NFL /NDL /NJH /NJS /XD libs .git .venv __pycache__ wheels msix /XF SondeR_cat_setup.exe *.zip >nul
 if %errorlevel% GEQ 8 goto copyfail
 if not exist "%SRC%libs" goto libsdone
 robocopy "%SRC%libs" "%DEST%\libs" /E /NFL /NDL /NJH /NJS >nul
