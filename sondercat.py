@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "3.3.2"
-APP_BUILD = "0708d"
+APP_BUILD = "0708e"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -2906,13 +2906,13 @@ class CatWindow(QWidget):
             hp = QPainter(img)
             dkc = QColor("#2a2a33")
             ltc = QColor("#7d7d94")
+            # NOTE: the base sprite is never mirrored (facing is shown by
+            # the run tilt), so the headset must not mirror either
             dcells, lcells = self._headset_cells(name)
             for (hx, hy) in dcells:
-                fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
-                hp.fillRect(fx * s, hy * s, s, s, dkc)
+                hp.fillRect(hx * s, hy * s, s, s, dkc)
             for (hx, hy) in lcells:
-                fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
-                hp.fillRect(fx * s, hy * s, s, s, ltc)
+                hp.fillRect(hx * s, hy * s, s, s, ltc)
             hp.end()
 
         eyes = sprites.EYE_CELLS.get(name)
