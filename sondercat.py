@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "3.4.0"
-APP_BUILD = "0708f"
+APP_BUILD = "0708g"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -629,6 +629,30 @@ class _InputBridge(QObject):
     poked = Signal()
 
 
+
+
+def pick_minutes(title, label, initial_min=25):
+    """Duration picker with a real HH:MM spinner. Returns minutes or None."""
+    from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel,
+                                   QTimeEdit, QVBoxLayout)
+    from PySide6.QtCore import QTime
+    dlg = QDialog()
+    dlg.setWindowTitle(title)
+    lay = QVBoxLayout(dlg)
+    lay.addWidget(QLabel(label))
+    t = QTimeEdit()
+    t.setDisplayFormat("HH:mm")
+    t.setTime(QTime(initial_min // 60, initial_min % 60))
+    t.setCurrentSection(QTimeEdit.MinuteSection)
+    lay.addWidget(t)
+    bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    bb.accepted.connect(dlg.accept)
+    bb.rejected.connect(dlg.reject)
+    lay.addWidget(bb)
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    qt = t.time()
+    return qt.hour() * 60 + qt.minute()
 
 
 class _AudioMeter:
@@ -1377,15 +1401,23 @@ class Manager(QObject):
             return time.time() + int(text) * 60
         return None
 
+    def custom_stretch(self):
+        m = pick_minutes("Stretch reminder", "Remind me to stretch every:",
+                         max(1, self.cfg["global"].get("stretch_minutes",
+                                                       50) or 50))
+        if m is not None and m > 0:
+            self.set_stretch(m)
+
+    def custom_pomodoro(self, kind):
+        m = pick_minutes("Pomodoro",
+                         "Focus for:" if kind == "focus" else "Break for:",
+                         25 if kind == "focus" else 5)
+        if m is not None and m > 0:
+            self.start_pomodoro(m, kind)
+
     def add_reminder(self):
-        when, ok = QInputDialog.getText(
-            None, "Set a reminder",
-            "When?  (a time like 21:30, or minutes from now like 45)")
-        if not ok or not when.strip():
-            return
-        t = self.parse_when(when)
+        t = self.pick_reminder_time()
         if t is None:
-            self.say_primary("I didn't understand that time…", 3)
             return
         msg, ok = QInputDialog.getText(None, "Set a reminder",
                                        "What should I say?")
@@ -1395,6 +1427,51 @@ class Manager(QObject):
         save_config(self.cfg)
         mins = max(1, int((t - time.time()) / 60))
         self.say_primary(f"Okay! I'll meow in ~{mins} min", 3)
+
+    @staticmethod
+    def pick_reminder_time():
+        """Reminder time with real spinners: at a clock time, or in a
+        duration from now. Returns a unix timestamp or None."""
+        from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel,
+                                       QRadioButton, QTimeEdit, QVBoxLayout)
+        from PySide6.QtCore import QTime
+        dlg = QDialog()
+        dlg.setWindowTitle("Set a reminder")
+        lay = QVBoxLayout(dlg)
+        r_at = QRadioButton("At this time:")
+        r_at.setChecked(True)
+        lay.addWidget(r_at)
+        at = QTimeEdit()
+        at.setDisplayFormat("HH:mm")
+        at.setTime(QTime.currentTime().addSecs(3600))
+        lay.addWidget(at)
+        r_in = QRadioButton("Or in (from now):")
+        lay.addWidget(r_in)
+        dur = QTimeEdit()
+        dur.setDisplayFormat("HH:mm")
+        dur.setTime(QTime(0, 30))
+        lay.addWidget(dur)
+        at.timeChanged.connect(lambda _t: r_at.setChecked(True))
+        dur.timeChanged.connect(lambda _t: r_in.setChecked(True))
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(dlg.accept)
+        bb.rejected.connect(dlg.reject)
+        lay.addWidget(bb)
+        if dlg.exec() != QDialog.Accepted:
+            return None
+        now = time.time()
+        if r_in.isChecked():
+            q = dur.time()
+            secs = q.hour() * 3600 + q.minute() * 60
+            return now + max(60, secs)
+        q = at.time()
+        lt = time.localtime(now)
+        target = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday,
+                              q.hour(), q.minute(), 0,
+                              lt.tm_wday, lt.tm_yday, -1))
+        if target <= now:
+            target += 86400                  # that time tomorrow
+        return target
 
     def clear_reminders(self):
         self.cfg["global"]["reminders"] = []
@@ -1680,6 +1757,9 @@ class CatWindow(QWidget):
         add = QAction("Add a cat 🐈", menu)
         add.triggered.connect(mgr.add_cat)
         cats.addAction(add)
+        nm = QAction("Name this cat ✏️", menu)
+        nm.triggered.connect(self.rename_cat)
+        cats.addAction(nm)
         rem = QAction("Remove this cat", menu)
         rem.triggered.connect(lambda: mgr.remove_cat(self))
         cats.addAction(rem)
@@ -1692,6 +1772,12 @@ class CatWindow(QWidget):
             act.triggered.connect(lambda _=False, m=mins, k=kind:
                                   mgr.start_pomodoro(m, k))
             pomo.addAction(act)
+        pcus = QAction("Custom focus ⏱…", menu)
+        pcus.triggered.connect(lambda _=False: mgr.custom_pomodoro("focus"))
+        pomo.addAction(pcus)
+        bcus = QAction("Custom break ⏱…", menu)
+        bcus.triggered.connect(lambda _=False: mgr.custom_pomodoro("break"))
+        pomo.addAction(bcus)
         for label, f, b in (("Loop 25 / 5", 25, 5), ("Loop 50 / 10", 50, 10)):
             act = QAction(label, menu)
             act.triggered.connect(lambda _=False, ff=f, bb=b:
@@ -1709,6 +1795,9 @@ class CatWindow(QWidget):
             act.setChecked(self.gcfg["stretch_minutes"] == mins)
             act.triggered.connect(lambda _=False, m=mins: mgr.set_stretch(m))
             stretch.addAction(act)
+        scus = QAction("Custom interval ⏱…", menu)
+        scus.triggered.connect(mgr.custom_stretch)
+        stretch.addAction(scus)
 
         beh = menu.addMenu("Behavior")
         chase = QAction("Chase the cursor", menu)
@@ -1926,6 +2015,19 @@ class CatWindow(QWidget):
         save_config(self.mgr.cfg)
         self._resize_to_sprite()
         self.update()
+
+    def rename_cat(self):
+        cur = self.ccfg.get("name", "")
+        name, ok = QInputDialog.getText(
+            None, "Name this cat", "This cat's name:", text=cur)
+        if not ok:
+            return
+        name = name.strip()[:24]
+        self.ccfg["name"] = name
+        save_config(self.mgr.cfg)
+        if self.index == 0:
+            self.mgr._make_tray()
+        self.say(f"I'm {name}! 🐾" if name else "no name, just cat 🐾", 3)
 
     def toggle_manual_peek(self):
         self.manual_peek = not self.manual_peek
