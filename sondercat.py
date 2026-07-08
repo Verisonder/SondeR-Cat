@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.4.0"
-APP_BUILD = "0709n"
+APP_BUILD = "0709o"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -813,8 +813,12 @@ class GuardBeam(QWidget):
             cr = cat.geometry()
             scale = max(1, cat.scale)
             lens = getattr(cat, "_torch_lens", (24, 21))
-            ox = cr.left() + int(lens[0] * scale) - self.x()
-            oy = cr.top() + int(lens[1] * scale) - self.y()
+            # the sprite is drawn at (side, TOP_MARGIN) inside the window,
+            # scaled by grow — the lens position must include all of that
+            ox = (cr.left() + cat.side
+                  + int((lens[0] + 0.5) * scale * cat.grow) - self.x())
+            oy = (cr.top() + TOP_MARGIN
+                  + int((lens[1] + 1.0) * scale * cat.grow) - self.y())
         except Exception:
             ox, oy = w // 2, h // 2
         t = self._phase
@@ -3747,41 +3751,47 @@ class CatWindow(QWidget):
         return cached
 
     def _draw_flashlight(self, p, name, s):
-        # a small handheld flashlight held out at the right front paw,
-        # pointing outward/down; the red beam emerges from its lens
+        # a chunky handheld flashlight held out at the right FOREPAW,
+        # pointing right; the red beam emerges from its lens
         g = sprites.FRAMES.get(name)
-        if not g:
-            self._torch_lens = (sprites.GRID_W - 3, int(sprites.GRID_H * 0.8))
-            return
-        H, W = len(g), sprites.GRID_W
-        low_rows = [y for y in range(int(H * 0.62), H)
-                    if any(c != "." for c in g[y])]
-        if not low_rows:
-            self._torch_lens = (W - 3, int(H * 0.8))
-            return
-        fy = low_rows[0]
-        xs = [x for x, c in enumerate(g[fy]) if c != "."]
-        rpaw = min(max(xs) if xs else W - 6, W - 6)
+        W = sprites.GRID_W
+        H = len(g) if g else sprites.GRID_H
+        # anchor: rightmost sprite content near the paw line (bottom rows)
+        fy = H - 7
+        rpaw = 0
+        if g:
+            for y in range(max(0, H - 9), H - 2):
+                xs = [x for x, c in enumerate(g[y]) if c != "."]
+                if xs:
+                    rpaw = max(rpaw, max(xs))
+            fy = H - 7
+        rpaw = min(max(rpaw, 12), W - 6)     # keep the torch on-canvas
         body = QColor("#33373f")
-        ring = QColor("#5a606b")
-        head = QColor("#c8ccd2")             # metal head
-        lens = QColor("#fff4be")
-        # barrel: 3 cells angling down-right from the paw
-        barrel = [(rpaw, fy), (rpaw + 1, fy + 1), (rpaw + 2, fy + 1)]
-        for (cx, cy) in barrel:
-            if 0 <= cx < W and 0 <= cy < H:
-                p.fillRect(cx * s, cy * s, s, s, body)
-        # head + lens at the end
-        hx, hy = rpaw + 3, min(fy + 2, H - 1)
-        p.fillRect(hx * s, hy * s, s, s, head)
-        lx, ly = rpaw + 3, min(fy + 1, H - 1)
-        p.fillRect(lx * s, ly * s, s, s, ring)
-        # bright lens + warm glow halo at the emitter
-        glow = QColor(255, 120, 90); glow.setAlpha(130)
+        band = QColor("#20232a")
+        headc = QColor("#c8ccd2")            # metal head ring
+        lensc = QColor("#fff4be")
+        edge = QColor("#15171c")
+        # 2-cell-tall, 5-cell-long torch: grip, body×2, head, lens
+        # outline first for pop
+        for cx in range(rpaw, rpaw + 5):
+            for cy in (fy, fy + 1):
+                p.fillRect(cx * s - 1, cy * s - 1, s + 2, s + 2, edge)
+        # warm glow at the emitter FIRST, so solid parts stay clean on top
+        lx, ly = rpaw + 4, fy
+        glow = QColor(255, 130, 100); glow.setAlpha(140)
         p.setPen(Qt.NoPen); p.setBrush(glow)
-        p.drawEllipse(QPointF((lx + 1) * s, (ly + 1) * s), s * 1.4, s * 1.4)
-        p.fillRect((lx + 1) * s, ly * s, s, s, lens)
-        self._torch_lens = (lx + 1, ly)      # beam starts at the lens
+        p.drawEllipse(QPointF((lx + 1) * s, (ly + 1) * s),
+                      s * 1.8, s * 1.8)
+        # grip cell (attached to the paw)
+        p.fillRect(rpaw * s, fy * s, s, 2 * s, band)
+        # body: two columns
+        p.fillRect((rpaw + 1) * s, fy * s, s, 2 * s, body)
+        p.fillRect((rpaw + 2) * s, fy * s, s, 2 * s, body)
+        # metal head ring
+        p.fillRect((rpaw + 3) * s, fy * s, s, 2 * s, headc)
+        # lens column (bright, solid)
+        p.fillRect(lx * s, ly * s, s, 2 * s, lensc)
+        self._torch_lens = (lx, ly)          # beam starts at the lens
 
     def _draw_helmet(self, p, name, s):
         dome, rim, camo = self._helmet_cells(name)
