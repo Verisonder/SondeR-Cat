@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "7.1.0"
-APP_BUILD = "0709d"
+APP_VERSION = "7.2.0"
+APP_BUILD = "0709e"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -162,7 +162,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "name": "", "pinned": "", "reminders": [], "sounds": True, "laser_only": True, "wiggle_hide": True,
                    "wiggle_sens": "medium",
                    "force_sleep": False, "watch_sprites": False,
-                   "window_perch": True, "perch_freq": "often",
+                   "window_perch": True, "perch_freq": "instant",
                    "auto_update": True,
                    "dance_music": True, "dance_on_sound": False,
                    "gemini_key": "", "screen_vision": False,
@@ -1590,7 +1590,7 @@ class Manager(QObject):
     }
 
     def perch_interval(self):
-        key = self.cfg["global"].get("perch_freq", "often")
+        key = self.cfg["global"].get("perch_freq", "instant")
         return self.PERCH_FREQS.get(key, self.PERCH_FREQS["often"])
 
     def set_perch_freq(self, key):
@@ -2318,7 +2318,7 @@ class CatWindow(QWidget):
                                   mgr.set_wiggle_sens(k))
             sens.addAction(act)
         perchm = beh.addMenu("Sit on top of windows 🪟")
-        cur_freq = self.gcfg.get("perch_freq", "often")
+        cur_freq = self.gcfg.get("perch_freq", "instant")
         if not self.gcfg.get("window_perch", True):
             cur_freq = "off"
         for key, label in (("off", "Off"),
