@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "7.0.0"
-APP_BUILD = "0709a"
+APP_VERSION = "7.1.0"
+APP_BUILD = "0709b"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -159,7 +159,7 @@ CAT_DEFAULTS = {"palette": "orange tabby", "pattern": "tabby",
                 "custom_body": None, "scale": 6, "pos": None}
 GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "auto_peek": True, "chase_enabled": True,
-                   "name": "", "pinned": "", "reminders": [], "sounds": True, "laser_only": True, "wiggle_hide": True,
+                   "name": "", "pinned": "", "reminders": [], "sounds": True, "laser_only": True, "wiggle_hide": True, "wiggle_summon": True,
                    "wiggle_sens": "medium",
                    "force_sleep": False, "watch_sprites": False,
                    "window_perch": True, "perch_freq": "often",
@@ -1485,6 +1485,14 @@ class Manager(QObject):
         if not self.inputs.mouse_ok:
             self.say_primary("(my scroll hook is OFF — see About)", 4)
 
+    def toggle_wiggle_summon(self):
+        g = self.cfg["global"]
+        g["wiggle_summon"] = not g.get("wiggle_summon", True)
+        save_config(self.cfg)
+        self.say_primary(
+            "wiggle on a window's top edge and I'll come sit on it 🪟"
+            if g["wiggle_summon"] else "okay, no more summoning", 4)
+
     def toggle_wiggle_hide(self):
         g = self.cfg["global"]
         g["wiggle_hide"] = not g.get("wiggle_hide", True)
@@ -2306,6 +2314,11 @@ class CatWindow(QWidget):
         wigh.setChecked(self.gcfg.get("wiggle_hide", True))
         wigh.triggered.connect(mgr.toggle_wiggle_hide)
         beh.addAction(wigh)
+        wigs = QAction("Wiggle on a window to summon me 🪟", menu)
+        wigs.setCheckable(True)
+        wigs.setChecked(self.gcfg.get("wiggle_summon", True))
+        wigs.triggered.connect(mgr.toggle_wiggle_summon)
+        beh.addAction(wigs)
         sens = beh.addMenu("Wiggle sensitivity")
         for label, key in (("High (easy to trigger)", "high"),
                            ("Medium", "medium"),
@@ -2615,6 +2628,7 @@ class CatWindow(QWidget):
                 self._peek_x = cur.x()          # hide where the wiggle was
                 self.manual_peek = True
             elif (self.gcfg.get("window_perch", True)
+                    and self.gcfg.get("wiggle_summon", True)
                     and len(self._wigv_times) >= flips_req
                     and now > self._summon_wig_cd
                     and self.glide_target is None):
