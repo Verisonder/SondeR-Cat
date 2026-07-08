@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.8.0"
-APP_BUILD = "0708t"
+APP_BUILD = "0708u"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -162,7 +162,8 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "name": "", "pinned": "", "reminders": [], "sounds": True, "laser_only": True, "wiggle_hide": True,
                    "wiggle_sens": "medium",
                    "force_sleep": False, "watch_sprites": False,
-                   "window_perch": True, "auto_update": True,
+                   "window_perch": True, "perch_freq": "often",
+                   "auto_update": True,
                    "dance_music": True, "dance_on_sound": False,
                    "gemini_key": "", "screen_vision": False,
                    "hide_mode": False}
@@ -1580,6 +1581,35 @@ class Manager(QObject):
         g["auto_update"] = not g.get("auto_update", True)
         save_config(self.cfg)
 
+    PERCH_FREQS = {
+        "rarely":    (300, 600),
+        "sometimes": (180, 420),
+        "often":     (90, 210),
+        "very":      (35, 90),
+    }
+
+    def perch_interval(self):
+        key = self.cfg["global"].get("perch_freq", "often")
+        return self.PERCH_FREQS.get(key, self.PERCH_FREQS["often"])
+
+    def set_perch_freq(self, key):
+        g = self.cfg["global"]
+        g["perch_freq"] = key
+        g["window_perch"] = (key != "off")
+        save_config(self.cfg)
+        labels = {"off": "I'll stay off your windows",
+                  "rarely": "I'll rarely climb up",
+                  "sometimes": "I'll sometimes climb up",
+                  "often": "I'll often climb your windows 🪟",
+                  "very": "I'll climb up a lot! 🪟"}
+        self.say_primary(labels.get(key, ""), 3)
+        # make the change take effect soon, not after the old long wait
+        if key != "off":
+            lo, hi = self.perch_interval()
+            for c in self.cats:
+                c.next_perch_try = time.time() + random.uniform(
+                    min(8, lo), min(20, hi))
+
     def toggle_window_perch(self):
         g = self.cfg["global"]
         g["window_perch"] = not g.get("window_perch", True)
@@ -2022,7 +2052,7 @@ class CatWindow(QWidget):
         self.perch_pending = None
         self.perch_until = 0.0
         self.perch_home = None
-        self.next_perch_try = time.time() + random.uniform(120, 360)
+        self.next_perch_try = time.time() + random.uniform(30, 90)
         self._perch_miss = 0
         self._perch_hist = deque(maxlen=40)
         self._shake_quiet_until = 0.0
@@ -2285,11 +2315,21 @@ class CatWindow(QWidget):
             act.triggered.connect(lambda _=False, k=key:
                                   mgr.set_wiggle_sens(k))
             sens.addAction(act)
-        prc = QAction("Sometimes sit on top of windows 🪟", menu)
-        prc.setCheckable(True)
-        prc.setChecked(self.gcfg.get("window_perch", True))
-        prc.triggered.connect(mgr.toggle_window_perch)
-        beh.addAction(prc)
+        perchm = beh.addMenu("Sit on top of windows 🪟")
+        cur_freq = self.gcfg.get("perch_freq", "often")
+        if not self.gcfg.get("window_perch", True):
+            cur_freq = "off"
+        for key, label in (("off", "Off"),
+                           ("rarely", "Rarely"),
+                           ("sometimes", "Sometimes"),
+                           ("often", "Often"),
+                           ("very", "Very often")):
+            a = QAction(label, menu)
+            a.setCheckable(True)
+            a.setChecked(cur_freq == key)
+            a.triggered.connect(
+                lambda _=False, k=key: mgr.set_perch_freq(k))
+            perchm.addAction(a)
         dnc = QAction("Headphones when sound plays 🎧", menu)
         dnc.setCheckable(True)
         dnc.setChecked(self.gcfg.get("dance_music", True))
@@ -2816,7 +2856,8 @@ class CatWindow(QWidget):
                     and self.glide_target is None
                     and not self.peeking
                     and not mgr.fullscreen_active):
-                self.next_perch_try = now + random.uniform(180, 420)
+                lo, hi = mgr.perch_interval()
+                self.next_perch_try = now + random.uniform(lo, hi)
                 self.try_perch()
 
         if self.state != PEEK and self.peeking:
@@ -3222,7 +3263,8 @@ class CatWindow(QWidget):
             except Exception:
                 pass
             self.sleep_at = time.time()
-            self.next_perch_try = time.time() + random.uniform(240, 480)
+            lo, hi = self.mgr.perch_interval()
+            self.next_perch_try = time.time() + random.uniform(lo, hi * 1.3)
             return False
         choice = random.choice(targets)
         hwnd, (l, t, r, b) = choice[0], choice[1]
@@ -3246,7 +3288,8 @@ class CatWindow(QWidget):
             self._falling = True
         except Exception:
             pass
-        self.next_perch_try = now + random.uniform(240, 480)
+        lo, hi = self.mgr.perch_interval()
+        self.next_perch_try = now + random.uniform(lo, hi * 1.3)
 
     def _end_perch(self, go_home):
         self.perch_asleep = False
@@ -3305,7 +3348,8 @@ class CatWindow(QWidget):
             except Exception:
                 pass
             self.sleep_at = now               # doze off once settled
-            self.next_perch_try = now + random.uniform(180, 420)
+            lo, hi = self.mgr.perch_interval()
+            self.next_perch_try = now + random.uniform(lo, hi)
             return
         _, (l, t, r, b) = q
         if self._perch_covered(l, t, r, b):
@@ -3319,7 +3363,8 @@ class CatWindow(QWidget):
                 except Exception:
                     pass
                 self.sleep_at = now
-                self.next_perch_try = now + random.uniform(180, 420)
+                lo, hi = self.mgr.perch_interval()
+                self.next_perch_try = now + random.uniform(lo, hi)
                 return
         else:
             self._cover_miss = 0
@@ -3356,7 +3401,8 @@ class CatWindow(QWidget):
                                     "woOoOah", "earthquake!! 🙀"]), 2.2)
         if now > self.perch_until and not self.perch_asleep:
             self._end_perch(go_home=True)
-            self.next_perch_try = now + random.uniform(180, 420)
+            lo, hi = self.mgr.perch_interval()
+            self.next_perch_try = now + random.uniform(lo, hi)
 
     # -------------------------------------------------------------- render --
     def _frame_name(self):
