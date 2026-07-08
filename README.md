@@ -94,9 +94,12 @@ apk), checks system libraries, and offers to fix anything missing.
 
 Requires Python 3.9+ · Dependencies: PySide6 (Essentials), pynput
 
-### Code signing
+### Trust & signing
 
-Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+The tiny online installer (`SondeR_cat_setup.exe`) is frozen — it's never
+rebuilt for app changes, only when the installer stub itself changes — so it
+steadily earns Microsoft SmartScreen reputation over time. App updates ship as
+content diffs to the app files, so they never reset that trust.
 
 
 ## Linux support

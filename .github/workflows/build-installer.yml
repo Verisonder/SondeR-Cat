@@ -1,8 +1,8 @@
-# Builds SondeR_cat_setup.exe reproducibly, and (once SignPath Foundation
-# approves the project) signs it with a Windows-trusted certificate.
+# Builds SondeR_cat_setup.exe reproducibly and uploads it as a workflow
+# artifact.
 #
 # Trigger: manually from the Actions tab, or on a version tag push.
-name: Build (and sign) installer
+name: Build installer
 
 on:
   workflow_dispatch:
@@ -28,29 +28,8 @@ jobs:
       - name: Build installer
         run: python3 build_exe.py
 
-      - name: Upload unsigned artifact
-        id: upload
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SondeR_cat_setup-unsigned
+          name: SondeR_cat_setup
           path: SondeR_cat_setup.exe
-
-      # ---- SignPath signing (activates once the three secrets exist) ----
-      - name: Submit to SignPath
-        if: ${{ vars.SIGNPATH_ORG_ID != '' }}
-        uses: signpath/github-action-submit-signing-request@v1
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORG_ID }}
-          project-slug: sonder-cat
-          signing-policy-slug: release-signing
-          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
-          wait-for-completion: true
-          output-artifact-directory: signed
-
-      - name: Upload signed artifact
-        if: ${{ vars.SIGNPATH_ORG_ID != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: SondeR_cat_setup-signed
-          path: signed/SondeR_cat_setup.exe
