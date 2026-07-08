@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.1.0"
-APP_BUILD = "0709b"
+APP_BUILD = "0709c"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1531,6 +1531,37 @@ class Manager(QObject):
             self.music_mode = "listen"
         self.music_on = self.music_mode == "dance"
 
+    def perch_doctor(self):
+        """6s live probe: point at a window's title bar to see if the cat
+        can detect it as a summon/perch target."""
+        c = self.primary()
+        t_end = time.time() + 6
+
+        def step():
+            if time.time() > t_end:
+                self.say_primary("perch doctor done 🪟", 2)
+                return
+            cur = QCursor.pos()
+            hwnd = c._window_under_cursor(cur)
+            if not hwnd:
+                msg = "no window under cursor (or it's an overlay)"
+            else:
+                q = c._perch_query(hwnd)
+                if not isinstance(q, tuple):
+                    msg = f"window found but: {q}"
+                else:
+                    l, t, r, b = q[1]
+                    top_zone = t + max(70, int((b - t) * 0.25))
+                    in_top = t - 16 <= cur.y() <= top_zone
+                    wide = (r - l) >= c.width() + 60
+                    msg = (f"win ok w={r-l} "
+                           f"{'WIDE-OK' if wide else 'TOO-NARROW'} | "
+                           f"cursor {'IN top-zone' if in_top else 'below top'}"
+                           f" (y={cur.y()} t={t})")
+            self.say_primary(msg, 0.7)
+            QTimer.singleShot(300, step)
+        step()
+
     def music_doctor(self):
         t_end = time.time() + 5
 
@@ -2462,6 +2493,9 @@ class CatWindow(QWidget):
         doctor = QAction("Scroll doctor (5s live test)", menu)
         doctor.triggered.connect(mgr.scroll_doctor)
         tst.addAction(doctor)
+        pdoc = QAction("Perch doctor 🪟 (6s: point at a title bar)", menu)
+        pdoc.triggered.connect(mgr.perch_doctor)
+        tst.addAction(pdoc)
 
         hid = QAction("Hide at the bottom 🫣", menu)
         hid.setCheckable(True)
@@ -3105,6 +3139,8 @@ class CatWindow(QWidget):
         u.WindowFromPoint.restype = wintypes.HWND
         u.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
         u.GetAncestor.restype = wintypes.HWND
+        u.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+        u.ShowWindow.restype = wintypes.BOOL
         WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND,
                                          wintypes.LPARAM)
         u.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
@@ -3233,20 +3269,39 @@ class CatWindow(QWidget):
             return []
 
     def _window_under_cursor(self, cur):
-        """Top-level window under the point, or None (Windows only)."""
+        """Top-level window under the point, or None (Windows only).
+        Skips our own overlay windows and transparent/tool windows so we
+        find the real app window the user is pointing at."""
         if platform.system() != "Windows":
             return None
         try:
             ctypes, wintypes, u, _d, _p = self._win32()
+            GWL_EXSTYLE = -20
+            WS_EX_LAYERED = 0x00080000
+            WS_EX_TRANSPARENT = 0x00000020
+            WS_EX_TOOLWINDOW = 0x00000080
+            own = {int(c.winId()) for c in self.mgr.cats}
+            for w in (getattr(self.mgr, "_ask_box", None),
+                      getattr(self.mgr, "_bubble_win", None)):
+                if w is not None:
+                    try:
+                        own.add(int(w.winId()))
+                    except Exception:
+                        pass
             pt = wintypes.POINT(int(cur.x()), int(cur.y()))
             hwnd = u.WindowFromPoint(pt)
             if not hwnd:
                 return None
             root = u.GetAncestor(hwnd, 2)          # GA_ROOT
-            hwnd = root or hwnd
-            if int(hwnd) in {int(c.winId()) for c in self.mgr.cats}:
+            top = root or hwnd
+            ex = u.getlong(top, GWL_EXSTYLE)
+            is_overlay = (int(top) in own
+                          or (ex & WS_EX_TRANSPARENT)
+                          or ((ex & WS_EX_LAYERED)
+                              and (ex & WS_EX_TOOLWINDOW)))
+            if is_overlay:
                 return None
-            return hwnd
+            return top
         except Exception:
             return None
 
@@ -3259,8 +3314,9 @@ class CatWindow(QWidget):
         if not isinstance(q, tuple):
             return False
         l, t, r, b = q[1]
-        # must be wiggling ON the top edge / title area of that window
-        if not (t - 10 <= cur.y() <= t + 52 and l <= cur.x() <= r):
+        # wiggling near the top of the window (title-bar zone): generous
+        top_zone = t + max(70, int((b - t) * 0.25))
+        if not (t - 16 <= cur.y() <= top_zone and l <= cur.x() <= r):
             return False
         if r - l < self.width() + 60:              # too narrow to sit on
             return False
