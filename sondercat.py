@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710o"
+APP_BUILD = "0710p"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -4142,9 +4142,12 @@ class CatWindow(QWidget):
             Lcup = [L2 - 3 - OUT, L2 - 2 - OUT, L2 - 1 - OUT]
             Rcup = [R2 + 1 + OUT - RIN, R2 + 2 + OUT - RIN, R2 + 3 + OUT - RIN]
             # keep a 1-cell margin from the sprite edges so the white outline
-            # (drawn just outside the cup) never falls off-canvas and breaks
+            # (drawn just outside the cup) never falls off-canvas and breaks.
+            # the right side gets an extra cell of margin because the drag
+            # mochi-squish compresses the far-right columns and was clipping
+            # the right cup's outline on real displays.
             Lcup = [x + max(0, 1 - min(Lcup)) for x in Lcup]
-            Rcup = [x + min(0, (sprites.GRID_W - 2) - max(Rcup)) for x in Rcup]
+            Rcup = [x + min(0, (sprites.GRID_W - 4) - max(Rcup)) for x in Rcup]
             for cy in range(t2 + 3, t2 + 8):
                 for cx in Lcup + Rcup:
                     dark.append((cx, cy))
