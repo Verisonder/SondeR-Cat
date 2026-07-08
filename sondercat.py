@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710q"
+APP_BUILD = "0710r"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -4245,8 +4245,11 @@ class CatWindow(QWidget):
                            (hx + out, hy - 1), (hx + out, hy + 1)):  # corners
                     if nb not in solid and 0 <= nb[0] < W and 0 <= nb[1] < H:
                         halo.add(nb)
-            for (hx, hy) in halo:
-                hp.fillRect(hx * s, hy * s, s, s, whc)
+            # no outline in the typing/kneading (side) poses — it caused
+            # rendering trouble there; just draw the cups cleanly
+            if not name.startswith(("type_", "knead_")):
+                for (hx, hy) in halo:
+                    hp.fillRect(hx * s, hy * s, s, s, whc)
             for (hx, hy) in dcells:
                 hp.fillRect(hx * s, hy * s, s, s, dkc)
             for (hx, hy) in lcells:
