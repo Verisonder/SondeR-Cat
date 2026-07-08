@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.8.0"
-APP_BUILD = "0708u"
+APP_BUILD = "0708v"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -3430,8 +3430,7 @@ class CatWindow(QWidget):
         if self.state in (KNEAD, OVERHEAT):
             return "type_a" if fast else "type_b"
         if self.state == SCROLLPLAY:
-            return ("knead_c", "knead_b", "knead_a",
-                    "knead_b")[int(now / 0.14) % 4]
+            return "scrollup_a" if int(now / 0.3) % 2 else "scrollup_b"
         if self.state == CHASE:
             return "run_a" if fast else "run_b"
         if self.state == THINK:
@@ -3561,7 +3560,7 @@ class CatWindow(QWidget):
             if self.state == THINK and not power:
                 offx, offy = -s // 3, -s // 2
             elif self.state == SCROLLPLAY:
-                offx, offy = -(s * 3) // 4, (s * 3) // 4
+                offx, offy = -(s * 3) // 4, -s // 4
             else:
                 cur = QCursor.pos()
                 c = self.mapToGlobal(self.cat_rect().center())
@@ -3648,14 +3647,15 @@ class CatWindow(QWidget):
         p.drawImage(QRect(tx, ty, tw_, th_), img)
         p.restore()
 
-        # paper roll + unspooling strip, drawn ON TOP so it's always visible
+        # tall paper roll + floor-length strip, drawn ON TOP
         if self.state == SCROLLPLAY:
-            rx, ry = sprites.SCROLL_ROLL
-            cx = r.left() + int((rx + 1.4) * s * self.grow)
-            cy = r.top() + int((ry - 2.0) * s * self.grow)
-            rr = int(s * 2.2)
-            ln = min(int(self.mgr.inputs.scroll_accum) * 2 + 4 * s,
-                     self.height() - cy - 6)
+            rx, ry = getattr(sprites, "SCROLL_ROLL_UP", (4, 6))
+            cx = r.left() + int((rx + 0.5) * s * self.grow)
+            cy = r.top() + int(ry * s * self.grow)
+            rr = int(s * 2.6)
+            floor = r.top() + int((sprites.GRID_H - 2.5) * s * self.grow)
+            ln = min(int(self.mgr.inputs.scroll_accum) * 2 + 10 * s,
+                     max(6 * s, floor - cy))
             paper = QColor("#f7f5ef")
             edge = QColor("#5a5148")
             w2 = int(s * 1.6)

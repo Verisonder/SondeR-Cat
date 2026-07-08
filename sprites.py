@@ -744,3 +744,68 @@ def render_icon(palette, pattern="tabby", scale=12, frame="sit_a"):
         p.fillRect(bx, by, pw, pw, pc)
     p.end()
     return img
+
+# --- scroll play: standing upright, batting the tall paper roll ---
+FRAMES["scrollup_a"] = [
+    "..........................",
+    "..........................",
+    "..........KK........KK....",
+    ".........KBBK......KBBK...",
+    ".........KBZBK....KBZBK...",
+    "........KBBBBBKKKKBBBBBK..",
+    "........KBBBBBBBBBBBBBBK..",
+    ".......KBBBBBBBBBBBBBBBBK.",
+    ".......KBEEEBBBBBBBBEEEBK.",
+    ".......KBEEEBBBBBBBBEEEBK.",
+    ".......KBEEEBBBNNBBBEEEBK.",
+    ".......KBBBBBBBMMBBBBBBBK.",
+    ".......KBBBBBBBBBBBBBBBBK.",
+    "........KBBBBBBBBBBBBBBK..",
+    "......KBBBKBBBBBBBBBBBBK..",
+    "......KWBBKBBBBBBBBBBBBK..",
+    "..........KBBBBBBBBBBBBKK.",
+    "..........KBBBBBBBBBBBBKBK",
+    "..........KBBBBBBBBBBBBKBK",
+    "..........KBBBBBBBBBBBBKBK",
+    "..........KBBBBBBBBBBBBKK.",
+    "..........KBBBBBBBBBBBBK..",
+    ".........KBBBBBBBBBBBBK...",
+    ".........KBBK.....KBBK....",
+    ".........KWWK.....KWWK....",
+    "..........KK.......KK.....",
+    "..........................",
+    "..........................",
+]
+FRAMES["scrollup_b"] = [
+    "..........................",
+    "..........................",
+    "..........KK........KK....",
+    ".........KBBK......KBBK...",
+    ".........KBZBK....KBZBK...",
+    "........KBBBBBKKKKBBBBBK..",
+    "........KBBBBBBBBBBBBBBK..",
+    ".......KBBBBBBBBBBBBBBBBK.",
+    ".......KBEEEBBBBBBBBEEEBK.",
+    ".......KBEEEBBBBBBBBEEEBK.",
+    ".......KBEEEBBBNNBBBEEEBK.",
+    ".......KBBBBBBBMMBBBBBBBK.",
+    ".......KBBBBBBBBBBBBBBBBK.",
+    "........KBBBBBBBBBBBBBBK..",
+    "..........KBBBBBBBBBBBBK..",
+    "..........KBBBBBBBBBBBBK..",
+    "..........KBBBBBBBBBBBBKK.",
+    "..........KBBBBBBBBBBBBKBK",
+    "......KBBBKBBBBBBBBBBBBKBK",
+    "......KWBBKBBBBBBBBBBBBKBK",
+    "..........KBBBBBBBBBBBBKK.",
+    "..........KBBBBBBBBBBBBK..",
+    ".........KBBBBBBBBBBBBK...",
+    ".........KBBK.....KBBK....",
+    ".........KWWK.....KWWK....",
+    "..........KK.......KK.....",
+    "..........................",
+    "..........................",
+]
+EYE_CELLS["scrollup_a"] = [(9, 8), (20, 8)]
+EYE_CELLS["scrollup_b"] = [(9, 8), (20, 8)]
+SCROLL_ROLL_UP = (4, 6)   # tall roll anchor (cell x, y)
