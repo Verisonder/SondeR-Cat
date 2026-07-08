@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.0.0"
-APP_BUILD = "0708z"
+APP_BUILD = "0709a"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -2074,6 +2074,7 @@ class CatWindow(QWidget):
         # peek
         self.manual_peek = False
         self._peek_x = None
+        self._summon_wig_cd = 0.0
         self.peeking = False
         self._saved_pos = None
         self.grow = 1.0
@@ -2613,6 +2614,14 @@ class CatWindow(QWidget):
                 self._hide_wig_cd = now + 4.0
                 self._peek_x = cur.x()          # hide where the wiggle was
                 self.manual_peek = True
+            elif (self.gcfg.get("window_perch", True)
+                    and len(self._wigv_times) >= flips_req
+                    and now > self._summon_wig_cd
+                    and self.glide_target is None):
+                # wiggle on a window's top edge -> come perch there
+                if self._try_summon_perch(cur, now):
+                    self._wigv_times.clear()
+                    self._summon_wig_cd = now + 4.0
         if dist_moved > 2 or inputs.typing(1.2):
             self.sleep_at = now + self.gcfg["sleep_seconds"]
             if self.state == SLEEP and not self.gcfg.get("force_sleep") \
@@ -3208,6 +3217,57 @@ class CatWindow(QWidget):
             return out
         except Exception:
             return []
+
+    def _window_under_cursor(self, cur):
+        """Top-level window under the point, or None (Windows only)."""
+        if platform.system() != "Windows":
+            return None
+        try:
+            ctypes, wintypes, u, _d, _p = self._win32()
+            pt = wintypes.POINT(int(cur.x()), int(cur.y()))
+            hwnd = u.WindowFromPoint(pt)
+            if not hwnd:
+                return None
+            root = u.GetAncestor(hwnd, 2)          # GA_ROOT
+            hwnd = root or hwnd
+            if int(hwnd) in {int(c.winId()) for c in self.mgr.cats}:
+                return None
+            return hwnd
+        except Exception:
+            return None
+
+    def _try_summon_perch(self, cur, now):
+        """Wiggle on a window's top edge -> come sit on that window."""
+        hwnd = self._window_under_cursor(cur)
+        if not hwnd:
+            return False
+        q = self._perch_query(hwnd)
+        if not isinstance(q, tuple):
+            return False
+        l, t, r, b = q[1]
+        # must be wiggling ON the top edge / title area of that window
+        if not (t - 10 <= cur.y() <= t + 52 and l <= cur.x() <= r):
+            return False
+        if r - l < self.width() + 60:              # too narrow to sit on
+            return False
+        # only the nearest cat answers the call
+        me = self.pos()
+        def d2(c):
+            return (c.x() - cur.x()) ** 2 + (c.y() - cur.y()) ** 2
+        if any(d2(c) < d2(self) for c in self.mgr.cats if c is not self):
+            return False
+        if self.perch_hwnd is not None:
+            self._end_perch(go_home=False)
+        x = cur.x() - self.width() // 2
+        x = max(l + 20, min(x, r - self.width() - 20))
+        self.perch_home = self.pos()
+        self.perch_pending = hwnd
+        self.perch_offx = x - l
+        self._glide_to(QPoint(x, t - self._feet_offset()), speed=340)
+        lo, hi = self.mgr.perch_interval()
+        self.next_perch_try = now + random.uniform(lo, hi)
+        self.say("coming! 🪟", 1.5)
+        return True
 
     def _perch_query(self, hwnd):
         """('ok', rect) while perchable; 'minimized'; 'gone'."""
