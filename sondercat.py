@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.8.0"
-APP_BUILD = "0708v"
+APP_BUILD = "0708w"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -3430,7 +3430,8 @@ class CatWindow(QWidget):
         if self.state in (KNEAD, OVERHEAT):
             return "type_a" if fast else "type_b"
         if self.state == SCROLLPLAY:
-            return "scrollup_a" if int(now / 0.3) % 2 else "scrollup_b"
+            return ("knead_c", "knead_b", "knead_a",
+                    "knead_b")[int(now / 0.14) % 4]
         if self.state == CHASE:
             return "run_a" if fast else "run_b"
         if self.state == THINK:
@@ -3560,7 +3561,7 @@ class CatWindow(QWidget):
             if self.state == THINK and not power:
                 offx, offy = -s // 3, -s // 2
             elif self.state == SCROLLPLAY:
-                offx, offy = -(s * 3) // 4, -s // 4
+                offx, offy = -(s * 3) // 4, (s * 3) // 4
             else:
                 cur = QCursor.pos()
                 c = self.mapToGlobal(self.cat_rect().center())
@@ -3647,54 +3648,76 @@ class CatWindow(QWidget):
         p.drawImage(QRect(tx, ty, tw_, th_), img)
         p.restore()
 
-        # tall paper roll + floor-length strip, drawn ON TOP
+        # paper roll + unrolling strip — chunky pixel-art style, ON TOP
         if self.state == SCROLLPLAY:
-            rx, ry = getattr(sprites, "SCROLL_ROLL_UP", (4, 6))
-            cx = r.left() + int((rx + 0.5) * s * self.grow)
-            cy = r.top() + int(ry * s * self.grow)
-            rr = int(s * 2.6)
-            floor = r.top() + int((sprites.GRID_H - 2.5) * s * self.grow)
-            ln = min(int(self.mgr.inputs.scroll_accum) * 2 + 10 * s,
-                     max(6 * s, floor - cy))
-            paper = QColor("#f7f5ef")
-            edge = QColor("#5a5148")
-            w2 = int(s * 1.6)
-            zig = max(3, s // 2)
-            sway = math.sin(now * 2.6) * min(4, s * 0.5)
-            if ln > 2:
-                path = QPainterPath()
-                path.moveTo(cx - w2, cy)
-                path.lineTo(cx - w2 + sway, cy + ln)
-                x = cx - w2
-                up = True
-                while x < cx + w2:
-                    x2 = min(x + zig, cx + w2)
-                    path.lineTo((x + x2) / 2 + sway,
-                                cy + ln + (zig if up else 0))
-                    path.lineTo(x2 + sway, cy + ln)
-                    x = x2
-                    up = not up
-                path.lineTo(cx + w2, cy)
-                path.closeSubpath()
-                p.setPen(edge)
-                p.setBrush(paper)
-                p.drawPath(path)
-                p.setPen(QColor("#ddd8cc"))
-                for i, ly in enumerate(range(cy + 6, cy + ln - 3, 7)):
-                    off = sway * (ly - cy) / max(ln, 1)
-                    p.drawLine(int(cx - w2 + 3 + off), ly,
-                               int(cx + w2 - 3 + off), ly)
-            p.setPen(edge)
-            p.setBrush(paper)
-            p.drawEllipse(QPoint(cx, cy), rr, rr)
-            p.setBrush(QColor("#dcd6c8"))
-            p.drawEllipse(QPoint(cx, cy), int(rr * 0.45), int(rr * 0.45))
-            # a mark that spins as you scroll
-            ang = self.mgr.inputs.scroll_accum * 0.35 + now * 0.8
-            mx = cx + int(math.cos(ang) * rr * 0.72)
-            my = cy + int(math.sin(ang) * rr * 0.72)
-            p.setBrush(QColor("#c9c2b2"))
-            p.drawEllipse(QPoint(mx, my), max(2, s // 3), max(2, s // 3))
+            rx, ry = sprites.SCROLL_ROLL
+            cx = r.left() + int((rx + 1.4) * s * self.grow)
+            cy = r.top() + int((ry - 2.6) * s * self.grow)
+            rr = int(s * 2.4)
+            px = max(2, s // 2)              # paper "pixel" size
+            paper = QColor("#fbfaf5")
+            shade = QColor("#e3ddcf")
+            edge = QColor("#4c463e")
+            core = QColor("#b8b0a0")
+            hole = QColor("#8d8577")
+            p.setRenderHint(QPainter.Antialiasing, False)
+            p.setPen(Qt.NoPen)
+            w2 = int(s * 1.8)
+            ln = min(int(self.mgr.inputs.scroll_accum) * 2 + 5 * s,
+                     self.height() - cy - rr - 6)
+            sway = math.sin(now * 2.2) * min(3.0, s * 0.4)
+            top = cy + rr - px               # strip starts under the roll
+            if ln > px * 2:
+                seg_h = px * 3               # TP squares
+                y = top
+                i = 0
+                while y < top + ln:
+                    h = min(seg_h, top + ln - y)
+                    off = int(sway * (y - top) / max(ln, 1) * 2)
+                    # outline block then paper block inside = crisp border
+                    p.fillRect(cx - w2 - px + off, y, (w2 + px) * 2, h,
+                               edge)
+                    p.fillRect(cx - w2 + off, y, w2 * 2, h, paper)
+                    # right-side shading strip for depth
+                    p.fillRect(cx + w2 - px + off, y, px, h, shade)
+                    # perforation dashes between squares
+                    if i > 0:
+                        for dx in range(-w2 + px, w2 - px, px * 2):
+                            p.fillRect(cx + dx + off, y, px,
+                                       max(1, px // 2), shade)
+                    y += seg_h
+                    i += 1
+                # torn end: staggered pixel teeth
+                endy = top + ln
+                off = int(sway * 2)
+                tooth = px
+                tx = cx - w2 + off
+                k = 0
+                while tx < cx + w2 + off:
+                    th = tooth if (k % 2 == 0) else tooth * 2
+                    p.fillRect(int(tx), endy, tooth, th, edge)
+                    p.fillRect(int(tx), endy, tooth, max(1, th - px // 2),
+                               paper if k % 2 else shade)
+                    tx += tooth
+                    k += 1
+            # the roll: pixel cylinder with outline, sheet wrap + core
+            p.fillRect(cx - rr - px, cy - rr - px, (rr + px) * 2,
+                       (rr + px) * 2, edge)
+            p.fillRect(cx - rr, cy - rr, rr * 2, rr * 2, paper)
+            p.fillRect(cx + rr - px * 2, cy - rr, px * 2, rr * 2, shade)
+            # winding line: the sheet's outer edge on the roll
+            p.fillRect(cx - rr, cy + rr - px * 2, rr * 2, px, shade)
+            # core hole
+            ch = max(px * 2, rr // 2)
+            p.fillRect(cx - ch // 1 + ch // 2 - ch // 2, cy - ch // 2,
+                       ch, ch, core)
+            p.fillRect(cx - ch // 4, cy - ch // 4, ch // 2, ch // 2, hole)
+            # spinning tick so the roll visibly turns as you scroll
+            ang = self.mgr.inputs.scroll_accum * 0.5 + now * 1.2
+            mx = cx + int(math.cos(ang) * (rr - px * 1.5))
+            my = cy + int(math.sin(ang) * (rr - px * 1.5))
+            p.fillRect(mx - px // 2, my - px // 2, px, px, shade)
+            p.setRenderHint(QPainter.Antialiasing, True)
 
         # thinking face: thought dots drifting above the head
         if self.state == THINK:
