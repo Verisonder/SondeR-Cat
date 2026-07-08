@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.0.0"
-APP_BUILD = "0708l"
+APP_BUILD = "0708m"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -819,30 +819,42 @@ class BubbleWindow(QWidget):
 
 
 class AskBox(QWidget):
-    """Frameless one-line prompt that floats above the cat (Ctrl+Space)."""
+    """A speech-bubble-styled prompt that floats above the cat: cream
+    paper, rounded, with a tail pointing down at the cat (Ctrl+Space)."""
+
+    _PAD = 13
+    _TAIL = 10
 
     def __init__(self, mgr):
         super().__init__(None, Qt.FramelessWindowHint
                          | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.mgr = mgr
-        self.setStyleSheet(
-            "QWidget{background:#23232b;}"
-            "QLineEdit{background:#2e2e38;color:#f0eee8;"
-            "border:1px solid #55556a;border-radius:6px;"
-            "padding:7px 10px;font-size:13px;min-width:280px;}")
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(8, 8, 8, 8)
-        self.edit = QLineEdit()
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.cat = None
+        # a paper-colored line edit with no chrome — the bubble is the frame
+        self.edit = QLineEdit(self)
+        self.edit.setFrame(False)
+        self.edit.setStyleSheet(
+            "QLineEdit{background:transparent;border:none;"
+            "color:#40342a;font-family:Arial;font-size:13px;"
+            "selection-background-color:#e6b877;}")
         self.edit.returnPressed.connect(self._send)
-        lay.addWidget(self.edit)
 
     def open_above(self, cat, name):
-        self.edit.setPlaceholderText(f"Ask {name}…  (Esc to close)")
+        self.cat = cat
+        self.edit.setPlaceholderText(f"Ask {name}…   (Esc to close)")
         self.edit.clear()
-        self.adjustSize()
+        fm = QFontMetrics(QFont("Arial", 13))
+        w = max(268, fm.horizontalAdvance(
+            self.edit.placeholderText()) + 46)
+        eh = fm.height() + 12
+        self.resize(w + self._PAD * 2,
+                    eh + self._PAD * 2 + self._TAIL)
+        self.edit.setGeometry(self._PAD + 4, self._PAD,
+                              w - 8, eh)
         scr = (cat.screen() or QGuiApplication.primaryScreen()).geometry()
         x = cat.x() + cat.width() // 2 - self.width() // 2
-        y = cat.y() - self.height() - 6
+        y = cat.y() - self.height() + int(TOP_MARGIN * 0.8)
         x = max(scr.left() + 4, min(x, scr.right() - self.width() - 4))
         y = max(scr.top() + 4, y)
         self.move(x, y)
@@ -850,6 +862,20 @@ class AskBox(QWidget):
         self.raise_()
         self.activateWindow()
         self.edit.setFocus()
+
+    def paintEvent(self, _ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        w, h = self.width(), self.height() - self._TAIL
+        p.setPen(QColor(0, 0, 0, 60))
+        p.setBrush(QColor(255, 253, 246, 244))
+        p.drawRoundedRect(1, 1, w - 2, h - 2, 10, 10)
+        cx = w // 2
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(255, 253, 246, 244))
+        tail = QPolygonF([QPointF(cx - 8, h - 2), QPointF(cx + 8, h - 2),
+                          QPointF(cx, h + self._TAIL - 1)])
+        p.drawPolygon(tail)
 
     def _send(self):
         t = self.edit.text().strip()
