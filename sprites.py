@@ -661,8 +661,18 @@ def apply_pattern(grid, pattern):
                 elif c == "B" and y >= int(h * 0.58) \
                         and w * 0.40 <= x <= w * 0.60:
                     c = "W"                      # chest bib
-                elif c == "B" and (x + (y // 3)) % 3 == 0:
-                    c = "S"                      # vertical mackerel stripes
+                elif c == "B":
+                    on_line = (x + (y // 3)) % 3 == 0
+                    if y < h * 0.46:
+                        # head: only short forehead lines, cheeks clear
+                        if on_line and y < h * 0.30 \
+                                and w * 0.32 <= x <= w * 0.68 \
+                                and _spot_hash(x, y) > 8:
+                            c = "S"
+                    else:
+                        # body: broken, irregular mackerel stripes
+                        if on_line and _spot_hash(x, y) > 7:
+                            c = "S"
             elif pattern == "mimi":
                 if c == "B" and y <= int(h * 0.22):
                     c = "S"                      # dusky crown and ears
