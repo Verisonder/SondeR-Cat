@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710r"
+APP_BUILD = "0710s"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -4180,18 +4180,14 @@ class CatWindow(QWidget):
                     dark.append((cx, cy))
             lite += [(Lcup[1], top + 6), (Lcup[1], top + 7)]
         lite += [(Rcup[1], top + 6), (Rcup[1], top + 7)]
-        if not tucked:
-            # band arcs between the cups — but NOT in typing/kneading poses:
-            # there the ears sit further inward, so the arc lands across the
-            # ears/forehead and looks like a dark blob. Side view = the band
-            # is hidden behind the head; just the cups show.
-            mid = (L + R) / 2.0
-            for x in range(L - 1, R + 2):
-                t = abs(x - mid) / max(1.0, mid - (L - 1))
-                y = top + int(round(t * t * 3))
-                dark.append((x, y))
-                dark.append((x, y + 1))
-            lite += [(L, top + 3), (R, top + 3)]
+        # band arcs between the cups
+        mid = (L + R) / 2.0
+        for x in range(L - 1, R + 2):
+            t = abs(x - mid) / max(1.0, mid - (L - 1))
+            y = top + int(round(t * t * 3))
+            dark.append((x, y))
+            dark.append((x, y + 1))
+        lite += [(L, top + 3), (R, top + 3)]
         W, H = sprites.GRID_W, sprites.GRID_H
         dark = [(x, y) for (x, y) in dark if 0 <= x < W and 0 <= y < H]
         lite = [(x, y) for (x, y) in lite if 0 <= x < W and 0 <= y < H]
