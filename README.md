@@ -176,6 +176,30 @@ message telling you exactly which line to fix.
 
 **Full guide: [ANIMATIONS.md](ANIMATIONS.md)**
 
+## Support SondeR cat 💛
+
+SondeR cat is free and always will be. If it brightens your desktop and you'd
+like to help it grow, you can chip in:
+
+- ❤️ **[GitHub Sponsors](https://github.com/sponsors/Verisonder)**
+- ☕ Or use the **Sponsor** button at the top of the repo
+
+Every bit is appreciated and goes straight into building more cat. 🐾
+
+## Using this project / credit 📜
+
+SondeR cat is open source under **Apache-2.0**, and it's the original work of
+**Verisonder**. You're very welcome to use it, learn from it, and build on it —
+with three simple, legally-binding conditions (see `LICENSE` and `NOTICE`):
+
+- ✅ **Keep the credit** — leave the copyright and `NOTICE` in place
+- 🚫 **Don't claim it as your own** — don't pass SondeR cat off as something you
+  created; if you build on it, say it's based on SondeR cat by Verisonder
+- 🚫 **Don't imply endorsement** — the *SondeR cat* name and the cat characters
+  (Lilly, JJ, Mimi) are the author's; name them only to credit the origin
+
+Want to do something beyond that? Just ask first. 🐾
+
 ## License
 
-[MIT](LICENSE) — do whatever you like, no warranty.
+Apache License 2.0 — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Free to use with attribution; you may not claim it as your own or imply the author's endorsement.
