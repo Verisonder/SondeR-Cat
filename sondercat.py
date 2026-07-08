@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.0.0"
-APP_BUILD = "0709x"
+APP_BUILD = "0709y"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -3888,17 +3888,20 @@ class CatWindow(QWidget):
         dome, brim, camo = [], [], []
         cx = (L + R) / 2.0
         half = (R - L) / 2.0
-        # dome: 3 rows curving over the crown (rows crown_y-1 .. crown_y+1),
-        # narrowing toward the top for a rounded helmet silhouette
-        for row_i, dy in enumerate((crown_y - 1, crown_y, crown_y + 1)):
-            # curvature: top row inset most, lower rows wider
-            inset = (2 - row_i)
-            for x in range(int(L + inset), int(R - inset) + 1):
+        # a little bigger: widen the whole helmet by 1 cell each side...
+        Lw = max(0, L - 1)
+        Rw = min(sprites.GRID_W - 1, R + 1)
+        # ...and give it one extra row up top so it stands taller. 4 rows
+        # now (crown_y-2 .. crown_y+1), curving in toward the rounded top.
+        rows = (crown_y - 2, crown_y - 1, crown_y, crown_y + 1)
+        insets = (2, 1, 0, 0)          # top row inset most, lower rows full
+        for dy, inset in zip(rows, insets):
+            for x in range(int(Lw + inset), int(Rw - inset) + 1):
                 if 0 <= x < sprites.GRID_W and 0 <= dy < H:
                     dome.append((x, dy))
-        # brim: one row below the dome, full head width, slight forward jut
+        # brim: one row below the dome, full (widened) head width
         by = crown_y + 2
-        for x in range(L, R + 1):
+        for x in range(Lw, Rw + 1):
             if 0 <= x < sprites.GRID_W and 0 <= by < H:
                 brim.append((x, by))
         # camo: deterministic sparse patches on the dome
