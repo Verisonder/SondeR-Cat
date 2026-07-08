@@ -626,6 +626,9 @@ class _InputBridge(QObject):
     poked = Signal()
 
 
+_SMTC_CMD = "QQBkAGQALQBUAHkAcABlACAALQBBAHMAcwBlAG0AYgBsAHkATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AUgB1AG4AdABpAG0AZQAuAFcAaQBuAGQAbwB3AHMAUgB1AG4AdABpAG0AZQAKACQAZwA9ACgAWwBTAHkAcwB0AGUAbQAuAFcAaQBuAGQAbwB3AHMAUgB1AG4AdABpAG0AZQBTAHkAcwB0AGUAbQBFAHgAdABlAG4AcwBpAG8AbgBzAF0ALgBHAGUAdABNAGUAdABoAG8AZABzACgAKQB8AFcAaABlAHIAZQAtAE8AYgBqAGUAYwB0ACAAewAkAF8ALgBOAGEAbQBlACAALQBlAHEAIAAnAEEAcwBUAGEAcwBrACcAIAAtAGEAbgBkACAAJABfAC4ARwBlAHQAUABhAHIAYQBtAGUAdABlAHIAcwAoACkALgBDAG8AdQBuAHQAIAAtAGUAcQAgADEAIAAtAGEAbgBkACAAJABfAC4ARwBlAHQAUABhAHIAYQBtAGUAdABlAHIAcwAoACkAWwAwAF0ALgBQAGEAcgBhAG0AZQB0AGUAcgBUAHkAcABlAC4ATgBhAG0AZQAgAC0AZQBxACAAJwBJAEEAcwB5AG4AYwBPAHAAZQByAGEAdABpAG8AbgBgADEAJwB9ACkAWwAwAF0ACgBmAHUAbgBjAHQAaQBvAG4AIABBAHcAYQBpAHQAKAAkAHQALAAkAHIAdAApAHsAJABhAD0AJABnAC4ATQBhAGsAZQBHAGUAbgBlAHIAaQBjAE0AZQB0AGgAbwBkACgAJAByAHQAKQA7ACQAbgA9ACQAYQAuAEkAbgB2AG8AawBlACgAJABuAHUAbABsACwAQAAoACQAdAApACkAOwAkAG4ALgBXAGEAaQB0ACgALQAxACkAfABPAHUAdAAtAE4AdQBsAGwAOwAkAG4ALgBSAGUAcwB1AGwAdAB9AAoAWwBXAGkAbgBkAG8AdwBzAC4ATQBlAGQAaQBhAC4AQwBvAG4AdAByAG8AbAAuAEcAbABvAGIAYQBsAFMAeQBzAHQAZQBtAE0AZQBkAGkAYQBUAHIAYQBuAHMAcABvAHIAdABDAG8AbgB0AHIAbwBsAHMAUwBlAHMAcwBpAG8AbgBNAGEAbgBhAGcAZQByACwAVwBpAG4AZABvAHcAcwAuAE0AZQBkAGkAYQAuAEMAbwBuAHQAcgBvAGwALABDAG8AbgB0AGUAbgB0AFQAeQBwAGUAPQBXAGkAbgBkAG8AdwBzAFIAdQBuAHQAaQBtAGUAXQB8AE8AdQB0AC0ATgB1AGwAbAAKACQAbQA9AEEAdwBhAGkAdAAgACgAWwBXAGkAbgBkAG8AdwBzAC4ATQBlAGQAaQBhAC4AQwBvAG4AdAByAG8AbAAuAEcAbABvAGIAYQBsAFMAeQBzAHQAZQBtAE0AZQBkAGkAYQBUAHIAYQBuAHMAcABvAHIAdABDAG8AbgB0AHIAbwBsAHMAUwBlAHMAcwBpAG8AbgBNAGEAbgBhAGcAZQByAF0AOgA6AFIAZQBxAHUAZQBzAHQAQQBzAHkAbgBjACgAKQApACAAKABbAFcAaQBuAGQAbwB3AHMALgBNAGUAZABpAGEALgBDAG8AbgB0AHIAbwBsAC4ARwBsAG8AYgBhAGwAUwB5AHMAdABlAG0ATQBlAGQAaQBhAFQAcgBhAG4AcwBwAG8AcgB0AEMAbwBuAHQAcgBvAGwAcwBTAGUAcwBzAGkAbwBuAE0AYQBuAGEAZwBlAHIAXQApAAoAJABzAD0AJABtAC4ARwBlAHQAQwB1AHIAcgBlAG4AdABTAGUAcwBzAGkAbwBuACgAKQAKAGkAZgAoACQAcwApAHsAJABpAD0AJABzAC4ARwBlAHQAUABsAGEAeQBiAGEAYwBrAEkAbgBmAG8AKAApADsAVwByAGkAdABlAC0ATwB1AHQAcAB1AHQAIAAoACIAewAwAH0AfAB7ADEAfQAiACAALQBmACAAJABpAC4AUABsAGEAeQBiAGEAYwBrAFMAdABhAHQAdQBzACwAJABpAC4AUABsAGEAeQBiAGEAYwBrAFQAeQBwAGUAKQB9AGUAbABzAGUAewBXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACIAbgBvAG4AZQAiAH0A"  # base64(utf-16le) PowerShell: media session status|type
+
+
 class _AudioMeter:
     """System output level 0..1 via WASAPI IAudioMeterInformation."""
     def __init__(self):
@@ -725,6 +728,10 @@ class Manager(QObject):
         self._call_bridge = _CallBridge()
         QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
         self._audio = _AudioMeter()
+        self._smtc_state = "unknown"
+        if platform.system() == "Windows":
+            import threading
+            threading.Thread(target=self._smtc_loop, daemon=True).start()
         self._music_hist = deque(maxlen=24)
         self.music_on = False
         self._music_timer = QTimer()
@@ -1235,6 +1242,37 @@ class Manager(QObject):
         self.say_primary("I only hunt wiggles now!" if g["laser_only"]
                          else "I'll chase any fast cursor!", 2.5)
 
+    @staticmethod
+    def _parse_smtc(out):
+        out = (out or "").strip().splitlines()
+        out = out[-1].strip() if out else ""
+        if not out or out == "none":
+            return "none"
+        status, _, ptype = out.partition("|")
+        if status != "Playing":
+            return "not_playing"
+        if ptype == "Music":
+            return "playing_music"
+        if ptype == "Video":
+            return "playing_video"
+        return "unknown"                # no type reported: benefit of doubt
+
+    def _smtc_loop(self):
+        import subprocess
+        while True:
+            time.sleep(4)
+            if not self.cfg["global"].get("dance_music", True):
+                continue
+            try:
+                r = subprocess.run(
+                    ["powershell", "-NoProfile", "-EncodedCommand",
+                     _SMTC_CMD],
+                    capture_output=True, text=True, timeout=8,
+                    creationflags=0x08000000)      # CREATE_NO_WINDOW
+                self._smtc_state = self._parse_smtc(r.stdout)
+            except Exception:
+                self._smtc_state = "unknown"
+
     def _poll_music(self):
         if not self.cfg["global"].get("dance_music", True):
             self.music_on = False
@@ -1244,10 +1282,13 @@ class Manager(QObject):
         if len(h) < 12:
             return
         loud = sum(1 for v in h if v > 0.015)
-        if not self.music_on and loud >= int(len(h) * 0.7):
-            self.music_on = True
-        elif self.music_on and loud <= int(len(h) * 0.15):
-            self.music_on = False
+        meter_on = getattr(self, "_meter_on", False)
+        if not meter_on and loud >= int(len(h) * 0.7):
+            meter_on = True
+        elif meter_on and loud <= int(len(h) * 0.15):
+            meter_on = False
+        self._meter_on = meter_on
+        self.music_on = meter_on and self._smtc_state != "playing_video"
 
     def music_doctor(self):
         t_end = time.time() + 5
@@ -1259,9 +1300,9 @@ class Manager(QObject):
             pk = self._audio.peak()
             c = self.primary()
             self.say_primary(
-                f"peak {pk:.3f} | music {'ON' if self.music_on else 'off'}"
-                f" | state {c.state} | dance_cfg "
-                f"{'on' if self.cfg['global'].get('dance_music', True) else 'OFF'}",
+                f"peak {pk:.3f} | media {self._smtc_state}"
+                f" | music {'ON' if self.music_on else 'off'}"
+                f" | state {c.state}",
                 0.6)
             QTimer.singleShot(250, step)
         step()
@@ -2756,11 +2797,13 @@ class CatWindow(QWidget):
                 for x, c in enumerate(g[y]) if c != "."]
         L, R = (min(cols), max(cols)) if cols else (4, 21)
         dark, lite = [], []
-        for cy in range(top + 5, top + 10):        # cups hug the ear bases
-            for cx in (L - 3, L - 2, L - 1, R + 1, R + 2, R + 3):
+        # near cup: full; far cup: slim sliver peeking from behind the head
+        for cy in range(top + 5, top + 10):
+            for cx in (R + 1, R + 2, R + 3):
                 dark.append((cx, cy))
-        lite += [(L - 2, top + 6), (R + 2, top + 6),
-                 (L - 2, top + 7), (R + 2, top + 7)]
+        for cy in range(top + 6, top + 10):
+            dark.append((L - 1, cy))
+        lite += [(R + 2, top + 6), (R + 2, top + 7)]
         mid = (L + R) / 2.0                        # band arcs between them
         for x in range(L - 1, R + 2):
             t = abs(x - mid) / max(1.0, mid - (L - 1))
