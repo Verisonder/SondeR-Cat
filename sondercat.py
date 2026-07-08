@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710t"
+APP_BUILD = "0710u"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -170,6 +170,9 @@ def _detect_channel():
 APP_CHANNEL = _detect_channel()
 IS_STORE_BUILD = (APP_CHANNEL == "store")
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
+# Ko-fi donation page (0% fees on donations). Replace "verisonder" with your
+# Ko-fi username once your page is live: https://ko-fi.com/<username>
+KOFI_URL = "https://ko-fi.com/verisonder"
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
 TOP_MARGIN = 68
@@ -1536,6 +1539,26 @@ class Manager(QObject):
     def sprites_path(self):
         return os.path.abspath(sprites.__file__)
 
+    def open_donate(self):
+        """Open the Ko-fi tip page in the browser — SondeR cat is free; this
+        is a fully optional way for happy users to chip in."""
+        try:
+            import webbrowser
+            if not webbrowser.open(KOFI_URL):
+                raise RuntimeError("no browser")
+            self.say_primary("thank you!! every tip helps 🐾💛", 4)
+        except Exception:
+            try:
+                if platform.system() == "Windows":
+                    os.startfile(KOFI_URL)
+                elif platform.system() == "Darwin":
+                    subprocess.Popen(["open", KOFI_URL])
+                else:
+                    subprocess.Popen(["xdg-open", KOFI_URL])
+                self.say_primary("thank you!! every tip helps 🐾💛", 4)
+            except Exception:
+                self.say_primary(f"support me here: {KOFI_URL}", 8)
+
     def open_sprites(self):
         path = self.sprites_path()
         try:
@@ -2883,6 +2906,10 @@ class CatWindow(QWidget):
             gtimer)
         custom.triggered.connect(lambda _=False: mgr.pick_guard_timer())
         gtimer.addAction(custom)
+        menu.addSeparator()
+        donate = QAction("Support the cat 💛 (Ko-fi)", menu)
+        donate.triggered.connect(lambda _=False: mgr.open_donate())
+        menu.addAction(donate)
         quit_act = QAction("Quit", menu)
         quit_act.triggered.connect(QApplication.instance().quit)
         menu.addAction(quit_act)

@@ -154,8 +154,9 @@ message telling you exactly which line to fix.
 SondeR cat is free and always will be. If it brightens your desktop and you'd
 like to help it grow, you can chip in:
 
+- ☕ **[Tip on Ko-fi](https://ko-fi.com/verisonder)** (0% fees) — also right in the app: menu → **Support the cat 💛**
 - ❤️ **[GitHub Sponsors](https://github.com/sponsors/Verisonder)**
-- ☕ Or use the **Sponsor** button at the top of the repo
+- Or use the **Sponsor** button at the top of the repo
 
 Every bit is appreciated and goes straight into building more cat. 🐾
 
