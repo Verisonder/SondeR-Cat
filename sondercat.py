@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.4.0"
-APP_BUILD = "0709m"
+APP_BUILD = "0709n"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -818,11 +818,12 @@ class GuardBeam(QWidget):
         except Exception:
             ox, oy = w // 2, h // 2
         t = self._phase
-        # sweep like a held flashlight: pan around the outward/down direction
-        base = 0.5              # ~down-and-slightly-right
-        ang = base + math.sin(t * 0.9) * 0.85
+        # sweep like a held flashlight: aim outward-and-down to the right,
+        # panning a moderate arc around that direction
+        base = 0.62             # down-and-right (radians from +x axis)
+        ang = base + math.sin(t * 0.8) * 0.7
         length = math.hypot(w, h)
-        spread = 0.13
+        spread = 0.11
         a1, a2 = ang - spread, ang + spread
         p1 = QPointF(ox + math.cos(a1) * length, oy + math.sin(a1) * length)
         p2 = QPointF(ox + math.cos(a2) * length, oy + math.sin(a2) * length)
@@ -3009,7 +3010,8 @@ class CatWindow(QWidget):
                 self.last_scroll_say = now
                 self.say("paper!!", 1.2)
             self.state = SCROLLPLAY
-        elif typing_now and not want_peek:
+        elif typing_now and not want_peek \
+                and not self.mgr.cfg["global"].get("guard_mode", False):
             self.state = KNEAD
         elif inputs.scrolling() and not want_peek:
             if self.state != SCROLLPLAY and now - self.last_scroll_say > 10:
@@ -3244,16 +3246,26 @@ class CatWindow(QWidget):
             if head.contains(ev.position().toPoint()):
                 self.pet_accum += 1
                 now = time.time()
+                guarding = self.mgr.cfg["global"].get("guard_mode", False)
                 if self.pet_accum > 14 and now - self.last_pet_heart > 0.45:
                     self.last_pet_heart = now
                     self.pet_accum = 0
-                    r = self.cat_rect()
-                    self.hearts.append({
-                        "x": r.left() + random.randint(20, r.width() - 20),
-                        "y": r.top() + 8, "vy": 1.1, "life": 1.6,
-                        "seed": random.random() * 6})
-                    if random.random() < 0.3:
-                        self.say(random.choice(["purrr…", "prrrp", "♥"]), 1.2)
+                    if guarding:
+                        # no petting on duty — it gets MAD
+                        self.jump_until = max(self.jump_until, now + 0.5)
+                        if random.random() < 0.6:
+                            self.say(random.choice([
+                                "don't touch me! 😾", "HANDS OFF.",
+                                "I'm on duty!", "grrr… 😾", "hsss!"]), 1.4)
+                    else:
+                        r = self.cat_rect()
+                        self.hearts.append({
+                            "x": r.left() + random.randint(20, r.width() - 20),
+                            "y": r.top() + 8, "vy": 1.1, "life": 1.6,
+                            "seed": random.random() * 6})
+                        if random.random() < 0.3:
+                            self.say(random.choice(
+                                ["purrr…", "prrrp", "♥"]), 1.2)
                     if self.state == SLEEP \
                             and not self.gcfg.get("force_sleep") \
                             and not self.perch_asleep:
@@ -3735,39 +3747,41 @@ class CatWindow(QWidget):
         return cached
 
     def _draw_flashlight(self, p, name, s):
-        # a small handheld flashlight at the right front paw, pointing
-        # outward/down (there's canvas room on the right side)
+        # a small handheld flashlight held out at the right front paw,
+        # pointing outward/down; the red beam emerges from its lens
         g = sprites.FRAMES.get(name)
         if not g:
+            self._torch_lens = (sprites.GRID_W - 3, int(sprites.GRID_H * 0.8))
             return
         H, W = len(g), sprites.GRID_W
-        low_rows = [y for y in range(int(H * 0.66), H)
+        low_rows = [y for y in range(int(H * 0.62), H)
                     if any(c != "." for c in g[y])]
         if not low_rows:
+            self._torch_lens = (W - 3, int(H * 0.8))
             return
-        fy = low_rows[0] + 1
+        fy = low_rows[0]
         xs = [x for x, c in enumerate(g[fy]) if c != "."]
-        rpaw = max(xs)                        # right paw edge
-        # keep the whole torch (paw..lens = 4 cells right) on the canvas
-        rpaw = min(rpaw, W - 5)
-        body = QColor("#2c2f36")
-        ring = QColor("#4a4f58")
-        lens = QColor("#fff2b0")
-        glow = QColor(255, 236, 150)
-        cells = [(rpaw, fy), (rpaw + 1, fy + 1), (rpaw + 2, fy + 2)]
-        for (cx, cy) in cells:
+        rpaw = min(max(xs) if xs else W - 6, W - 6)
+        body = QColor("#33373f")
+        ring = QColor("#5a606b")
+        head = QColor("#c8ccd2")             # metal head
+        lens = QColor("#fff4be")
+        # barrel: 3 cells angling down-right from the paw
+        barrel = [(rpaw, fy), (rpaw + 1, fy + 1), (rpaw + 2, fy + 1)]
+        for (cx, cy) in barrel:
             if 0 <= cx < W and 0 <= cy < H:
                 p.fillRect(cx * s, cy * s, s, s, body)
-        tip = (rpaw + 3, min(fy + 3, H - 1))
-        p.fillRect(tip[0] * s, tip[1] * s, s, s, ring)
-        lx, ly = rpaw + 3, min(fy + 2, H - 1)
-        glow.setAlpha(120)
-        p.setPen(Qt.NoPen)
-        p.setBrush(glow)
-        p.drawEllipse(QPointF(lx * s + s / 2, ly * s + s / 2),
-                      s * 1.6, s * 1.6)
-        p.fillRect(lx * s, ly * s, s, s, lens)   # solid lens on top of glow
-        self._torch_lens = (lx, ly)
+        # head + lens at the end
+        hx, hy = rpaw + 3, min(fy + 2, H - 1)
+        p.fillRect(hx * s, hy * s, s, s, head)
+        lx, ly = rpaw + 3, min(fy + 1, H - 1)
+        p.fillRect(lx * s, ly * s, s, s, ring)
+        # bright lens + warm glow halo at the emitter
+        glow = QColor(255, 120, 90); glow.setAlpha(130)
+        p.setPen(Qt.NoPen); p.setBrush(glow)
+        p.drawEllipse(QPointF((lx + 1) * s, (ly + 1) * s), s * 1.4, s * 1.4)
+        p.fillRect((lx + 1) * s, ly * s, s, s, lens)
+        self._torch_lens = (lx + 1, ly)      # beam starts at the lens
 
     def _draw_helmet(self, p, name, s):
         dome, rim, camo = self._helmet_cells(name)
