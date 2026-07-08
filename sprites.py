@@ -1,5 +1,5 @@
 """
-SondeR cat sprites v4 — rebuilt from zero on Comnyang's real proportions.
+SondeR cat sprites.
 
 What the reference actually shows (and v1-v3 got wrong):
   * the sitting cat is TALLER than wide — an upright cat, not a blob
