@@ -19,6 +19,7 @@ Run:  python sondercat.py       Quit: right-click a cat -> Quit
 """
 
 import json
+import re
 import math
 import os
 import platform
@@ -626,7 +627,7 @@ class _InputBridge(QObject):
     poked = Signal()
 
 
-_SMTC_CMD = "QQBkAGQALQBUAHkAcABlACAALQBBAHMAcwBlAG0AYgBsAHkATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AUgB1AG4AdABpAG0AZQAuAFcAaQBuAGQAbwB3AHMAUgB1AG4AdABpAG0AZQAKACQAZwA9ACgAWwBTAHkAcwB0AGUAbQAuAFcAaQBuAGQAbwB3AHMAUgB1AG4AdABpAG0AZQBTAHkAcwB0AGUAbQBFAHgAdABlAG4AcwBpAG8AbgBzAF0ALgBHAGUAdABNAGUAdABoAG8AZABzACgAKQB8AFcAaABlAHIAZQAtAE8AYgBqAGUAYwB0ACAAewAkAF8ALgBOAGEAbQBlACAALQBlAHEAIAAnAEEAcwBUAGEAcwBrACcAIAAtAGEAbgBkACAAJABfAC4ARwBlAHQAUABhAHIAYQBtAGUAdABlAHIAcwAoACkALgBDAG8AdQBuAHQAIAAtAGUAcQAgADEAIAAtAGEAbgBkACAAJABfAC4ARwBlAHQAUABhAHIAYQBtAGUAdABlAHIAcwAoACkAWwAwAF0ALgBQAGEAcgBhAG0AZQB0AGUAcgBUAHkAcABlAC4ATgBhAG0AZQAgAC0AZQBxACAAJwBJAEEAcwB5AG4AYwBPAHAAZQByAGEAdABpAG8AbgBgADEAJwB9ACkAWwAwAF0ACgBmAHUAbgBjAHQAaQBvAG4AIABBAHcAYQBpAHQAKAAkAHQALAAkAHIAdAApAHsAJABhAD0AJABnAC4ATQBhAGsAZQBHAGUAbgBlAHIAaQBjAE0AZQB0AGgAbwBkACgAJAByAHQAKQA7ACQAbgA9ACQAYQAuAEkAbgB2AG8AawBlACgAJABuAHUAbABsACwAQAAoACQAdAApACkAOwAkAG4ALgBXAGEAaQB0ACgALQAxACkAfABPAHUAdAAtAE4AdQBsAGwAOwAkAG4ALgBSAGUAcwB1AGwAdAB9AAoAWwBXAGkAbgBkAG8AdwBzAC4ATQBlAGQAaQBhAC4AQwBvAG4AdAByAG8AbAAuAEcAbABvAGIAYQBsAFMAeQBzAHQAZQBtAE0AZQBkAGkAYQBUAHIAYQBuAHMAcABvAHIAdABDAG8AbgB0AHIAbwBsAHMAUwBlAHMAcwBpAG8AbgBNAGEAbgBhAGcAZQByACwAVwBpAG4AZABvAHcAcwAuAE0AZQBkAGkAYQAuAEMAbwBuAHQAcgBvAGwALABDAG8AbgB0AGUAbgB0AFQAeQBwAGUAPQBXAGkAbgBkAG8AdwBzAFIAdQBuAHQAaQBtAGUAXQB8AE8AdQB0AC0ATgB1AGwAbAAKACQAbQA9AEEAdwBhAGkAdAAgACgAWwBXAGkAbgBkAG8AdwBzAC4ATQBlAGQAaQBhAC4AQwBvAG4AdAByAG8AbAAuAEcAbABvAGIAYQBsAFMAeQBzAHQAZQBtAE0AZQBkAGkAYQBUAHIAYQBuAHMAcABvAHIAdABDAG8AbgB0AHIAbwBsAHMAUwBlAHMAcwBpAG8AbgBNAGEAbgBhAGcAZQByAF0AOgA6AFIAZQBxAHUAZQBzAHQAQQBzAHkAbgBjACgAKQApACAAKABbAFcAaQBuAGQAbwB3AHMALgBNAGUAZABpAGEALgBDAG8AbgB0AHIAbwBsAC4ARwBsAG8AYgBhAGwAUwB5AHMAdABlAG0ATQBlAGQAaQBhAFQAcgBhAG4AcwBwAG8AcgB0AEMAbwBuAHQAcgBvAGwAcwBTAGUAcwBzAGkAbwBuAE0AYQBuAGEAZwBlAHIAXQApAAoAJABzAD0AJABtAC4ARwBlAHQAQwB1AHIAcgBlAG4AdABTAGUAcwBzAGkAbwBuACgAKQAKAGkAZgAoACQAcwApAHsACgAkAGkAPQAkAHMALgBHAGUAdABQAGwAYQB5AGIAYQBjAGsASQBuAGYAbwAoACkACgAkAHAAdAA9ACIAIgAKAHQAcgB5AHsAJABwAD0AQQB3AGEAaQB0ACAAKAAkAHMALgBUAHIAeQBHAGUAdABNAGUAZABpAGEAUAByAG8AcABlAHIAdABpAGUAcwBBAHMAeQBuAGMAKAApACkAIAAoAFsAVwBpAG4AZABvAHcAcwAuAE0AZQBkAGkAYQAuAEMAbwBuAHQAcgBvAGwALgBHAGwAbwBiAGEAbABTAHkAcwB0AGUAbQBNAGUAZABpAGEAVAByAGEAbgBzAHAAbwByAHQAQwBvAG4AdAByAG8AbABzAFMAZQBzAHMAaQBvAG4ATQBlAGQAaQBhAFAAcgBvAHAAZQByAHQAaQBlAHMAXQApADsAJABwAHQAPQAkAHAALgBQAGwAYQB5AGIAYQBjAGsAVAB5AHAAZQB9AGMAYQB0AGMAaAB7AH0ACgBXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACgAIgB7ADAAfQB8AHsAMQB9AHwAewAyAH0AfAB7ADMAfQAiACAALQBmACAAJABpAC4AUABsAGEAeQBiAGEAYwBrAFMAdABhAHQAdQBzACwAJABpAC4AUABsAGEAeQBiAGEAYwBrAFQAeQBwAGUALAAkAHAAdAAsACQAcwAuAFMAbwB1AHIAYwBlAEEAcABwAFUAcwBlAHIATQBvAGQAZQBsAEkAZAApAAoAfQBlAGwAcwBlAHsAVwByAGkAdABlAC0ATwB1AHQAcAB1AHQAIAAiAG4AbwBuAGUAIgB9AA=="  # base64(utf-16le) PowerShell: media session status|type
+_SMTC_CMD = "QQBkAGQALQBUAHkAcABlACAALQBBAHMAcwBlAG0AYgBsAHkATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AUgB1AG4AdABpAG0AZQAuAFcAaQBuAGQAbwB3AHMAUgB1AG4AdABpAG0AZQAKACQAZwA9ACgAWwBTAHkAcwB0AGUAbQAuAFcAaQBuAGQAbwB3AHMAUgB1AG4AdABpAG0AZQBTAHkAcwB0AGUAbQBFAHgAdABlAG4AcwBpAG8AbgBzAF0ALgBHAGUAdABNAGUAdABoAG8AZABzACgAKQB8AFcAaABlAHIAZQAtAE8AYgBqAGUAYwB0ACAAewAkAF8ALgBOAGEAbQBlACAALQBlAHEAIAAnAEEAcwBUAGEAcwBrACcAIAAtAGEAbgBkACAAJABfAC4ARwBlAHQAUABhAHIAYQBtAGUAdABlAHIAcwAoACkALgBDAG8AdQBuAHQAIAAtAGUAcQAgADEAIAAtAGEAbgBkACAAJABfAC4ARwBlAHQAUABhAHIAYQBtAGUAdABlAHIAcwAoACkAWwAwAF0ALgBQAGEAcgBhAG0AZQB0AGUAcgBUAHkAcABlAC4ATgBhAG0AZQAgAC0AZQBxACAAJwBJAEEAcwB5AG4AYwBPAHAAZQByAGEAdABpAG8AbgBgADEAJwB9ACkAWwAwAF0ACgBmAHUAbgBjAHQAaQBvAG4AIABBAHcAYQBpAHQAKAAkAHQALAAkAHIAdAApAHsAJABhAD0AJABnAC4ATQBhAGsAZQBHAGUAbgBlAHIAaQBjAE0AZQB0AGgAbwBkACgAJAByAHQAKQA7ACQAbgA9ACQAYQAuAEkAbgB2AG8AawBlACgAJABuAHUAbABsACwAQAAoACQAdAApACkAOwAkAG4ALgBXAGEAaQB0ACgALQAxACkAfABPAHUAdAAtAE4AdQBsAGwAOwAkAG4ALgBSAGUAcwB1AGwAdAB9AAoAWwBXAGkAbgBkAG8AdwBzAC4ATQBlAGQAaQBhAC4AQwBvAG4AdAByAG8AbAAuAEcAbABvAGIAYQBsAFMAeQBzAHQAZQBtAE0AZQBkAGkAYQBUAHIAYQBuAHMAcABvAHIAdABDAG8AbgB0AHIAbwBsAHMAUwBlAHMAcwBpAG8AbgBNAGEAbgBhAGcAZQByACwAVwBpAG4AZABvAHcAcwAuAE0AZQBkAGkAYQAuAEMAbwBuAHQAcgBvAGwALABDAG8AbgB0AGUAbgB0AFQAeQBwAGUAPQBXAGkAbgBkAG8AdwBzAFIAdQBuAHQAaQBtAGUAXQB8AE8AdQB0AC0ATgB1AGwAbAAKACQAbQA9AEEAdwBhAGkAdAAgACgAWwBXAGkAbgBkAG8AdwBzAC4ATQBlAGQAaQBhAC4AQwBvAG4AdAByAG8AbAAuAEcAbABvAGIAYQBsAFMAeQBzAHQAZQBtAE0AZQBkAGkAYQBUAHIAYQBuAHMAcABvAHIAdABDAG8AbgB0AHIAbwBsAHMAUwBlAHMAcwBpAG8AbgBNAGEAbgBhAGcAZQByAF0AOgA6AFIAZQBxAHUAZQBzAHQAQQBzAHkAbgBjACgAKQApACAAKABbAFcAaQBuAGQAbwB3AHMALgBNAGUAZABpAGEALgBDAG8AbgB0AHIAbwBsAC4ARwBsAG8AYgBhAGwAUwB5AHMAdABlAG0ATQBlAGQAaQBhAFQAcgBhAG4AcwBwAG8AcgB0AEMAbwBuAHQAcgBvAGwAcwBTAGUAcwBzAGkAbwBuAE0AYQBuAGEAZwBlAHIAXQApAAoAJABzAD0AJABtAC4ARwBlAHQAQwB1AHIAcgBlAG4AdABTAGUAcwBzAGkAbwBuACgAKQAKAGkAZgAoACQAcwApAHsACgAkAGkAPQAkAHMALgBHAGUAdABQAGwAYQB5AGIAYQBjAGsASQBuAGYAbwAoACkACgAkAHAAdAA9ACIAIgA7ACQAdABpAD0AIgAiADsAJABhAHIAPQAiACIACgB0AHIAeQB7ACQAcAA9AEEAdwBhAGkAdAAgACgAJABzAC4AVAByAHkARwBlAHQATQBlAGQAaQBhAFAAcgBvAHAAZQByAHQAaQBlAHMAQQBzAHkAbgBjACgAKQApACAAKABbAFcAaQBuAGQAbwB3AHMALgBNAGUAZABpAGEALgBDAG8AbgB0AHIAbwBsAC4ARwBsAG8AYgBhAGwAUwB5AHMAdABlAG0ATQBlAGQAaQBhAFQAcgBhAG4AcwBwAG8AcgB0AEMAbwBuAHQAcgBvAGwAcwBTAGUAcwBzAGkAbwBuAE0AZQBkAGkAYQBQAHIAbwBwAGUAcgB0AGkAZQBzAF0AKQA7ACQAcAB0AD0AJABwAC4AUABsAGEAeQBiAGEAYwBrAFQAeQBwAGUAOwAkAHQAaQA9ACQAcAAuAFQAaQB0AGwAZQA7ACQAYQByAD0AJABwAC4AQQByAHQAaQBzAHQAfQBjAGEAdABjAGgAewB9AAoAVwByAGkAdABlAC0ATwB1AHQAcAB1AHQAIAAoACgAJABpAC4AUABsAGEAeQBiAGEAYwBrAFMAdABhAHQAdQBzACwAJABpAC4AUABsAGEAeQBiAGEAYwBrAFQAeQBwAGUALAAkAHAAdAAsACQAcwAuAFMAbwB1AHIAYwBlAEEAcABwAFUAcwBlAHIATQBvAGQAZQBsAEkAZAAsACQAdABpACwAJABhAHIAKQAgAC0AagBvAGkAbgAgAFsAYwBoAGEAcgBdADMAMQApAAoAfQBlAGwAcwBlAHsAVwByAGkAdABlAC0ATwB1AHQAcAB1AHQAIAAiAG4AbwBuAGUAIgB9AA=="  # base64(utf-16le) PowerShell: media session status|type
 
 
 class _AudioMeter:
@@ -729,6 +730,7 @@ class Manager(QObject):
         QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
         self._audio = _AudioMeter()
         self._smtc_state = "unknown"
+        self._smtc_title = ""
         if platform.system() == "Windows":
             import threading
             threading.Thread(target=self._smtc_loop, daemon=True).start()
@@ -1244,31 +1246,43 @@ class Manager(QObject):
 
     _BROWSERS = ("chrome", "msedge", "edge", "firefox", "opera", "brave",
                  "vivaldi", "librewolf", "chromium")
+    _MUSIC_HINTS = re.compile(
+        r"official (music )?video|official audio|music video|\blyrics?\b|"
+        r"visuali[sz]er|\bm/?v\b|full album|\bremix\b|\bcover\b|"
+        r"karaoke|instrumental|sped up|slowed|8d audio|nightcore|"
+        r"\bfeat\.|\bft\.|\bprod\.|\(audio\)|- topic$", re.I)
 
     @staticmethod
     def _parse_smtc(out):
+        """Returns (state, title). Fields separated by \x1f (or legacy |)."""
         out = (out or "").strip().splitlines()
         out = out[-1].strip() if out else ""
         if not out or out == "none":
-            return "none"
-        parts = out.split("|")
+            return "none", ""
+        sep = "\x1f" if "\x1f" in out else "|"
+        parts = out.split(sep)
         status = parts[0]
         if status != "Playing":
-            return "not_playing"
+            return "not_playing", ""
         itype = parts[1] if len(parts) > 1 else ""
         ptype = parts[2] if len(parts) > 2 else ""
         appid = (parts[3] if len(parts) > 3 else "").lower()
+        title = parts[4] if len(parts) > 4 else ""
+        artist = parts[5] if len(parts) > 5 else ""
+        # the title knows best: "Official Music Video", "Lyrics", feat.,
+        # and YouTube's auto-generated "Artist - Topic" channels are music
+        # even when the session type says Video or nothing
+        if Manager._MUSIC_HINTS.search(title) \
+                or Manager._MUSIC_HINTS.search(artist):
+            return "playing_music", title
         kind = ptype if ptype in ("Music", "Video") else itype
         if kind == "Music":
-            return "playing_music"
+            return "playing_music", title
         if kind == "Video":
-            return "playing_video"
-        # no type reported: browsers are watching-things machines, so an
-        # untyped browser session counts as video; other apps get the
-        # benefit of the doubt (games, legacy players)
+            return "playing_video", title
         if any(b in appid for b in Manager._BROWSERS):
-            return "playing_video"
-        return "unknown"
+            return "playing_video", title
+        return "unknown", title
 
     def _smtc_loop(self):
         import subprocess
@@ -1282,7 +1296,8 @@ class Manager(QObject):
                      _SMTC_CMD],
                     capture_output=True, text=True, timeout=8,
                     creationflags=0x08000000)      # CREATE_NO_WINDOW
-                self._smtc_state = self._parse_smtc(r.stdout)
+                self._smtc_state, self._smtc_title = \
+                    self._parse_smtc(r.stdout)
             except Exception:
                 self._smtc_state = "unknown"
 
@@ -1312,8 +1327,10 @@ class Manager(QObject):
                 return
             pk = self._audio.peak()
             c = self.primary()
+            ti = self._smtc_title[:18]
             self.say_primary(
                 f"peak {pk:.3f} | media {self._smtc_state}"
+                f"{' ~' + ti if ti else ''}"
                 f" | music {'ON' if self.music_on else 'off'}"
                 f" | state {c.state}",
                 0.6)
