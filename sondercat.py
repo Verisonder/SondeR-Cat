@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.1.0"
-APP_BUILD = "0710f"
+APP_BUILD = "0710g"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -484,6 +484,13 @@ class FullscreenDetector:
         cls = ctypes.create_unicode_buffer(64)
         u.GetClassNameW(hwnd, cls, 64)
         if cls.value in ("Progman", "WorkerW", "Shell_TrayWnd"):
+            return False
+        # never count our OWN windows (the cat, the full-screen guard-beam
+        # overlay, the ask box…) as "fullscreen video" — that would make the
+        # cat hide from itself
+        pid = wt.DWORD()
+        u.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value == os.getpid():
             return False
         rect = wt.RECT()
         u.GetWindowRect(hwnd, ctypes.byref(rect))
@@ -1193,6 +1200,7 @@ class Manager(QObject):
         self.meow = Meow()
 
         self.fullscreen_active = False
+        self._fs_streak = 0
         self.stretch_until = 0.0
         mins = self.cfg["global"]["stretch_minutes"]
         self.next_stretch = time.time() + mins * 60 if mins > 0 else None
@@ -1236,9 +1244,12 @@ class Manager(QObject):
         # keep the global input hooks alive
         self.inputs.ensure_alive()
 
-        # fullscreen (auto-peek)
-        self.fullscreen_active = (self.cfg["global"]["auto_peek"]
-                                  and self.fs_detect.check())
+        # fullscreen (auto-peek) — debounced so a single stray reading can't
+        # tuck the cat; needs the fullscreen state to hold across two checks
+        # (~1s) before hiding, but drops the moment it's no longer fullscreen
+        raw_fs = (self.cfg["global"]["auto_peek"] and self.fs_detect.check())
+        self._fs_streak = (self._fs_streak + 1) if raw_fs else 0
+        self.fullscreen_active = self._fs_streak >= 2
 
         # scroll accumulation decay
         self.inputs.scroll_accum = max(0.0, self.inputs.scroll_accum - 3.0)
