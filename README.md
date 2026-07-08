@@ -5,10 +5,6 @@ For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 
 ![SondeR cats](assets/preview.png)
 
-> SondeR cat is an unofficial, from-scratch implementation with its own code
-> and art, for people not on a Mac. If you use macOS, go support the
-> original!
-
 ## Features
 
 **Reacts to you**
