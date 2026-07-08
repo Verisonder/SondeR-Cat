@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.3.0"
-APP_BUILD = "0709j"
+APP_BUILD = "0709k"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -352,7 +352,8 @@ class InputWatcher:
     def _on_press(self, key):
         try:
             if key in self._down:
-                return                 # OS auto-repeat while held: count once
+                self.last_key = time.time()   # auto-repeat: still held, but
+                return                        # don't re-count (parity stays)
             self._down.add(key)
             if len(self._down) > 24:   # safety net for missed releases
                 self._down.clear()
@@ -402,7 +403,15 @@ class InputWatcher:
                 pass
 
     def key_held(self):
-        """True while a non-modifier key is physically pressed."""
+        """True while a non-modifier key is genuinely held down. Guarded by
+        recent key activity so a MISSED release (stale _down entry) can't
+        freeze the paw forever: a real hold produces OS auto-repeat, which
+        keeps last_key fresh."""
+        if time.time() - self.last_key > 1.2:
+            # no key events lately -> any _down entry is a phantom; drop them
+            if self._down:
+                self._down.clear()
+            return False
         try:
             for k in self._down:
                 if getattr(k, "name", None) not in self._MODS:
