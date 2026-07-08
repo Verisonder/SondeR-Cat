@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710l"
+APP_BUILD = "0710m"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -4204,16 +4204,25 @@ class CatWindow(QWidget):
             # NOTE: the base sprite is never mirrored (facing is shown by
             # the run tilt), so the headset must not mirror either
             dcells, lcells = self._headset_cells(name)
-            # white outline: every empty cell touching the dark shell (8-way)
+            # white outline ONLY on the small outer edge of each cup (the bit
+            # that sticks out into the background) — never the band or the
+            # inner side facing the head. A cell is an "outer" cell when the
+            # neighbour on its outward side (away from the head centre) is
+            # empty; the band's ends butt against the cups so they're skipped.
             solid = set(dcells) | set(lcells)
             W, H = sprites.GRID_W, sprites.GRID_H
+            xs = [x for x, _ in dcells]
+            midx = (min(xs) + max(xs)) / 2.0 if xs else W / 2.0
             halo = set()
             for (hx, hy) in dcells:
-                for dx in (-1, 0, 1):
-                    for dy in (-1, 0, 1):
-                        n = (hx + dx, hy + dy)
-                        if n not in solid and 0 <= n[0] < W and 0 <= n[1] < H:
-                            halo.add(n)
+                out = -1 if hx < midx else 1
+                if (hx + out, hy) in solid:
+                    continue                 # not an outer-edge cell
+                for nb in ((hx + out, hy),           # outer face
+                           (hx, hy - 1), (hx, hy + 1),        # top/bottom cap
+                           (hx + out, hy - 1), (hx + out, hy + 1)):  # corners
+                    if nb not in solid and 0 <= nb[0] < W and 0 <= nb[1] < H:
+                        halo.add(nb)
             for (hx, hy) in halo:
                 hp.fillRect(hx * s, hy * s, s, s, whc)
             for (hx, hy) in dcells:
