@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "7.4.0"
-APP_BUILD = "0709p"
+APP_VERSION = "7.8.0"
+APP_BUILD = "0709q"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1144,6 +1144,7 @@ class Manager(QObject):
         self._guard_timer.timeout.connect(self._tick_guard)
         self._guard_timer.start(33)
         self._guard_say = 0.0
+        self._guard_posted = False
         self._auto_timer = QTimer()
         self._auto_timer.timeout.connect(
             lambda: self.check_updates(manual=False))
@@ -1698,6 +1699,16 @@ class Manager(QObject):
 
     def _tick_guard(self):
         on = self.cfg["global"].get("guard_mode", False)
+        if on and not self._guard_posted:
+            # take up position: top-center of the screen, best view 🔭
+            self._guard_posted = True
+            for c in self.cats:
+                try:
+                    c.go_to_guard_post()
+                except Exception:
+                    pass
+        elif not on:
+            self._guard_posted = False
         if on and self._guard_beam is None:
             self._guard_beam = GuardBeam(self)
         if self._guard_beam is not None:
@@ -1717,11 +1728,20 @@ class Manager(QObject):
         save_config(self.cfg)
         CatWindow._HELMET_CACHE.clear()
         if g["guard_mode"]:
+            for c in self.cats:
+                c.groom_until = 0.0     # no grooming on duty — focus.
             self.say_primary("GUARD MODE ENGAGED. 🫡🔦", 3)
         else:
             self.say_primary("at ease. 😌", 3)
             if self._guard_beam is not None:
                 self._guard_beam.hide()
+            for c in self.cats:         # climb back down off the post
+                try:
+                    if c.glide_target is None and c.perch_hwnd is None \
+                            and not c.peeking:
+                        c._glide_to(c._ground_point(), speed=600)
+                except Exception:
+                    pass
 
     def toggle_hide_mode(self):
         g = self.cfg["global"]
@@ -2824,7 +2844,8 @@ class CatWindow(QWidget):
             self._wigv_times.popleft()
         # wiggle up-down near the bottom edge -> the cat goes to hide
         if self.gcfg.get("wiggle_hide", True) and not self.dragging \
-                and not self.peeking and now > self._hide_wig_cd:
+                and not self.peeking and now > self._hide_wig_cd \
+                and not self.gcfg.get("guard_mode", False):
             scr_c = QGuiApplication.screenAt(cur) \
                 or QGuiApplication.primaryScreen()
             if (cur.y() > scr_c.geometry().bottom() - 90
@@ -3072,10 +3093,13 @@ class CatWindow(QWidget):
             if now > self.next_blink:
                 self.blink_until = now + 0.18
                 self.next_blink = now + random.uniform(2.5, 7)
-            if now > self.next_groom and now > self.groom_until:
+            guarding = self.gcfg.get("guard_mode", False)
+            if (now > self.next_groom and now > self.groom_until
+                    and not guarding):        # no grooming on duty — focus.
                 self.groom_until = now + 2.6
                 self.next_groom = now + random.uniform(30, 80)
             if (self.gcfg.get("window_perch", True)
+                    and not guarding          # stay at the guard post
                     and now > self.next_perch_try
                     and self.perch_hwnd is None
                     and self.perch_pending is None
@@ -3238,6 +3262,14 @@ class CatWindow(QWidget):
             if self.state == DRAG:
                 self.state = IDLE
             self._sync_float()
+            if self.gcfg.get("guard_mode", False):
+                post = self._guard_post_point()
+                if (abs(self.x() - post.x()) > 40
+                        or abs(self.y() - post.y()) > 40):
+                    self.say(random.choice(
+                        ["back to my post. 😾", "I have a JOB to do.",
+                         "nice try. resuming patrol."]), 2.2)
+                    self._glide_to(post, speed=600)
             self.mgr.save_all()
 
     def mouseMoveEvent(self, ev):
@@ -3479,6 +3511,30 @@ class CatWindow(QWidget):
                  min(self.x(), scr.right() - self.width() - 8))
         gy = scr.bottom() - self._feet_offset()
         return QPoint(gx, gy)
+
+    def _guard_post_point(self):
+        """Top-center of the current screen — the watchtower spot.
+        Extra cats fan out left/right so they don't stack."""
+        scr = self.screen().availableGeometry()
+        i = self.index
+        shift = ((i + 1) // 2) * (self.width() + 24) * (1 if i % 2 else -1)
+        x = scr.center().x() - self.width() // 2 + shift
+        x = max(scr.left() + 8, min(x, scr.right() - self.width() - 8))
+        return QPoint(x, scr.top())
+
+    def go_to_guard_post(self):
+        """Guard mode ON: abandon whatever we're doing and take position
+        at the top-center of the screen for the best view."""
+        try:
+            if self.perch_hwnd is not None or self.perch_pending is not None:
+                self._end_perch(go_home=False)
+            if self.peeking:
+                self._unpeek(cancel=True)
+        except Exception:
+            pass
+        self.manual_peek = False
+        self.groom_until = 0.0
+        self._glide_to(self._guard_post_point(), speed=600)
 
     def _perch_covered(self, l, t, r, b):
         """Probe beside the cat: is our window's top edge still showing?"""
