@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.0.0"
-APP_BUILD = "0710b"
+APP_BUILD = "0710c"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -2354,6 +2354,7 @@ class CatWindow(QWidget):
         self.manual_peek = False
         self._peek_x = None
         self.peeking = False
+        self._peek_was_fs = False
         self._saved_pos = None
         self.grow = 1.0
         self._pre_grow = None
@@ -3139,6 +3140,9 @@ class CatWindow(QWidget):
             if not self.peeking:
                 self._peek()
             self.state = PEEK
+            if (mgr.fullscreen_active and not self.manual_peek
+                    and not self.gcfg.get("hide_mode", False)):
+                self._peek_was_fs = True
         elif mgr.ai_busy:
             self.state = THINK
         elif mgr.agent_working:
@@ -3200,7 +3204,14 @@ class CatWindow(QWidget):
                 self.try_perch()
 
         if self.state != PEEK and self.peeking:
+            was_fs = self._peek_was_fs
+            self._peek_was_fs = False
             self._unpeek(cancel=True)
+            if was_fs:                       # fullscreen ended — pop back up
+                self.state = IDLE
+                self.say(random.choice(
+                    ["mrrp! is it over? 👀", "back! 😺", "phew, that's better."
+                     ]), 1.8)
         if self.state != STRETCH and self.grow > 1.0:
             self._set_grow(False)
 
