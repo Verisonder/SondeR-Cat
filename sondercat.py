@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.1.0"
-APP_BUILD = "0710e"
+APP_BUILD = "0710f"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1013,6 +1013,7 @@ class AskBox(QWidget):
         self.activateWindow()
         self.setFocus(Qt.OtherFocusReason)
         self.edit.setFocus(Qt.OtherFocusReason)
+        self._force_foreground()
         # some window managers hand focus to a brand-new tool window late;
         # re-grab on the next event-loop turns so the first keystroke lands
         for delay in (0, 30, 90, 180):
@@ -1023,8 +1024,36 @@ class AskBox(QWidget):
             return
         self.raise_()
         self.activateWindow()
+        self._force_foreground()
         self.edit.setFocus(Qt.OtherFocusReason)
         self.edit.setCursorPosition(len(self.edit.text()))
+
+    def _force_foreground(self):
+        """On Windows, a background app can't just steal focus — the OS
+        foreground lock ignores SetForegroundWindow. Attaching our input
+        thread to the current foreground window's thread lets it through,
+        so the ask box truly grabs the keyboard and the first keystroke
+        lands in it (no click needed)."""
+        if platform.system() != "Windows":
+            return
+        try:
+            import ctypes
+            u = ctypes.windll.user32
+            k = ctypes.windll.kernel32
+            hwnd = int(self.winId())
+            fg = u.GetForegroundWindow()
+            cur = k.GetCurrentThreadId()
+            fg_thread = u.GetWindowThreadProcessId(fg, None) if fg else 0
+            attached = False
+            if fg_thread and fg_thread != cur:
+                attached = bool(u.AttachThreadInput(fg_thread, cur, True))
+            u.BringWindowToTop(hwnd)
+            u.SetForegroundWindow(hwnd)
+            u.SetFocus(hwnd)
+            if attached:
+                u.AttachThreadInput(fg_thread, cur, False)
+        except Exception:
+            pass
 
     def reposition(self):
         cat = self.cat
