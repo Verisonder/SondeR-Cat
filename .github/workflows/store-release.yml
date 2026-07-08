@@ -1,0 +1,88 @@
+# Builds the Microsoft Store (MSIX) package from the same source as the
+# GitHub build and — once you've published the app and added the Store API
+# secrets — submits it automatically. Until then it just builds the .msix and
+# uploads it as a workflow artifact; the submit step is skipped safely.
+#
+# Trigger: on a published GitHub Release (or manually from the Actions tab).
+#
+# Secrets required ONLY for the auto-submit step (add these after you reserve
+# the app in Partner Center; without them the build still runs, submit skips):
+#   STORE_IDENTITY_NAME   Package/Identity/Name    (e.g. 1234ABCD.SondeRcat)
+#   STORE_PUBLISHER       Package/Identity/Publisher (e.g. CN=xxxxxxxx-....)
+#   STORE_PUBLISHER_NAME  your publisher display name
+#   STORE_APP_ID          Partner Center Store/app (Big) ID
+#   AZURE_TENANT_ID       Azure AD tenant for the Store submission API
+#   AZURE_CLIENT_ID       Azure AD app (client) ID with Store API access
+#   AZURE_CLIENT_SECRET   its client secret
+name: Store release (MSIX)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build-msix:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add Windows SDK (makeappx) to PATH
+        shell: pwsh
+        run: |
+          $sdk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory |
+                 Where-Object { Test-Path (Join-Path $_.FullName "x64\makeappx.exe") } |
+                 Sort-Object Name -Descending | Select-Object -First 1
+          "$($sdk.FullName)\x64" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Build MSIX
+        shell: pwsh
+        env:
+          IDENTITY_NAME:  ${{ secrets.STORE_IDENTITY_NAME }}
+          PUBLISHER:      ${{ secrets.STORE_PUBLISHER }}
+          PUBLISHER_NAME: ${{ secrets.STORE_PUBLISHER_NAME }}
+        run: |
+          # fall back to harmless placeholders so the package still builds for
+          # testing before the Store account exists
+          $id   = if ($env:IDENTITY_NAME)  { $env:IDENTITY_NAME }  else { "0000Placeholder.SondeRcat" }
+          $pub  = if ($env:PUBLISHER)      { $env:PUBLISHER }      else { "CN=00000000-0000-0000-0000-000000000000" }
+          $name = if ($env:PUBLISHER_NAME) { $env:PUBLISHER_NAME } else { "SondeR cat" }
+          # MSVC is present on windows-latest; ensure cl.exe is on PATH
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+                  -latest -property installationPath
+          Import-Module (Join-Path $vs "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
+          Enter-VsDevShell -VsInstallPath $vs -DevCmdArguments "-arch=x64" -SkipAutomaticLocation
+          ./msix/build_msix.ps1 -IdentityName $id -Publisher $pub -PublisherName $name
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SondeRcat-msix
+          path: msix/out/SondeRcat.msix
+
+      - name: Submit to Microsoft Store
+        # only runs when the Store API secrets are configured
+        if: ${{ env.HAVE_SECRETS == 'true' }}
+        env:
+          HAVE_SECRETS: ${{ secrets.STORE_APP_ID != '' && secrets.AZURE_CLIENT_ID != '' }}
+          STORE_APP_ID:        ${{ secrets.STORE_APP_ID }}
+          AZURE_TENANT_ID:     ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID:     ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        shell: pwsh
+        run: |
+          # Uses the Microsoft Store submission API via the community
+          # StoreBroker module (Microsoft-maintained).
+          Install-Module -Name StoreBroker -Force -Scope CurrentUser -AcceptLicense
+          Import-Module StoreBroker
+          $sec = ConvertTo-SecureString $env:AZURE_CLIENT_SECRET -AsPlainText -Force
+          $cred = New-Object System.Management.Automation.PSCredential($env:AZURE_CLIENT_ID, $sec)
+          Set-StoreBrokerAuthentication -TenantId $env:AZURE_TENANT_ID -Credential $cred
+          # package the .msix into a StoreBroker submission and push it
+          New-SubmissionPackage -ConfigPath ./msix/sb-config.json `
+                                -AppxPath msix/out/SondeRcat.msix `
+                                -OutPath  msix/out -OutName submission
+          Update-ApplicationSubmission -AppId $env:STORE_APP_ID `
+                                -SubmissionDataPath msix/out/submission.json `
+                                -PackagePath msix/out/submission.zip `
+                                -ReplacePackages -AutoCommit -Force
