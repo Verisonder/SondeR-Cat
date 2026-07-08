@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.0.0"
-APP_BUILD = "0708h"
+APP_BUILD = "0708i"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -3242,14 +3242,42 @@ class CatWindow(QWidget):
             pal = (sprites.OVERHEAT_PALETTE if self.state == OVERHEAT
                    else self.palette())
             pc = QColor(pal["P"])
+            power = (self.index == 0
+                     and (self.mgr.ai_busy
+                          or (self.mgr._ask_box is not None
+                              and self.mgr._ask_box.isVisible())))
             ew_x, ew_y = sprites.EYE_W * s, sprites.EYE_H * s
             pw = 2 * s                     # pupil size (px)
             pp = QPainter(img)
+            if power:
+                # all-seeing mode: glowing blue eyes while the brain works
+                pc = QColor("#3ec8ff")
+                pulse = 0.38 + 0.26 * math.sin(now * 6.0)
+                halo = QColor("#56d9ff")
+                halo.setAlphaF(max(0.0, min(1.0, pulse)))
+                pp.setPen(Qt.NoPen)
+                pp.setBrush(halo)
+                grid = sprites.FRAMES.get(name)
+                tint = QColor("#b8ecff")
+                for (ex, ey) in eyes:
+                    cxp = ex * s + ew_x / 2.0
+                    cyp = ey * s + ew_y / 2.0
+                    pp.drawEllipse(QPointF(cxp, cyp),
+                                   ew_x * 1.15, ew_y * 1.15)
+                if grid:
+                    for gy, row in enumerate(grid):
+                        for gx, c in enumerate(row):
+                            if c == "E":
+                                pp.fillRect(gx * s, gy * s, s, s, tint)
             for (ex, ey) in eyes:
                 bx, by = ex * s, ey * s
                 px = max(bx, min(bx + offx + (ew_x - pw) // 2, bx + ew_x - pw))
                 py = max(by, min(by + offy + (ew_y - pw) // 2, by + ew_y - pw))
                 pp.fillRect(px, py, pw, pw, pc)
+                if power:                  # white spark in the pupil core
+                    pp.fillRect(px + pw // 4, py + pw // 4,
+                                max(1, pw // 3), max(1, pw // 3),
+                                QColor("#f2ffff"))
             pp.end()
 
         jy = 0
