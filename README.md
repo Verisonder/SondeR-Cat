@@ -5,6 +5,8 @@ For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 
 ![SondeR cats](assets/preview.png)
 
+> Inspired by the lovely [Comnyang](https://comnyang.com/en) on macOS — SondeR cat is its own separate, from-scratch project with entirely original code and art, built to bring that same cozy desktop-pet feeling to Windows and Linux. If you're on a Mac, go check out Comnyang too! 🐾
+
 ## Features
 
 **Reacts to you**
