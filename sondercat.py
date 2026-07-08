@@ -145,7 +145,7 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "3.2.0"
+APP_VERSION = "3.3.0"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -2742,6 +2742,39 @@ class CatWindow(QWidget):
             self._frame_cache[key] = img
         return img
 
+    _HEADSET_CACHE = {}
+
+    def _headset_cells(self, name):
+        cached = CatWindow._HEADSET_CACHE.get(name)
+        if cached is not None:
+            return cached
+        g = sprites.FRAMES.get(name, sprites.FRAMES["sit_a"])
+        rows = [y for y, row in enumerate(g)
+                if any(c != "." for c in row)]
+        top = rows[0] if rows else 1
+        cols = [x for y in range(top, min(top + 3, len(g)))
+                for x, c in enumerate(g[y]) if c != "."]
+        L, R = (min(cols), max(cols)) if cols else (4, 21)
+        dark, lite = [], []
+        for cy in range(top + 5, top + 10):        # cups hug the ear bases
+            for cx in (L - 3, L - 2, L - 1, R + 1, R + 2, R + 3):
+                dark.append((cx, cy))
+        lite += [(L - 2, top + 6), (R + 2, top + 6),
+                 (L - 2, top + 7), (R + 2, top + 7)]
+        mid = (L + R) / 2.0                        # band arcs between them
+        for x in range(L - 1, R + 2):
+            t = abs(x - mid) / max(1.0, mid - (L - 1))
+            y = top + int(round(t * t * 3))
+            dark.append((x, y))
+            dark.append((x, y + 1))
+        lite += [(L, top + 3), (R, top + 3)]
+        W, H = sprites.GRID_W, sprites.GRID_H
+        dark = [(x, y) for (x, y) in dark if 0 <= x < W and 0 <= y < H]
+        lite = [(x, y) for (x, y) in lite if 0 <= x < W and 0 <= y < H]
+        cached = (dark, lite)
+        CatWindow._HEADSET_CACHE[name] = cached
+        return cached
+
     def paintEvent(self, _ev):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, False)
@@ -2778,17 +2811,11 @@ class CatWindow(QWidget):
             if wearing:
                 dark = QColor("#2a2a33")
                 lite = QColor("#7d7d94")
-                arc = [(6, 4), (7, 3), (8, 3), (9, 2), (10, 2), (11, 2),
-                       (12, 2), (13, 2), (14, 2), (15, 2), (16, 3),
-                       (17, 3), (18, 4)]
-                band = arc + [(hx, hy + 1) for (hx, hy) in arc]
-                cups = [(cx, cy) for cy in range(6, 11)
-                        for cx in (1, 2, 3, 22, 23, 24)]
-                for (hx, hy) in band + cups:
+                dcells, lcells = self._headset_cells(name)
+                for (hx, hy) in dcells:
                     fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
                     pp.fillRect(fx * s, hy * s, s, s, dark)
-                for (hx, hy) in ((2, 7), (23, 7), (2, 8), (23, 8),
-                                 (6, 5), (18, 5)):
+                for (hx, hy) in lcells:
                     fx = (sprites.GRID_W - 1 - hx) if self.flip else hx
                     pp.fillRect(fx * s, hy * s, s, s, lite)
             for (ex, ey) in eyes:
