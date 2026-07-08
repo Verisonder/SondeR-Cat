@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.8.0"
-APP_BUILD = "0709v"
+APP_BUILD = "0709w"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -3103,7 +3103,8 @@ class CatWindow(QWidget):
                     "y": r.top() + 6, "vy": 1.3, "life": 1.2,
                     "seed": random.random() * 6})
         elif (inputs.scrolling() and not want_peek
-              and inputs.last_scroll >= inputs.last_key):
+              and inputs.last_scroll >= inputs.last_key
+              and not self.mgr.cfg["global"].get("guard_mode", False)):
             if self.state != SCROLLPLAY and now - self.last_scroll_say > 10:
                 self.last_scroll_say = now
                 self.say("paper!!", 1.2)
@@ -3111,7 +3112,8 @@ class CatWindow(QWidget):
         elif typing_now and not want_peek \
                 and not self.mgr.cfg["global"].get("guard_mode", False):
             self.state = KNEAD
-        elif inputs.scrolling() and not want_peek:
+        elif inputs.scrolling() and not want_peek \
+                and not self.mgr.cfg["global"].get("guard_mode", False):
             if self.state != SCROLLPLAY and now - self.last_scroll_say > 10:
                 self.last_scroll_say = now
                 self.say("paper!!", 1.2)
