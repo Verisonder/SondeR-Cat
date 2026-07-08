@@ -127,8 +127,8 @@ try:
                                QGuiApplication, QIcon, QPainter,
                                QPainterPath, QPixmap)
     from PySide6.QtWidgets import (QApplication, QColorDialog, QInputDialog,
-                                   QMenu, QMessageBox, QSystemTrayIcon,
-                                   QWidget)
+                                   QLineEdit, QMenu, QMessageBox,
+                                   QSystemTrayIcon, QVBoxLayout, QWidget)
 except Exception:
     _fatal("PySide6 (the GUI library) isn't installed correctly.",
            "Fix: run install.bat again (Windows) or ./install.sh (Linux).\n"
@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "3.4.0"
-APP_BUILD = "0708g"
+APP_VERSION = "6.0.0"
+APP_BUILD = "0708h"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -164,6 +164,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "force_sleep": False, "watch_sprites": False,
                    "window_perch": True, "auto_update": True,
                    "dance_music": True, "dance_on_sound": False,
+                   "gemini_key": "",
                    "hide_mode": False}
 
 (IDLE, KNEAD, SLEEP, CHASE, DRAG, STRETCH,
@@ -317,6 +318,7 @@ class InputWatcher:
         except Exception:
             pass
         self.pyn_count = 0
+        self.on_ask = None
         self._native = None
         if platform.system() == "Windows":
             try:
@@ -347,6 +349,15 @@ class InputWatcher:
             self._down.add(key)
             if len(self._down) > 24:   # safety net for missed releases
                 self._down.clear()
+        except Exception:
+            pass
+        try:
+            if getattr(key, "name", None) == "space" \
+                    and self.on_ask is not None \
+                    and any(getattr(k, "name", None) in
+                            ("ctrl", "ctrl_l", "ctrl_r")
+                            for k in self._down):
+                self.on_ask()
         except Exception:
             pass
         now = time.time()
@@ -732,6 +743,52 @@ class _AudioMeter:
             return 0.0
 
 
+class AskBox(QWidget):
+    """Frameless one-line prompt that floats above the cat (Ctrl+Space)."""
+
+    def __init__(self, mgr):
+        super().__init__(None, Qt.FramelessWindowHint
+                         | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.mgr = mgr
+        self.setStyleSheet(
+            "QWidget{background:#23232b;}"
+            "QLineEdit{background:#2e2e38;color:#f0eee8;"
+            "border:1px solid #55556a;border-radius:6px;"
+            "padding:7px 10px;font-size:13px;min-width:280px;}")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(8, 8, 8, 8)
+        self.edit = QLineEdit()
+        self.edit.returnPressed.connect(self._send)
+        lay.addWidget(self.edit)
+
+    def open_above(self, cat, name):
+        self.edit.setPlaceholderText(f"Ask {name}…  (Esc to close)")
+        self.edit.clear()
+        self.adjustSize()
+        scr = (cat.screen() or QGuiApplication.primaryScreen()).geometry()
+        x = cat.x() + cat.width() // 2 - self.width() // 2
+        y = cat.y() - self.height() - 6
+        x = max(scr.left() + 4, min(x, scr.right() - self.width() - 4))
+        y = max(scr.top() + 4, y)
+        self.move(x, y)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.edit.setFocus()
+
+    def _send(self):
+        t = self.edit.text().strip()
+        self.hide()
+        if t:
+            self.mgr.ask_ai(t)
+
+    def keyPressEvent(self, ev):
+        if ev.key() == Qt.Key_Escape:
+            self.hide()
+        else:
+            super().keyPressEvent(ev)
+
+
 class _CallBridge(QObject):
     """Marshal callables from worker threads onto the GUI thread."""
     call = Signal(object)
@@ -755,6 +812,9 @@ class Manager(QObject):
         QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
         self._audio = _AudioMeter()
         self.music_mode = "off"
+        self.ai_busy = False
+        self._ai_hist = []
+        self._ask_box = None
         self._music_hist = deque(maxlen=24)
         self.music_on = False
         self._music_timer = QTimer()
@@ -772,6 +832,7 @@ class Manager(QObject):
         self._bridge = _InputBridge()
         self._bridge.poked.connect(self._on_input_event)
         self.inputs = InputWatcher(on_event=self._bridge.poked.emit)
+        self.inputs.on_ask = lambda: self._call_bridge.call.emit(self.open_ask_box)
         self.fs_detect = FullscreenDetector()
         self.meow = Meow()
 
@@ -1401,6 +1462,133 @@ class Manager(QObject):
             return time.time() + int(text) * 60
         return None
 
+    def open_ask_box(self):
+        p = self.primary()
+        name = (p.ccfg.get("name") or "").strip()
+        if not name:
+            p.say("I need a name first! ✏️", 3)
+            p.rename_cat()
+            name = (p.ccfg.get("name") or "").strip()
+            if not name:
+                return
+        if not self.cfg["global"].get("gemini_key", "").strip():
+            p.say("add a Gemini API key first 🔑 (menu → AI)", 5)
+            return
+        if self._ask_box is None:
+            self._ask_box = AskBox(self)
+        self._ask_box.open_above(p, name)
+
+    def set_gemini_key(self):
+        cur = self.cfg["global"].get("gemini_key", "")
+        key, ok = QInputDialog.getText(
+            None, "Gemini API key",
+            "Paste your Google Gemini API key\n"
+            "(free at aistudio.google.com — stored only on this PC):",
+            QLineEdit.Password, cur)
+        if not ok:
+            return
+        self.cfg["global"]["gemini_key"] = key.strip()
+        save_config(self.cfg)
+        self.say_primary("brain installed! 🧠 Ctrl+Space to ask me"
+                         if key.strip() else "API key removed", 4)
+
+    @staticmethod
+    def _gemini_parse(data):
+        parts = data["candidates"][0]["content"]["parts"]
+        text = " ".join(p.get("text", "") for p in parts).strip()
+        if not text:
+            raise RuntimeError("empty answer")
+        return text
+
+    def _gemini_call(self, contents, persona):
+        import urllib.request
+        import urllib.error
+        key = self.cfg["global"].get("gemini_key", "").strip()
+        models = []
+        if getattr(self, "_gemini_model", None):
+            models.append(self._gemini_model)
+        for m in ("gemini-2.5-flash", "gemini-2.5-flash-lite",
+                  "gemini-2.0-flash", "gemini-1.5-flash"):
+            if m not in models:
+                models.append(m)
+        body = json.dumps({
+            "contents": contents,
+            "systemInstruction": {"parts": [{"text": persona}]},
+            "generationConfig": {"maxOutputTokens": 240,
+                                 "temperature": 0.8},
+        }).encode()
+        last = "no reply"
+        for m in models:
+            url = ("https://generativelanguage.googleapis.com/v1beta/"
+                   f"models/{m}:generateContent?key={key}")
+            req = urllib.request.Request(
+                url, data=body, headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    return self._gemini_parse(json.loads(r.read().decode()))
+            except urllib.error.HTTPError as e:
+                last = f"HTTP {e.code}"
+                if e.code in (400, 401, 403):
+                    raise RuntimeError(
+                        "the API key was rejected") from None
+                continue
+            except Exception as e:
+                last = str(e)[:60]
+                continue
+            finally:
+                if last == "no reply":
+                    self._gemini_model = m
+        raise RuntimeError(last)
+
+    def ask_ai(self, question):
+        import threading
+        p = self.primary()
+        if self.ai_busy:
+            p.say("one sec, still thinking… 🤔", 2)
+            return
+        name = (p.ccfg.get("name") or "the cat").strip()
+        persona = (
+            f"You are {name}, a tiny pixel-art desktop pet cat living at "
+            f"the bottom of the user's screen. Your name is {name} and you "
+            "know it. Be helpful, warm and a little playful, like a clever "
+            "cat. Keep answers under 70 words unless the question clearly "
+            "needs more. Plain text only: no markdown, no lists, no "
+            "asterisks.")
+        self._ai_hist.append({"role": "user",
+                              "parts": [{"text": question}]})
+        hist = list(self._ai_hist[-10:])
+        self.ai_busy = True
+        p.say("hmm… 🤔", 8)
+
+        def ui(fn):
+            self._call_bridge.call.emit(fn)
+
+        def work():
+            try:
+                ans = self._gemini_call(hist, persona).strip()
+                if len(ans) > 300:
+                    ans = ans[:297] + "…"
+
+                def done():
+                    self.ai_busy = False
+                    self._ai_hist.append(
+                        {"role": "model", "parts": [{"text": ans}]})
+                    del self._ai_hist[:-12]
+                    self.primary().say(ans,
+                                       min(30.0, max(7.0, len(ans) / 9)))
+                ui(done)
+            except Exception as e:
+                msg = str(e)[:60]
+
+                def fail():
+                    self.ai_busy = False
+                    if self._ai_hist:
+                        self._ai_hist.pop()
+                    self.primary().say(
+                        f"my brain won't connect… 🔑 ({msg})", 6)
+                ui(fail)
+        threading.Thread(target=work, daemon=True).start()
+
     def custom_stretch(self):
         m = pick_minutes("Stretch reminder", "Remind me to stretch every:",
                          max(1, self.cfg["global"].get("stretch_minutes",
@@ -1757,9 +1945,6 @@ class CatWindow(QWidget):
         add = QAction("Add a cat 🐈", menu)
         add.triggered.connect(mgr.add_cat)
         cats.addAction(add)
-        nm = QAction("Name this cat ✏️", menu)
-        nm.triggered.connect(self.rename_cat)
-        cats.addAction(nm)
         rem = QAction("Remove this cat", menu)
         rem.triggered.connect(lambda: mgr.remove_cat(self))
         cats.addAction(rem)
@@ -1855,7 +2040,18 @@ class CatWindow(QWidget):
         manual.triggered.connect(self.toggle_manual_peek)
         beh.addAction(manual)
 
-        agent = menu.addMenu("AI agent reactions")
+        agent = menu.addMenu("AI 🤖")
+        pnm = (mgr.primary().ccfg.get("name") or "").strip()
+        ask = QAction(f"Ask {pnm or 'me'} 💬 (Ctrl+Space)", menu)
+        ask.triggered.connect(lambda _=False: mgr.open_ask_box())
+        agent.addAction(ask)
+        gkey = QAction("Set Gemini API key 🔑…", menu)
+        gkey.triggered.connect(mgr.set_gemini_key)
+        agent.addAction(gkey)
+        nmai = QAction("Name this cat ✏️", menu)
+        nmai.triggered.connect(self.rename_cat)
+        agent.addAction(nmai)
+        agent.addSeparator()
         info = QAction("How to hook up (see README)", menu)
         info.triggered.connect(self.show_agent_help)
         agent.addAction(info)
@@ -2298,6 +2494,8 @@ class CatWindow(QWidget):
             if not self.peeking:
                 self._peek()
             self.state = PEEK
+        elif mgr.ai_busy:
+            self.state = THINK
         elif mgr.agent_working:
             self.state = THINK
             if self.index == 0 and now > self.next_think_bubble:
