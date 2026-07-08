@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.8.0"
-APP_BUILD = "0709t"
+APP_BUILD = "0709u"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1792,6 +1792,8 @@ class Manager(QObject):
             cur, 0, 720, 1)
         if ok:
             self.set_guard_timer(mins)
+
+    def toggle_hide_mode(self):
         g = self.cfg["global"]
         g["hide_mode"] = not g.get("hide_mode", False)
         save_config(self.cfg)
