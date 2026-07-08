@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.8.0"
-APP_BUILD = "0709r"
+APP_BUILD = "0709s"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -3196,7 +3196,16 @@ class CatWindow(QWidget):
         if d < 70:
             self.state = IDLE
             self.chase_cooldown = now + 4
-            self.say(random.choice(["gotcha!", "hmph.", ":3"]), 1.5)
+            if self.gcfg.get("guard_mode", False):
+                # intruder neutralised — back to the watchtower
+                self.say(random.choice([
+                    "intruder caught! back to my post. 🫡",
+                    "got you. resuming patrol.",
+                    "perimeter breach handled. 😼"]), 1.8)
+                self._sync_float()
+                self._glide_to(self._guard_post_point(), speed=700)
+            else:
+                self.say(random.choice(["gotcha!", "hmph.", ":3"]), 1.5)
             return
         speed = 340.0                       # px / second, smooth
         step = min(speed * dt, d)
