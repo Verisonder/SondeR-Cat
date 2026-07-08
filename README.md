@@ -38,11 +38,6 @@ For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 - Its eyes glow an all-seeing electric blue while it thinks 🔵
 - Your key is stored only on your PC and sent nowhere but Google
 
-**AI agent reactions** (Claude Code, Codex CLI, or any command)
-- 🤔 **Thinking along** — thought bubbles + upward gaze while your agent works
-- 🎉 **Agent done jump** — happy hop + meow when the task finishes
-- Hook up via `sonder_agent.py` (wrap any command) or Claude Code hooks — see below
-
 **🔦 Guard mode** (theatrical patrol — purely for fun, never blocks input)
 - Flip it on and the cat marches to the **top-center of the screen** — the high ground — puts on a **camo tactical helmet**, and stands watch with a **handheld flashlight** casting a sweeping red patrol beam (the torch rotates to follow the beam)
 - **All business on duty** — it won't groom, knead along with your typing, perch on windows, wiggle-hide, play with scroll-paper, or open the AI box (Ctrl+Space just gets "not now — I'm on duty. 🫡")
@@ -102,32 +97,6 @@ Requires Python 3.9+ · Dependencies: PySide6 (Essentials), pynput
 ### Code signing
 
 Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
-
-## Hooking up AI agents
-
-The cat watches `~/.sondercat_agent`. Write `working|Label` while an agent
-runs and `done|Label` when it finishes.
-
-Wrap any command:
-```bash
-python sonder_agent.py run "Codex" -- codex "fix the failing tests"
-```
-
-Claude Code hooks (`~/.claude/settings.json`):
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      { "hooks": [ { "type": "command",
-        "command": "python /path/to/sonder_agent.py working \"Claude Code\"" } ] }
-    ],
-    "Stop": [
-      { "hooks": [ { "type": "command",
-        "command": "python /path/to/sonder_agent.py done \"Claude Code\"" } ] }
-    ]
-  }
-}
-```
 
 
 ## Linux support
