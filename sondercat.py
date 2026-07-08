@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "7.3.0"
-APP_BUILD = "0709l"
+APP_VERSION = "7.4.0"
+APP_BUILD = "0709m"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -2493,13 +2493,6 @@ class CatWindow(QWidget):
         wigh.setChecked(self.gcfg.get("wiggle_hide", True))
         wigh.triggered.connect(mgr.toggle_wiggle_hide)
         beh.addAction(wigh)
-        beh.addSeparator()
-        guard = QAction("Guard mode 🔦 (helmet + red patrol beam)", menu)
-        guard.setCheckable(True)
-        guard.setChecked(self.gcfg.get("guard_mode", False))
-        guard.triggered.connect(mgr.toggle_guard_mode)
-        beh.addAction(guard)
-        beh.addSeparator()
         sens = beh.addMenu("Wiggle sensitivity")
         for label, key in (("High (easy to trigger)", "high"),
                            ("Medium", "medium"),
@@ -2668,6 +2661,11 @@ class CatWindow(QWidget):
         slp.setChecked(self.gcfg.get("force_sleep", False))
         slp.triggered.connect(mgr.toggle_force_sleep)
         menu.addAction(slp)
+        guard = QAction("Guard mode 🔦", menu)
+        guard.setCheckable(True)
+        guard.setChecked(self.gcfg.get("guard_mode", False))
+        guard.triggered.connect(mgr.toggle_guard_mode)
+        menu.addAction(guard)
         quit_act = QAction("Quit", menu)
         quit_act.triggered.connect(QApplication.instance().quit)
         menu.addAction(quit_act)
