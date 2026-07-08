@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.3.0"
-APP_BUILD = "0709k"
+APP_BUILD = "0709l"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -167,6 +167,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "auto_update": True,
                    "dance_music": True, "dance_on_sound": False,
                    "gemini_key": "", "screen_vision": False,
+                   "guard_mode": False,
                    "hide_mode": False}
 
 (IDLE, KNEAD, SLEEP, CHASE, DRAG, STRETCH,
@@ -772,6 +773,83 @@ class _AudioMeter:
             return 0.0
 
 
+class GuardBeam(QWidget):
+    """Full-screen click-through overlay: a red search beam that sweeps
+    around while guard mode is on. Purely visual; never blocks input."""
+
+    def __init__(self, mgr):
+        super().__init__(None, Qt.FramelessWindowHint
+                         | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.mgr = mgr
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self._phase = 0.0
+
+    def _apply_geometry(self):
+        scr = (self.mgr.primary().screen()
+               or QGuiApplication.primaryScreen())
+        self.setGeometry(scr.geometry())
+
+    def tick(self):
+        if not self.mgr.cfg["global"].get("guard_mode", False):
+            if self.isVisible():
+                self.hide()
+            return
+        if not self.isVisible():
+            self._apply_geometry()
+            self.show()
+        self._phase = time.time()
+        self.update()
+
+    def paintEvent(self, _ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        w, h = self.width(), self.height()
+        # beam originates from the cat's head, sweeps side to side and dips
+        cat = self.mgr.primary()
+        try:
+            cr = cat.geometry()
+            ox = cr.center().x() - self.x()
+            oy = cr.top() - self.y() + 6
+        except Exception:
+            ox, oy = w // 2, 40
+        t = self._phase
+        # sweep angle: wide left-right oscillation, aimed downward
+        ang = (math.pi / 2) + math.sin(t * 1.1) * 0.85
+        length = math.hypot(w, h)
+        spread = 0.16
+        a1, a2 = ang - spread, ang + spread
+        p1 = QPointF(ox + math.cos(a1) * length, oy + math.sin(a1) * length)
+        p2 = QPointF(ox + math.cos(a2) * length, oy + math.sin(a2) * length)
+        cone = QPolygonF([QPointF(ox, oy), p1, p2])
+        # soft red glow cone
+        flick = 0.5 + 0.5 * abs(math.sin(t * 9))
+        col = QColor(255, 40, 40)
+        col.setAlphaF(0.10 + 0.06 * flick)
+        p.setPen(Qt.NoPen)
+        p.setBrush(col)
+        p.drawPolygon(cone)
+        # brighter inner core line
+        core = QColor(255, 80, 80)
+        core.setAlphaF(0.22 + 0.12 * flick)
+        p.setBrush(core)
+        inner = QPolygonF([QPointF(ox, oy),
+                           QPointF(ox + math.cos(ang - 0.05) * length,
+                                   oy + math.sin(ang - 0.05) * length),
+                           QPointF(ox + math.cos(ang + 0.05) * length,
+                                   oy + math.sin(ang + 0.05) * length)])
+        p.drawPolygon(inner)
+        # a red dot where the beam "lands" (near the bottom / cursor area)
+        land_r = min(h * 0.7, length * 0.7)
+        lx = ox + math.cos(ang) * land_r
+        ly = oy + math.sin(ang) * land_r
+        dot = QColor(255, 30, 30)
+        dot.setAlphaF(0.5 + 0.4 * flick)
+        p.setBrush(dot)
+        p.drawEllipse(QPointF(lx, ly), 10, 10)
+
+
 class BubbleWindow(QWidget):
     """A speech bubble in its own window: stretches to fit long text
     (AI answers), floats above the cat, follows it, ignores the mouse."""
@@ -1048,6 +1126,11 @@ class Manager(QObject):
         self._music_timer = QTimer()
         self._music_timer.timeout.connect(self._poll_music)
         self._music_timer.start(120)
+        self._guard_beam = None
+        self._guard_timer = QTimer()
+        self._guard_timer.timeout.connect(self._tick_guard)
+        self._guard_timer.start(33)
+        self._guard_say = 0.0
         self._auto_timer = QTimer()
         self._auto_timer.timeout.connect(
             lambda: self.check_updates(manual=False))
@@ -1599,6 +1682,33 @@ class Manager(QObject):
                 0.6)
             QTimer.singleShot(250, step)
         step()
+
+    def _tick_guard(self):
+        on = self.cfg["global"].get("guard_mode", False)
+        if on and self._guard_beam is None:
+            self._guard_beam = GuardBeam(self)
+        if self._guard_beam is not None:
+            self._guard_beam.tick()
+        if on:
+            now = time.time()
+            if now - self._guard_say > 6 and random.random() < 0.02:
+                self._guard_say = now
+                self.say_primary(random.choice([
+                    "HALT. who goes there? 🔦", "identify yourself!",
+                    "🚨 intruder scan…", "state your business.",
+                    "eyes on you. 👁", "perimeter secure… for now."]), 2.5)
+
+    def toggle_guard_mode(self):
+        g = self.cfg["global"]
+        g["guard_mode"] = not g.get("guard_mode", False)
+        save_config(self.cfg)
+        CatWindow._HELMET_CACHE.clear()
+        if g["guard_mode"]:
+            self.say_primary("GUARD MODE ENGAGED. 🫡🔦", 3)
+        else:
+            self.say_primary("at ease. 😌", 3)
+            if self._guard_beam is not None:
+                self._guard_beam.hide()
 
     def toggle_hide_mode(self):
         g = self.cfg["global"]
@@ -2383,6 +2493,13 @@ class CatWindow(QWidget):
         wigh.setChecked(self.gcfg.get("wiggle_hide", True))
         wigh.triggered.connect(mgr.toggle_wiggle_hide)
         beh.addAction(wigh)
+        beh.addSeparator()
+        guard = QAction("Guard mode 🔦 (helmet + red patrol beam)", menu)
+        guard.setCheckable(True)
+        guard.setChecked(self.gcfg.get("guard_mode", False))
+        guard.triggered.connect(mgr.toggle_guard_mode)
+        beh.addAction(guard)
+        beh.addSeparator()
         sens = beh.addMenu("Wiggle sensitivity")
         for label, key in (("High (easy to trigger)", "high"),
                            ("Medium", "medium"),
@@ -3563,6 +3680,65 @@ class CatWindow(QWidget):
             self._frame_cache[key] = img
         return img
 
+    _HELMET_CACHE = {}
+
+    def _helmet_cells(self, name):
+        """Camo helmet dome cells + rim cells, anchored to the head top."""
+        cached = CatWindow._HELMET_CACHE.get(name)
+        if cached is not None:
+            return cached
+        g = sprites.FRAMES.get(name)
+        if not g:
+            CatWindow._HELMET_CACHE[name] = ([], [], [])
+            return ([], [], [])
+        # find the head's top row and its horizontal extent (ignore ears:
+        # scan the widest solid band in the top third)
+        rows = [y for y, r in enumerate(g) if any(c != "." for c in r)]
+        top = rows[0] if rows else 1
+        # widest row within the head region gives the dome width
+        best_w, best_y, bestL, bestR = 0, top, 4, 21
+        for y in range(top, min(top + 9, len(g))):
+            xs = [x for x, c in enumerate(g[y]) if c != "."]
+            if xs and (max(xs) - min(xs)) > best_w:
+                best_w = max(xs) - min(xs)
+                best_y, bestL, bestR = y, min(xs), max(xs)
+        L, R = bestL, bestR
+        dome, rim, camo = [], [], []
+        # dome sits over the top ~4 rows of the head, hugging its width
+        for i, dy in enumerate(range(best_y - 2, best_y + 2)):
+            inset = 2 - i if i < 2 else 0
+            for x in range(L + inset, R - inset + 1):
+                if 0 <= x < sprites.GRID_W and 0 <= dy < sprites.GRID_H:
+                    dome.append((x, dy))
+        # rim: a straight brim line across the brow
+        for x in range(L, R + 1):
+            ry = best_y + 2
+            if 0 <= x < sprites.GRID_W and 0 <= ry < sprites.GRID_H:
+                rim.append((x, ry))
+        # camo blotches: a sparse deterministic subset of the dome
+        for (x, y) in dome:
+            if ((x * 7 + y * 13) % 5) == 0:
+                camo.append((x, y))
+        cached = (dome, rim, camo)
+        CatWindow._HELMET_CACHE[name] = cached
+        return cached
+
+    def _draw_helmet(self, p, name, s):
+        dome, rim, camo = self._helmet_cells(name)
+        base = QColor("#5a6348")       # olive drab
+        camo_c = QColor("#3f4632")     # darker camo patch
+        rim_c = QColor("#40472f")      # brim
+        edge = QColor("#2c3122")       # outline
+        # outline pass (draw a ring under the dome)
+        for (x, y) in dome:
+            p.fillRect(x * s - 1, y * s - 1, s + 2, s + 2, edge)
+        for (x, y) in dome:
+            p.fillRect(x * s, y * s, s, s, base)
+        for (x, y) in camo:
+            p.fillRect(x * s, y * s, s, s, camo_c)
+        for (x, y) in rim:
+            p.fillRect(x * s, y * s, s, max(2, s // 2), rim_c)
+
     _HEADSET_CACHE = {}
 
     def _headset_cells(self, name):
@@ -3656,8 +3832,15 @@ class CatWindow(QWidget):
                 hp.fillRect(hx * s, hy * s, s, s, ltc)
             hp.end()
 
+        # guard mode: tactical helmet on the head + angry look
+        if self.mgr.cfg["global"].get("guard_mode", False):
+            gp = QPainter(img)
+            self._draw_helmet(gp, name, s)
+            gp.end()
+
         eyes = sprites.EYE_CELLS.get(name)
         if eyes:
+            guarding = self.mgr.cfg["global"].get("guard_mode", False)
             power = (self.index == 0
                      and (self.mgr.ai_busy
                           or (self.mgr._ask_box is not None
@@ -3708,6 +3891,20 @@ class CatWindow(QWidget):
                     pp.fillRect(px + pw // 4, py + pw // 4,
                                 max(1, pw // 3), max(1, pw // 3),
                                 QColor("#f2ffff"))
+            if guarding:
+                # angry slanted brows above the eyes
+                brow = QColor("#2c2118")
+                for i, (ex, ey) in enumerate(eyes):
+                    inner = (i == 0)   # slant down toward the center
+                    for k in range(sprites.EYE_W):
+                        bx = ex + k
+                        by = ey - 1 + (k if inner else (sprites.EYE_W - 1 - k)) \
+                            * 0 + (0 if inner else 0)
+                        # simple downward-inner slant
+                        slant = k if inner else (sprites.EYE_W - 1 - k)
+                        pp.fillRect((ex + k) * s,
+                                    (ey - 1) * s + slant * (s // 3),
+                                    s, max(1, s // 2), brow)
             pp.end()
 
         jy = 0
