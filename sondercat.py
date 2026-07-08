@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.2.0"
-APP_BUILD = "0709e"
+APP_BUILD = "0709f"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -163,6 +163,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "wiggle_sens": "medium",
                    "force_sleep": False, "watch_sprites": False,
                    "window_perch": True, "perch_freq": "instant",
+                   "perch_nap_chance": 0.3,
                    "auto_update": True,
                    "dance_music": True, "dance_on_sound": False,
                    "gemini_key": "", "screen_vision": False,
@@ -1593,6 +1594,15 @@ class Manager(QObject):
         key = self.cfg["global"].get("perch_freq", "instant")
         return self.PERCH_FREQS.get(key, self.PERCH_FREQS["often"])
 
+    def set_perch_nap(self, chance):
+        self.cfg["global"]["perch_nap_chance"] = chance
+        save_config(self.cfg)
+        labels = {0.0: "I'll always keep watch up there 👀",
+                  0.3: "mostly watching, sometimes napping 👀",
+                  0.6: "a balanced mix of naps and watching",
+                  0.9: "mostly napping up there 💤"}
+        self.say_primary(labels.get(chance, ""), 3)
+
     def set_perch_freq(self, key):
         g = self.cfg["global"]
         g["perch_freq"] = key
@@ -2333,6 +2343,19 @@ class CatWindow(QWidget):
             a.triggered.connect(
                 lambda _=False, k=key: mgr.set_perch_freq(k))
             perchm.addAction(a)
+        perchm.addSeparator()
+        napm = perchm.addMenu("While perched 👀")
+        cur_nap = self.gcfg.get("perch_nap_chance", 0.3)
+        for chance, label in ((0.0, "Always watch"),
+                              (0.3, "Mostly watch"),
+                              (0.6, "Balanced"),
+                              (0.9, "Mostly nap")):
+            na = QAction(label, menu)
+            na.setCheckable(True)
+            na.setChecked(abs(cur_nap - chance) < 0.01)
+            na.triggered.connect(
+                lambda _=False, ch=chance: mgr.set_perch_nap(ch))
+            napm.addAction(na)
         dnc = QAction("Headphones when sound plays 🎧", menu)
         dnc.setCheckable(True)
         dnc.setChecked(self.gcfg.get("dance_music", True))
@@ -3316,8 +3339,10 @@ class CatWindow(QWidget):
             self.perch_until = now + random.uniform(90, 240)
             self._shake_strikes = 0
             self._cover_miss = 0
-            if random.random() < 0.5:
-                # nap half: commits to sleeping until physically disturbed
+            nap_chance = self.mgr.cfg["global"].get(
+                "perch_nap_chance", 0.3)
+            if random.random() < nap_chance:
+                # nap: commits to sleeping until physically disturbed
                 self.perch_asleep = True
                 self.yawn_until = now + 0.9
                 if random.random() < 0.7:
