@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.4.0"
-APP_BUILD = "0708q"
+APP_BUILD = "0708r"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -319,6 +319,7 @@ class InputWatcher:
             pass
         self.pyn_count = 0
         self.on_ask = None
+        self.on_esc = None
         self._native = None
         if platform.system() == "Windows":
             try:
@@ -352,12 +353,14 @@ class InputWatcher:
         except Exception:
             pass
         try:
-            if getattr(key, "name", None) == "space" \
-                    and self.on_ask is not None \
+            kn = getattr(key, "name", None)
+            if kn == "space" and self.on_ask is not None \
                     and any(getattr(k, "name", None) in
                             ("ctrl", "ctrl_l", "ctrl_r")
                             for k in self._down):
                 self.on_ask()
+            elif kn == "esc" and self.on_esc is not None:
+                self.on_esc()
         except Exception:
             pass
         now = time.time()
@@ -984,7 +987,10 @@ class Manager(QObject):
         self._bridge = _InputBridge()
         self._bridge.poked.connect(self._on_input_event)
         self.inputs = InputWatcher(on_event=self._bridge.poked.emit)
-        self.inputs.on_ask = lambda: self._call_bridge.call.emit(self.open_ask_box)
+        self.inputs.on_ask = lambda: self._call_bridge.call.emit(
+            self.open_ask_box)
+        self.inputs.on_esc = lambda: self._call_bridge.call.emit(
+            self.dismiss_bubble)
         self.fs_detect = FullscreenDetector()
         self.meow = Meow()
 
@@ -1613,6 +1619,23 @@ class Manager(QObject):
         if text.isdigit():
             return time.time() + int(text) * 60
         return None
+
+    def dismiss_bubble(self):
+        bw = getattr(self, "_bubble_win", None)
+        if bw is not None and bw.isVisible():
+            bw.hide()
+            bw.cat = None
+        ab = getattr(self, "_ask_box", None)
+        if ab is not None and ab.isVisible():
+            ab.clearFocus()
+            ab.hide()
+            ab.setVisible(False)
+        # also clear a short inline answer, if one is showing
+        p = self.primary()
+        if p.bubble_text and time.time() < p.bubble_until:
+            p.bubble_until = 0
+            p.bubble_text = ""
+            p.update()
 
     def show_big_bubble(self, cat, text, secs, color=None):
         if getattr(self, "_bubble_win", None) is None:
