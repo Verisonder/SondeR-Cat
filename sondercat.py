@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.4.0"
-APP_BUILD = "0709o"
+APP_BUILD = "0709p"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -822,10 +822,14 @@ class GuardBeam(QWidget):
         except Exception:
             ox, oy = w // 2, h // 2
         t = self._phase
-        # sweep like a held flashlight: aim outward-and-down to the right,
-        # panning a moderate arc around that direction
-        base = 0.62             # down-and-right (radians from +x axis)
-        ang = base + math.sin(t * 0.8) * 0.7
+        # sweep like a held flashlight: aim outward-and-down toward the
+        # side the torch is held on, panning a moderate arc around it
+        try:
+            left = cat._guard_side(t) == 1
+        except Exception:
+            left = False
+        base = (math.pi - 0.62) if left else 0.62
+        ang = base + math.sin(t * 0.8) * 0.7 * (-1 if left else 1)
         length = math.hypot(w, h)
         spread = 0.11
         a1, a2 = ang - spread, ang + spread
@@ -3204,6 +3208,13 @@ class CatWindow(QWidget):
                     return
                 self._stand_up_here()
                 return
+            if self.mgr.cfg["global"].get("guard_mode", False):
+                self.jump_until = max(self.jump_until, time.time() + 0.5)
+                self.wobble = min(self.wobble + 5, 16)
+                self.say(random.choice([
+                    "HEY! hands off! 😾", "do NOT grab the guard!",
+                    "hsss!! 😾", "I'm ARMED, you know.",
+                    "unauthorized touch!!"]), 1.6)
             self.dragging = True
             self.glide_target = None
             self.drag_offset = ev.globalPosition().toPoint() - self.pos()
@@ -3750,6 +3761,12 @@ class CatWindow(QWidget):
         CatWindow._HELMET_CACHE[name] = cached
         return cached
 
+    def _guard_side(self, now=None):
+        """0 = torch in right paw looking right, 1 = left. Flips ~4.5s."""
+        if now is None:
+            now = time.time()
+        return int(now / 4.5) % 2
+
     def _draw_flashlight(self, p, name, s):
         # a chunky handheld flashlight held out at the right FOREPAW,
         # pointing right; the red beam emerges from its lens
@@ -3758,38 +3775,48 @@ class CatWindow(QWidget):
         H = len(g) if g else sprites.GRID_H
         # anchor: rightmost sprite content near the paw line (bottom rows)
         fy = H - 7
-        rpaw = 0
+        left = self._guard_side() == 1
+        edge_x = (W - 1) if not left else 0
         if g:
+            found = None
             for y in range(max(0, H - 9), H - 2):
                 xs = [x for x, c in enumerate(g[y]) if c != "."]
                 if xs:
-                    rpaw = max(rpaw, max(xs))
-            fy = H - 7
-        rpaw = min(max(rpaw, 12), W - 6)     # keep the torch on-canvas
+                    v = max(xs) if not left else min(xs)
+                    if found is None:
+                        found = v
+                    else:
+                        found = max(found, v) if not left \
+                            else min(found, v)
+            if found is not None:
+                edge_x = found
+        if not left:
+            rpaw = min(max(edge_x, 12), W - 6)   # torch extends right
+        else:
+            rpaw = max(min(edge_x, W - 13), 5)   # torch extends LEFT
         body = QColor("#33373f")
         band = QColor("#20232a")
         headc = QColor("#c8ccd2")            # metal head ring
         lensc = QColor("#fff4be")
         edge = QColor("#15171c")
         # 2-cell-tall, 5-cell-long torch: grip, body×2, head, lens
-        # outline first for pop
-        for cx in range(rpaw, rpaw + 5):
-            for cy in (fy, fy + 1):
-                p.fillRect(cx * s - 1, cy * s - 1, s + 2, s + 2, edge)
+        d = -1 if left else 1               # direction the torch points
+        lx, ly = rpaw + 4 * d, fy
         # warm glow at the emitter FIRST, so solid parts stay clean on top
-        lx, ly = rpaw + 4, fy
         glow = QColor(255, 130, 100); glow.setAlpha(140)
         p.setPen(Qt.NoPen); p.setBrush(glow)
-        p.drawEllipse(QPointF((lx + 1) * s, (ly + 1) * s),
+        p.drawEllipse(QPointF((lx + d) * s + s / 2, (ly + 1) * s),
                       s * 1.8, s * 1.8)
-        # grip cell (attached to the paw)
+        # outline behind the torch cells for pop
+        for i in range(5):
+            cx = rpaw + i * d
+            p.fillRect(cx * s - 1, fy * s - 1, s + 2, 2 * s + 2,
+                       QColor("#15171c"))
+        # grip (at the paw), body x2, metal head, bright lens
         p.fillRect(rpaw * s, fy * s, s, 2 * s, band)
-        # body: two columns
-        p.fillRect((rpaw + 1) * s, fy * s, s, 2 * s, body)
-        p.fillRect((rpaw + 2) * s, fy * s, s, 2 * s, body)
-        # metal head ring
-        p.fillRect((rpaw + 3) * s, fy * s, s, 2 * s, headc)
-        # lens column (bright, solid)
+        p.fillRect((rpaw + 1 * d) * s, fy * s, s, 2 * s, body)
+        p.fillRect((rpaw + 2 * d) * s, fy * s, s, 2 * s, body)
+        p.fillRect((rpaw + 3 * d) * s, fy * s, s, 2 * s, headc)
         p.fillRect(lx * s, ly * s, s, 2 * s, lensc)
         self._torch_lens = (lx, ly)          # beam starts at the lens
 
@@ -3888,7 +3915,8 @@ class CatWindow(QWidget):
         # headphones: music app playing = worn while dancing; browser
         # audio = worn quietly on whatever the cat is doing
         wearing = (self.gcfg.get("dance_music", True)
-                   and self.mgr.music_mode in ("listen", "dance"))
+                   and self.mgr.music_mode in ("listen", "dance")
+                   and not self.mgr.cfg["global"].get("guard_mode", False))
         if wearing:
             hp = QPainter(img)
             dkc = QColor("#2a2a33")
@@ -3920,6 +3948,13 @@ class CatWindow(QWidget):
                 offx, offy = -s // 3, -s // 2
             elif self.state == SCROLLPLAY:
                 offx, offy = -(s * 3) // 4, (s * 3) // 4
+            elif guarding:
+                # patrol gaze: look toward the side the torch points,
+                # with a slow scanning drift
+                left_side = self._guard_side() == 1
+                drift = math.sin(now * 1.7) * (s * 0.3)
+                offx = int((-1 if left_side else 1) * (s * 0.7) + drift)
+                offy = s // 4
             else:
                 cur = QCursor.pos()
                 c = self.mapToGlobal(self.cat_rect().center())
@@ -3963,19 +3998,16 @@ class CatWindow(QWidget):
                                 max(1, pw // 3), max(1, pw // 3),
                                 QColor("#f2ffff"))
             if guarding:
-                # angry slanted brows above the eyes
-                brow = QColor("#2c2118")
+                # BIG angry slanted brows: thick bars angling down-inward
+                brow = QColor("#261c14")
+                bw = sprites.EYE_W + 1          # one cell wider than the eye
                 for i, (ex, ey) in enumerate(eyes):
-                    inner = (i == 0)   # slant down toward the center
-                    for k in range(sprites.EYE_W):
-                        bx = ex + k
-                        by = ey - 1 + (k if inner else (sprites.EYE_W - 1 - k)) \
-                            * 0 + (0 if inner else 0)
-                        # simple downward-inner slant
-                        slant = k if inner else (sprites.EYE_W - 1 - k)
-                        pp.fillRect((ex + k) * s,
-                                    (ey - 1) * s + slant * (s // 3),
-                                    s, max(1, s // 2), brow)
+                    inner = (i == 0)            # slant down toward the center
+                    for k in range(bw):
+                        slant = k if inner else (bw - 1 - k)
+                        bx = (ex - (0 if inner else 1) + k) * s
+                        by = int((ey - 1.4) * s) + slant * (s * 2 // 3)
+                        pp.fillRect(bx, by, s, s, brow)
             pp.end()
 
         jy = 0
