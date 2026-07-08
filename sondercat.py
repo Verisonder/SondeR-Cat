@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "3.3.2"
-APP_BUILD = "0708c"
+APP_BUILD = "0708d"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -2182,16 +2182,12 @@ class CatWindow(QWidget):
             self.state = SCROLLPLAY
         elif self.state == CHASE:
             self._chase_step(cur, now, dt)
-        elif start_chase:
+        elif start_chase and not want_peek:
             if self.perch_hwnd is not None:
                 self._end_perch(go_home=False)
             self.state = CHASE
             self._wig_times.clear()
             self.glide_target = None
-            if self.peeking:                 # hunt straight from the edge
-                self.peeking = False
-                self._saved_pos = None
-            self.manual_peek = False         # done hiding once we're playing
             self._sync_float()
             self.say("!", 1)
         elif want_peek:
