@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.0.0"
-APP_BUILD = "0710c"
+APP_BUILD = "0710d"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1798,7 +1798,8 @@ class Manager(QObject):
         g["hide_mode"] = not g.get("hide_mode", False)
         save_config(self.cfg)
         if g["hide_mode"]:
-            self.say_primary("hiding! click me to come out 🫣", 3)
+            self.say_primary("hiding! untoggle me in the menu to come out 🫣",
+                             3)
         else:
             self.exit_hide_mode()
 
@@ -3128,7 +3129,16 @@ class CatWindow(QWidget):
             self.state = SCROLLPLAY
         elif self.state == CHASE:
             self._chase_step(cur, now, dt)
-        elif start_chase and not want_peek:
+        elif start_chase and (not want_peek or
+                              (self.manual_peek
+                               and not self.gcfg.get("hide_mode", False)
+                               and not mgr.fullscreen_active)):
+            if self.peeking:
+                # hidden by a wiggle — a laser wiggle lures it back out!
+                self.manual_peek = False
+                self.peeking = False
+                self._peek_was_fs = False
+                self._saved_pos = None       # no going back; the chase is on
             if self.perch_hwnd is not None:
                 self._end_perch(go_home=False)
             self.state = CHASE
@@ -3338,8 +3348,7 @@ class CatWindow(QWidget):
         if ev.button() == Qt.LeftButton:
             if self.peeking:
                 if self.gcfg.get("hide_mode", False):
-                    self.mgr.exit_hide_mode()
-                    return
+                    return              # firm hide: only the menu wakes it
                 self._stand_up_here()
                 return
             if self.mgr.cfg["global"].get("guard_mode", False):
