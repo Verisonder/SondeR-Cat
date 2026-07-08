@@ -162,7 +162,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "wiggle_sens": "medium",
                    "force_sleep": False, "watch_sprites": False,
                    "window_perch": True, "auto_update": True,
-                   "dance_music": True}
+                   "dance_music": True, "hide_mode": False}
 
 (IDLE, KNEAD, SLEEP, CHASE, DRAG, STRETCH,
  OVERHEAT, SCROLLPLAY, PEEK, THINK, DANCE) = range(11)
@@ -1303,10 +1303,15 @@ class Manager(QObject):
             if not self.cfg["global"].get("dance_music", True):
                 continue
             try:
+                ps = os.path.join(
+                    os.environ.get("SystemRoot", r"C:\Windows"),
+                    "System32", "WindowsPowerShell", "v1.0",
+                    "powershell.exe")
                 r = subprocess.run(
-                    ["powershell", "-NoProfile", "-EncodedCommand",
+                    [ps, "-NoProfile", "-NonInteractive",
+                     "-ExecutionPolicy", "Bypass", "-EncodedCommand",
                      _SMTC_CMD],
-                    capture_output=True, text=True, timeout=8,
+                    capture_output=True, text=True, timeout=15,
                     creationflags=0x08000000)      # CREATE_NO_WINDOW
                 self._smtc_state, self._smtc_title = \
                     self._parse_smtc(r.stdout)
@@ -1328,7 +1333,9 @@ class Manager(QObject):
         elif meter_on and loud <= int(len(h) * 0.15):
             meter_on = False
         self._meter_on = meter_on
-        self.music_on = meter_on and self._smtc_state != "playing_video"
+        # strict: only dance on POSITIVE music evidence — unknown sessions,
+        # videos, or a broken probe all mean no dancing
+        self.music_on = meter_on and self._smtc_state == "playing_music"
 
     def music_doctor(self):
         t_end = time.time() + 5
@@ -1348,6 +1355,32 @@ class Manager(QObject):
                 0.6)
             QTimer.singleShot(250, step)
         step()
+
+    def toggle_hide_mode(self):
+        g = self.cfg["global"]
+        g["hide_mode"] = not g.get("hide_mode", False)
+        save_config(self.cfg)
+        if g["hide_mode"]:
+            self.say_primary("hiding! click me to come out 🫣", 3)
+        else:
+            self.exit_hide_mode()
+
+    def exit_hide_mode(self):
+        self.cfg["global"]["hide_mode"] = False
+        save_config(self.cfg)
+        for c in self.cats:
+            c.manual_peek = False
+            if c.peeking:
+                c.peeking = False
+                c._saved_pos = None          # no going back: stand here
+                try:
+                    g = c._ground_point()
+                    c.move(g)
+                    c._sync_float()
+                except Exception:
+                    pass
+                c.state = IDLE
+        self.say_primary("mrrp! 🐾", 2)
 
     def toggle_dance_music(self):
         g = self.cfg["global"]
@@ -1871,6 +1904,11 @@ class CatWindow(QWidget):
         doctor.triggered.connect(mgr.scroll_doctor)
         tst.addAction(doctor)
 
+        hid = QAction("Hide at the bottom 🫣", menu)
+        hid.setCheckable(True)
+        hid.setChecked(self.gcfg.get("hide_mode", False))
+        hid.triggered.connect(mgr.toggle_hide_mode)
+        menu.addAction(hid)
         slp = QAction("Deep sleep 💤", menu)
         slp.setCheckable(True)
         slp.setChecked(self.gcfg.get("force_sleep", False))
@@ -2143,7 +2181,8 @@ class CatWindow(QWidget):
             self.update()
             return
 
-        want_peek = self.manual_peek or mgr.fullscreen_active
+        want_peek = (self.manual_peek or mgr.fullscreen_active
+                     or self.gcfg.get("hide_mode", False))
         typing_now = inputs.typing(0.30 if self.knead_hyst else 0.25)
         self.knead_hyst = typing_now
         overheat = (inputs.keys_per_sec() > 5.5 and typing_now)
@@ -2351,6 +2390,9 @@ class CatWindow(QWidget):
     def mousePressEvent(self, ev):
         if ev.button() == Qt.LeftButton:
             if self.peeking:
+                if self.gcfg.get("hide_mode", False):
+                    self.mgr.exit_hide_mode()
+                    return
                 self._unpeek()
                 return
             self.dragging = True
