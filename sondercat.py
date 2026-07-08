@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "6.0.0"
-APP_BUILD = "0708j"
+APP_BUILD = "0708k"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1959,26 +1959,6 @@ class CatWindow(QWidget):
         mgr = self.mgr
 
         cust = menu.addMenu("Customization 🎨")
-        thm = cust.addMenu("Themes ✨")
-        lil = QAction("Lilly", menu)
-        lil.setCheckable(True)
-        lil.setChecked(self.ccfg["palette"] == "lilly")
-        lil.triggered.connect(lambda _=False: self.set_palette("lilly"))
-        thm.addAction(lil)
-        jjt = QAction("JJ", menu)
-        jjt.setCheckable(True)
-        jjt.setChecked(self.ccfg["palette"] == "jj")
-        jjt.triggered.connect(lambda _=False: self.set_palette("jj"))
-        thm.addAction(jjt)
-        mmt = QAction("Mimi", menu)
-        mmt.setCheckable(True)
-        mmt.setChecked(self.ccfg["palette"] == "mimi")
-        mmt.triggered.connect(lambda _=False: self.set_palette("mimi"))
-        thm.addAction(mmt)
-        more = QAction("more coming…", menu)
-        more.setEnabled(False)
-        thm.addAction(more)
-
         fur = cust.addMenu("Fur color")
         for name in sprites.PALETTES:
             if name in ("lilly", "jj", "mimi"):
@@ -2034,8 +2014,29 @@ class CatWindow(QWidget):
         rem = QAction("Remove this cat", menu)
         rem.triggered.connect(lambda: mgr.remove_cat(self))
         cats.addAction(rem)
+        thm = cats.addMenu("Themes ✨")
+        lil = QAction("Lilly", menu)
+        lil.setCheckable(True)
+        lil.setChecked(self.ccfg["palette"] == "lilly")
+        lil.triggered.connect(lambda _=False: self.set_palette("lilly"))
+        thm.addAction(lil)
+        jjt = QAction("JJ", menu)
+        jjt.setCheckable(True)
+        jjt.setChecked(self.ccfg["palette"] == "jj")
+        jjt.triggered.connect(lambda _=False: self.set_palette("jj"))
+        thm.addAction(jjt)
+        mmt = QAction("Mimi", menu)
+        mmt.setCheckable(True)
+        mmt.setChecked(self.ccfg["palette"] == "mimi")
+        mmt.triggered.connect(lambda _=False: self.set_palette("mimi"))
+        thm.addAction(mmt)
+        more = QAction("more coming…", menu)
+        more.setEnabled(False)
+        thm.addAction(more)
 
-        pomo = menu.addMenu("Pomodoro")
+
+        remm = menu.addMenu("Reminders ⏰")
+        pomo = remm.addMenu("Pomodoro")
         for label, mins, kind in (("Focus 25 min", 25, "focus"),
                                   ("Focus 50 min", 50, "focus"),
                                   ("Break 5 min", 5, "break")):
@@ -2058,7 +2059,7 @@ class CatWindow(QWidget):
         stop.triggered.connect(mgr.stop_pomodoro)
         pomo.addAction(stop)
 
-        stretch = menu.addMenu("Stretch reminder")
+        stretch = remm.addMenu("Stretch reminder")
         for label, mins in (("Every 30 min", 30), ("Every 50 min", 50),
                             ("Every 90 min", 90), ("Off", 0)):
             act = QAction(label, menu)
@@ -2148,7 +2149,7 @@ class CatWindow(QWidget):
         t2.triggered.connect(lambda: self._write_agent("done|Test agent"))
         agent.addAction(t2)
 
-        msgs = menu.addMenu("Messages")
+        msgs = remm.addMenu("Messages")
         rem = QAction("Set a reminder…", menu)
         rem.triggered.connect(mgr.add_reminder)
         msgs.addAction(rem)
@@ -2175,9 +2176,6 @@ class CatWindow(QWidget):
         awatch.triggered.connect(mgr.toggle_watch_sprites)
         anim.addAction(awatch)
 
-        about = QAction("About", menu)
-        about.triggered.connect(self.show_about)
-        menu.addAction(about)
         upds = menu.addMenu("Updates ⤓")
         unow = QAction("Check for updates now", menu)
         unow.triggered.connect(
@@ -2188,6 +2186,9 @@ class CatWindow(QWidget):
         aup.setChecked(self.gcfg.get("auto_update", True))
         aup.triggered.connect(mgr.toggle_auto_update)
         upds.addAction(aup)
+        rst = QAction("Restart the cat 🔄", menu)
+        rst.triggered.connect(mgr._restart)
+        upds.addAction(rst)
         upds.addSeparator()
         uinf = QAction(f"Installed: v{APP_VERSION} · build {APP_BUILD}",
                        menu)
@@ -3317,7 +3318,11 @@ class CatWindow(QWidget):
 
         eyes = sprites.EYE_CELLS.get(name)
         if eyes:
-            if self.state == THINK:
+            power = (self.index == 0
+                     and (self.mgr.ai_busy
+                          or (self.mgr._ask_box is not None
+                              and self.mgr._ask_box.isVisible())))
+            if self.state == THINK and not power:
                 offx, offy = -s // 3, -s // 2
             elif self.state == SCROLLPLAY:
                 offx, offy = -(s * 3) // 4, (s * 3) // 4
@@ -3331,10 +3336,6 @@ class CatWindow(QWidget):
             pal = (sprites.OVERHEAT_PALETTE if self.state == OVERHEAT
                    else self.palette())
             pc = QColor(pal["P"])
-            power = (self.index == 0
-                     and (self.mgr.ai_busy
-                          or (self.mgr._ask_box is not None
-                              and self.mgr._ask_box.isVisible())))
             ew_x, ew_y = sprites.EYE_W * s, sprites.EYE_H * s
             pw = 2 * s                     # pupil size (px)
             pp = QPainter(img)
