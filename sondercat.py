@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.2.0"
-APP_BUILD = "0710h"
+APP_BUILD = "0710i"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -327,6 +327,7 @@ class InputWatcher:
         self.pyn_count = 0
         self.on_ask = None
         self.on_esc = None
+        self.on_update = None
         self._native = None
         if platform.system() == "Windows":
             try:
@@ -369,6 +370,19 @@ class InputWatcher:
                 self.on_ask()
             elif kn == "esc" and self.on_esc is not None:
                 self.on_esc()
+            # global failsafe: Ctrl+Shift+Alt+P forces an update check even
+            # if the right-click menu is somehow broken
+            if self.on_update is not None:
+                names = {getattr(k, "name", None) for k in self._down}
+                has_ctrl = bool(names & {"ctrl", "ctrl_l", "ctrl_r"})
+                has_shift = bool(names & {"shift", "shift_l", "shift_r"})
+                has_alt = bool(names & {"alt", "alt_l", "alt_r", "alt_gr"})
+                ch = getattr(key, "char", None)
+                is_p = (getattr(key, "vk", None) == 0x50
+                        or (isinstance(ch, str) and ch.lower() == "p")
+                        or ch == "\x10")          # Ctrl-P control char
+                if has_ctrl and has_shift and has_alt and is_p:
+                    self.on_update()
         except Exception:
             pass
         now = time.time()
@@ -1196,6 +1210,8 @@ class Manager(QObject):
             self.open_ask_box)
         self.inputs.on_esc = lambda: self._call_bridge.call.emit(
             self.dismiss_bubble)
+        self.inputs.on_update = lambda: self._call_bridge.call.emit(
+            lambda: self.check_updates(manual=True))
         self.fs_detect = FullscreenDetector()
         self.meow = Meow()
 
@@ -2739,7 +2755,7 @@ class CatWindow(QWidget):
         anim.addAction(awatch)
 
         upds = menu.addMenu("Updates ⤓")
-        unow = QAction("Check for updates now", menu)
+        unow = QAction("Check for updates now  (Ctrl+Shift+Alt+P)", menu)
         unow.triggered.connect(
             lambda _=False: mgr.check_updates(manual=True))
         upds.addAction(unow)
