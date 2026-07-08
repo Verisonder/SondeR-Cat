@@ -96,6 +96,10 @@ apk), checks system libraries, and offers to fix anything missing.
 
 Requires Python 3.9+ · Dependencies: PySide6 (Essentials), pynput
 
+### Code signing
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
 ## Hooking up AI agents
 
 The cat watches `~/.sondercat_agent`. Write `working|Label` while an agent
