@@ -35,6 +35,11 @@ jobs:
                  Sort-Object Name -Descending | Select-Object -First 1
           "$($sdk.FullName)\x64" | Out-File -FilePath $env:GITHUB_PATH -Append
 
+      - name: Set up MSVC (cl.exe) for the launcher
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Build MSIX
         shell: pwsh
         env:
@@ -42,27 +47,40 @@ jobs:
           PUBLISHER:      ${{ secrets.STORE_PUBLISHER }}
           PUBLISHER_NAME: ${{ secrets.STORE_PUBLISHER_NAME }}
         run: |
-          # fall back to harmless placeholders so the package still builds for
-          # testing before the Store account exists
-          $id   = if ($env:IDENTITY_NAME)  { $env:IDENTITY_NAME }  else { "0000Placeholder.SondeRcat" }
-          $pub  = if ($env:PUBLISHER)      { $env:PUBLISHER }      else { "CN=00000000-0000-0000-0000-000000000000" }
-          $name = if ($env:PUBLISHER_NAME) { $env:PUBLISHER_NAME } else { "SondeR cat" }
-          # MSVC is present on windows-latest; ensure cl.exe is on PATH
-          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
-                  -latest -property installationPath
-          Import-Module (Join-Path $vs "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
-          Enter-VsDevShell -VsInstallPath $vs -DevCmdArguments "-arch=x64" -SkipAutomaticLocation
-          ./msix/build_msix.ps1 -IdentityName $id -Publisher $pub -PublisherName $name
+          Start-Transcript -Path "$env:GITHUB_WORKSPACE\build-msix.log" | Out-Null
+          try {
+            # placeholders so the package still builds before the Store account exists
+            $id   = if ($env:IDENTITY_NAME)  { $env:IDENTITY_NAME }  else { "0000Placeholder.SondeRcat" }
+            $pub  = if ($env:PUBLISHER)      { $env:PUBLISHER }      else { "CN=00000000-0000-0000-0000-000000000000" }
+            $name = if ($env:PUBLISHER_NAME) { $env:PUBLISHER_NAME } else { "SondeR cat" }
+            Write-Host "cl on PATH:"; (Get-Command cl.exe -ErrorAction SilentlyContinue).Source
+            Write-Host "makeappx on PATH:"; (Get-Command makeappx.exe -ErrorAction SilentlyContinue).Source
+            & "$env:GITHUB_WORKSPACE\msix\build_msix.ps1" -IdentityName $id -Publisher $pub -PublisherName $name
+          }
+          catch {
+            Write-Host "BUILD FAILED: $($_.Exception.Message)"
+            Write-Host $_.ScriptStackTrace
+            throw
+          }
+          finally { Stop-Transcript | Out-Null }
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build-msix.log
+          if-no-files-found: warn
 
       - name: Upload MSIX artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: SondeRcat-msix
           path: msix/out/SondeRcat.msix
 
       - name: Submit to Microsoft Store
-        # only runs when the Store API secrets are configured
-        if: ${{ env.HAVE_SECRETS == 'true' }}
+        if: ${{ success() && env.HAVE_SECRETS == 'true' }}
         env:
           HAVE_SECRETS: ${{ secrets.STORE_APP_ID != '' && secrets.AZURE_CLIENT_ID != '' }}
           STORE_APP_ID:        ${{ secrets.STORE_APP_ID }}
@@ -71,14 +89,11 @@ jobs:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         shell: pwsh
         run: |
-          # Uses the Microsoft Store submission API via the community
-          # StoreBroker module (Microsoft-maintained).
           Install-Module -Name StoreBroker -Force -Scope CurrentUser -AcceptLicense
           Import-Module StoreBroker
-          $sec = ConvertTo-SecureString $env:AZURE_CLIENT_SECRET -AsPlainText -Force
+          $sec  = ConvertTo-SecureString $env:AZURE_CLIENT_SECRET -AsPlainText -Force
           $cred = New-Object System.Management.Automation.PSCredential($env:AZURE_CLIENT_ID, $sec)
           Set-StoreBrokerAuthentication -TenantId $env:AZURE_TENANT_ID -Credential $cred
-          # package the .msix into a StoreBroker submission and push it
           New-SubmissionPackage -ConfigPath ./msix/sb-config.json `
                                 -AppxPath msix/out/SondeRcat.msix `
                                 -OutPath  msix/out -OutName submission
