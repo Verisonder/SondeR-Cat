@@ -78,23 +78,54 @@ $launcherOut = Join-Path $app "SondeRCat.exe"
 $cl = Get-Command cl.exe -ErrorAction SilentlyContinue
 if ($cl) {
     Push-Location $app
-    & cl /nologo /O2 (Join-Path $msix "launcher.c") /Fe:$launcherOut `
-        /link user32.lib shell32.lib shlwapi.lib | Out-Null
-    Get-ChildItem $app -Filter *.obj | Remove-Item -Force
+    $clOut = & cl /nologo /O2 (Join-Path $msix "launcher.c") /Fe:$launcherOut `
+        /link user32.lib shell32.lib shlwapi.lib 2>&1
+    $clRc = $LASTEXITCODE
+    Get-ChildItem $app -Filter *.obj | Remove-Item -Force -ErrorAction SilentlyContinue
     Pop-Location
+    if ($clRc -ne 0 -or -not (Test-Path $launcherOut)) {
+        throw "cl failed (rc=$clRc): $($clOut -join ' // ')"
+    }
 } else {
     $gcc = Get-Command x86_64-w64-mingw32-gcc -ErrorAction SilentlyContinue
     if (-not $gcc) { throw "Need MSVC 'cl' or mingw gcc to build the launcher." }
     & x86_64-w64-mingw32-gcc (Join-Path $msix "launcher.c") `
         -o $launcherOut -mwindows -lshlwapi
+    if ($LASTEXITCODE -ne 0) { throw "mingw gcc failed to build the launcher." }
 }
 
 # --- 5. Store assets (logos) --------------------------------------------
+# The manifest references these PNGs; makeappx fails if any are missing.
+# Use real logos from msix/store-assets when present, else generate simple
+# placeholders so a test build always succeeds.
 $srcAssets = Join-Path $msix "store-assets"
-if (Test-Path $srcAssets) {
-    Copy-Item (Join-Path $srcAssets "*") (Join-Path $stage "Assets") -Recurse -Force
-} else {
-    Write-Warning "No msix/store-assets found — generate logos before submitting (see README)."
+$dstAssets = Join-Path $stage "Assets"
+$required = @{
+    "StoreLogo.png"          = 50
+    "Square44x44Logo.png"    = 44
+    "Square71x71Logo.png"    = 71
+    "Square150x150Logo.png"  = 150
+    "Square310x310Logo.png"  = 310
+    "Wide310x150Logo.png"    = @(310, 150)
+}
+Add-Type -AssemblyName System.Drawing
+foreach ($name in $required.Keys) {
+    $dst = Join-Path $dstAssets $name
+    $src = Join-Path $srcAssets $name
+    if (Test-Path $src) {
+        Copy-Item $src $dst -Force
+        continue
+    }
+    $dim = $required[$name]
+    $w = if ($dim -is [array]) { $dim[0] } else { $dim }
+    $h = if ($dim -is [array]) { $dim[1] } else { $dim }
+    $bmp = New-Object System.Drawing.Bitmap $w, $h
+    $g   = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.Clear([System.Drawing.Color]::FromArgb(255, 232, 150, 74))   # cat orange
+    $g.Dispose()
+    $bmp.Save($dst, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
+    Write-Warning "placeholder logo generated: $name ($w x $h) — replace before real submission"
 }
 
 # --- 6. manifest with real identity + version ---------------------------
@@ -109,7 +140,10 @@ Set-Content -Path (Join-Path $stage "AppxManifest.xml") -Value $manifest -Encodi
 $makeappx = Get-Command makeappx.exe -ErrorAction SilentlyContinue
 if (-not $makeappx) { throw "makeappx.exe not found — install the Windows SDK." }
 $msixOut = Join-Path $out "SondeRcat.msix"
-& makeappx pack /d $stage /p $msixOut /o | Out-Null
+$maOut = & makeappx pack /d $stage /p $msixOut /o 2>&1
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $msixOut)) {
+    throw "makeappx failed (rc=$LASTEXITCODE): $($maOut -join ' // ')"
+}
 
 Write-Host "`nBuilt: $msixOut" -ForegroundColor Green
 Write-Host "Unsigned by design — the Microsoft Store re-signs it on submission."
