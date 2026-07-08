@@ -1,7 +1,7 @@
 # SondeR cat 🐾
 
-A pixel cat that lives on your desktop — for **Windows** and **Linux**.
-Free, open source, no telemetry, no accounts.
+A pixel cat that lives on your desktop — naps on your windows, vibes to your music, and can even answer questions with a Gemini brain.
+For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 
 ![SondeR cats](assets/preview.png)
 
@@ -24,14 +24,22 @@ Free, open source, no telemetry, no accounts.
 
 **Being a good coworker**
 - 😴 Naps when you're idle; wakes with a "mrrp?"
-- 🪟 **Climbs on your windows** — occasionally walks over and sits on top of an open window, riding along if you move it (toggleable)
-- 💤 **Deep sleep** toggle (main menu, above Quit) — sleeps until YOU say otherwise; nothing wakes it
-- 📺 **Peek mode** — auto-hides at the bottom edge during fullscreen video; or send it to hide by wiggling your cursor up-down at the bottom of the screen
-- 🧘 **Stretch reminders** — it *grows big* and stretches with you every 30/50/90 min
-- 🍅 **Pomodoro** — focus/break **loops** with a pixel timer floating next to the cat
-- ⏰ **Message reminders** — "Ali, 21:30 'Meeting'" in a red bubble, with a meow
+- 🪟 **Climbs on your windows** — occasionally walks over and sits on top of an open window, riding along if you move it. It even naps up there, grumbles if you shake the window, and slides down if you minimize it (toggleable)
+- 💤 **Deep sleep** toggle — sleeps until YOU say otherwise; nothing wakes it
+- 🫣 **Hide at the bottom** — tuck the cat away at the screen edge, or wiggle your cursor up-down at the bottom to send it there. It stays hidden — ignoring typing, scrolling and mouse wiggles — until you **click** it, then it stands up right where it is
+- 📺 Also auto-hides during fullscreen video
+- 🎧 **Listens to your music** — when any sound plays, the cat puts on little pixel headphones and vibes along with whatever it's doing. Flip on *Dance + music notes* and it bounces to the beat with floating ♪♫
+- 🧘 **Stretch reminders** every 30/50/90 min — or set your own interval
+- 🍅 **Pomodoro** — focus/break **loops** with a pixel timer floating next to the cat; custom focus/break lengths too
+- ⏰ **Message reminders** — pick a clock time or a countdown with a real time-spinner, and the cat meows to remind you
 - 📌 **Pinned note** — keep an important message above its head
 - 🗣️ **Tell it your name** — it calls you by name in reminders and breaks
+
+**🧠 Ask your cat anything (Gemini AI)**
+- Give the cat a name, paste a free **Google Gemini API key**, and press **Ctrl+Space** anywhere
+- A little pixel speech-bubble opens above the cat — type your question and it answers *as your cat, by name*, remembering the conversation
+- Its eyes glow an all-seeing electric blue while it thinks 🔵
+- Your key is stored only on your PC and sent nowhere but Google
 
 **AI agent reactions** (Claude Code, Codex CLI, or any command)
 - 🤔 **Thinking along** — thought bubbles + upward gaze while your agent works
@@ -39,29 +47,35 @@ Free, open source, no telemetry, no accounts.
 - Hook up via `sonder_agent.py` (wrap any command) or Claude Code hooks — see below
 
 **Make it yours**
-- 🎨 10 fur colors + any custom color, 5 patterns (tabby / solid / tuxedo / spots / siamese)
-- 🐈🐈 **Multiple cats**, each with its own look
+- 🐱 **Real-cat themes** — one-click looks modeled on real cats: **Lilly** (orange, white chest), **JJ** (striped tabby, green eyes), **Mimi** (lynx-point, blue eyes), with more to come
+- 🎨 10 fur colors + any custom color, patterns (tabby / solid / tuxedo / spots / siamese), and **custom eye color** (presets or any color you pick)
+- 🐈🐈 **Multiple cats**, each with its own name, look and eyes
 - 📏 7 sizes from tiny 2× to chunky 10×; positions and settings remembered
+- 🔄 **Updates itself** — new versions install automatically in the background (toggleable); the installer never changes
 
 ## Install
 
 > **Requires 64-bit Windows 10/11** (or Linux). 32-bit systems can't run the Qt6 framework the cat is built on.
 
-### Windows — one file, everything inside
+### Windows — one tiny installer
 
-**[Download SondeR_cat_setup.exe](https://github.com/Verisonder/SondeR-Cat/raw/main/SondeR_cat_setup.exe)** (20 MB) and double-click it.
+**[Download SondeR_cat_setup.exe](https://github.com/Verisonder/SondeR-Cat/raw/main/SondeR_cat_setup.exe)** (140 KB) and double-click it.
 
-A graphical installer (no terminal, ever) does the rest:
-- unpacks the cat with **all components pre-extracted inside the exe** —
-  no pip, no downloads, nothing to install for this step
+A small graphical installer (no terminal, ever) does the rest:
+- downloads the **latest** version of the cat straight from this repo and
+  unpacks it — always current, the moment you install
 - if your PC has no Python at all, it fetches that one piece automatically
   (via Windows' package manager)
 - creates a Desktop shortcut with the cat icon, offers start-with-Windows,
   and launches your cat
 
-SmartScreen may warn about a new unsigned app — click *More info → Run
-anyway*. The installer's full source code is right here in this repo
-(`setup_stub.c`), built by `build_exe.py`.
+Because the installer carries no app code of its own, **it never changes** —
+which lets Windows' reputation systems gradually learn to trust it. After the
+first install, the cat keeps **itself** up to date automatically.
+
+SmartScreen may warn about a new app — click *More info → Run anyway*. The
+installer's full source code is right here in this repo (`setup_stub.c`),
+built by `build_exe.py`.
 
 **If Smart App Control / antivirus blocks the exe** (or you just prefer no
 exe): click the green **Code** button above → **Download ZIP** → right-click
@@ -108,7 +122,6 @@ Claude Code hooks (`~/.claude/settings.json`):
 }
 ```
 
-Try it instantly: right-click the cat → *AI agent reactions → Test*.
 
 ## Linux support
 
