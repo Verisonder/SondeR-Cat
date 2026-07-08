@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.2.0"
-APP_BUILD = "0709f"
+APP_BUILD = "0709g"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -758,6 +758,10 @@ class BubbleWindow(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.text = ""
+        self.full_text = ""
+        self._chars = 0
+        self._type_done = True
+        self._type_start = 0.0
         self.color = None
         self.until = 0.0
         self.cat = None
@@ -766,12 +770,19 @@ class BubbleWindow(QWidget):
 
     def show_for(self, cat, text, secs, color=None):
         self.cat = cat
-        self.text = text
+        self.full_text = text
+        self.text = ""
+        self._chars = 0
+        self._type_done = False
+        self._type_start = time.time()
         self.color = color
-        self.until = time.time() + secs
+        # the bubble stays up long enough to type out AND then be read
+        type_secs = min(2.6, len(text) * 0.022)
+        self.until = time.time() + secs + type_secs
         scr = (cat.screen() or QGuiApplication.primaryScreen()).geometry()
         maxtext = min(400, scr.width() // 3)
         fm = QFontMetrics(QFont("Arial", 10))
+        # size to the FULL text so the box doesn't jump while typing
         br = fm.boundingRect(QRect(0, 0, maxtext, 2000),
                              Qt.TextWordWrap, text)
         self._tr = QRect(self._pad, self._pad,
@@ -781,6 +792,24 @@ class BubbleWindow(QWidget):
         self.reposition()
         self.show()
         self.update()
+
+    def _advance_type(self):
+        if self._type_done:
+            return
+        # ~45 chars/sec, revealing whole words feels nicer than char-by-char
+        elapsed = time.time() - self._type_start
+        target = int(elapsed * 48)
+        if target >= len(self.full_text):
+            self.text = self.full_text
+            self._type_done = True
+        else:
+            # extend to the next space so words pop in whole
+            n = target
+            ft = self.full_text
+            while n < len(ft) and ft[n] not in " \n":
+                n += 1
+            self.text = ft[:n]
+        self._chars = len(self.text)
 
     def reposition(self):
         c = self.cat
@@ -796,6 +825,9 @@ class BubbleWindow(QWidget):
     def tick(self):
         if not self.isVisible():
             return
+        if not self._type_done:
+            self._advance_type()
+            self.update()
         if time.time() > self.until or self.cat is None:
             self.hide()
             self.cat = None
@@ -819,7 +851,10 @@ class BubbleWindow(QWidget):
         p.drawPolygon(tail)
         p.setPen(fg)
         p.setFont(QFont("Arial", 10))
-        p.drawText(self._tr, Qt.TextWordWrap, self.text)
+        shown = self.text
+        if not self._type_done and (int(time.time() * 2) & 1):
+            shown = shown + "█"          # blinking block caret
+        p.drawText(self._tr, Qt.TextWordWrap, shown)
 
 
 class AskBox(QWidget):
@@ -1761,7 +1796,7 @@ class Manager(QObject):
             b = {
                 "contents": contents,
                 "systemInstruction": {"parts": [{"text": persona}]},
-                "generationConfig": {"maxOutputTokens": 300,
+                "generationConfig": {"maxOutputTokens": 400,
                                      "temperature": 0.8},
             }
             if grounded and not has_image:
@@ -1872,8 +1907,15 @@ class Manager(QObject):
         def work():
             try:
                 ans = self._gemini_call(hist, persona).strip()
-                if len(ans) > 420:
-                    ans = ans[:417] + "…"
+                if len(ans) > 600:
+                    # trim at a sentence end near the limit, not mid-word
+                    cut = ans[:600]
+                    for stop in (". ", "! ", "? "):
+                        i = cut.rfind(stop)
+                        if i > 400:
+                            cut = cut[:i + 1]
+                            break
+                    ans = cut.rstrip() + ("…" if len(ans) > len(cut) else "")
 
                 def done():
                     self.ai_busy = False
