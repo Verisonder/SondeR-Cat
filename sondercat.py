@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.8.0"
-APP_BUILD = "0709u"
+APP_BUILD = "0709v"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -2745,12 +2745,14 @@ class CatWindow(QWidget):
         slp.setChecked(self.gcfg.get("force_sleep", False))
         slp.triggered.connect(mgr.toggle_force_sleep)
         menu.addAction(slp)
-        guard = QAction("Guard mode 🔦", menu)
+        gmenu = menu.addMenu("Guard mode 🔦")
+        guard = QAction("Guard mode 🔦", gmenu)
         guard.setCheckable(True)
         guard.setChecked(self.gcfg.get("guard_mode", False))
         guard.triggered.connect(mgr.toggle_guard_mode)
-        menu.addAction(guard)
-        gtimer = menu.addMenu("Guard auto-off ⏱")
+        gmenu.addAction(guard)
+        gmenu.addSeparator()
+        gtimer = gmenu.addMenu("Auto-off ⏱")
         cur_min = int(self.gcfg.get("guard_timer_min", 0) or 0)
         presets = [("No timer (manual)", 0), ("5 minutes", 5),
                    ("15 minutes", 15), ("30 minutes", 30),
