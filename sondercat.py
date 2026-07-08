@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "7.8.0"
-APP_BUILD = "0709q"
+APP_BUILD = "0709r"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -825,11 +825,9 @@ class GuardBeam(QWidget):
         # sweep like a held flashlight: aim outward-and-down toward the
         # side the torch is held on, panning a moderate arc around it
         try:
-            left = cat._guard_side(t) == 1
+            ang = cat._guard_beam_angle(t)
         except Exception:
-            left = False
-        base = (math.pi - 0.62) if left else 0.62
-        ang = base + math.sin(t * 0.8) * 0.7 * (-1 if left else 1)
+            ang = 0.62
         length = math.hypot(w, h)
         spread = 0.11
         a1, a2 = ang - spread, ang + spread
@@ -3823,6 +3821,17 @@ class CatWindow(QWidget):
             now = time.time()
         return int(now / 4.5) % 2
 
+    def _guard_beam_angle(self, now=None):
+        """The direction the patrol beam (and the flashlight) points, in
+        radians (y-down). Shared by the beam overlay and the torch sprite
+        so they always aim the same way. Sweeps an arc, biased outward-and-
+        down toward whichever paw currently holds the torch."""
+        if now is None:
+            now = time.time()
+        left = self._guard_side(now) == 1
+        base = (math.pi - 0.62) if left else 0.62
+        return base + math.sin(now * 0.8) * 0.7 * (-1 if left else 1)
+
     def _draw_flashlight(self, p, name, s):
         # a chunky handheld flashlight held out at the right FOREPAW,
         # pointing right; the red beam emerges from its lens
@@ -3855,26 +3864,39 @@ class CatWindow(QWidget):
         headc = QColor("#c8ccd2")            # metal head ring
         lensc = QColor("#fff4be")
         edge = QColor("#15171c")
-        # 2-cell-tall, 5-cell-long torch: grip, body×2, head, lens
-        d = -1 if left else 1               # direction the torch points
-        lx, ly = rpaw + 4 * d, fy
-        # warm glow at the emitter FIRST, so solid parts stay clean on top
+        # the torch ROTATES to point along the beam. Pivot at the grip
+        # (the paw); the 5-cell torch (grip, body×2, head, lens) is drawn
+        # along +x in a rotated frame, so it always aims where the beam does
+        ang = self._guard_beam_angle()
+        px, py = rpaw + 0.5, fy + 1.0        # grip pivot (cell coords)
+        p.save()
+        aa_was = p.testRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.translate(px * s, py * s)
+        p.rotate(math.degrees(ang))
+        # local +x = along the beam; cell i center at local x = i*s, the
+        # torch is 2 cells tall centred on the axis (y in [-s, +s])
+        def cell(i, col):
+            p.fillRect(int(i * s - 0.5 * s), int(-s), int(s), int(2 * s), col)
+        # warm glow just past the lens, painted first so solids stay clean
         glow = QColor(255, 130, 100); glow.setAlpha(140)
         p.setPen(Qt.NoPen); p.setBrush(glow)
-        p.drawEllipse(QPointF((lx + d) * s + s / 2, (ly + 1) * s),
-                      s * 1.8, s * 1.8)
-        # outline behind the torch cells for pop
-        for i in range(5):
-            cx = rpaw + i * d
-            p.fillRect(cx * s - 1, fy * s - 1, s + 2, 2 * s + 2,
-                       QColor("#15171c"))
-        # grip (at the paw), body x2, metal head, bright lens
-        p.fillRect(rpaw * s, fy * s, s, 2 * s, band)
-        p.fillRect((rpaw + 1 * d) * s, fy * s, s, 2 * s, body)
-        p.fillRect((rpaw + 2 * d) * s, fy * s, s, 2 * s, body)
-        p.fillRect((rpaw + 3 * d) * s, fy * s, s, 2 * s, headc)
-        p.fillRect(lx * s, ly * s, s, 2 * s, lensc)
-        self._torch_lens = (lx, ly)          # beam starts at the lens
+        p.drawEllipse(QPointF(4.6 * s, 0), s * 1.8, s * 1.8)
+        # outline behind the barrel for pop
+        p.fillRect(int(-0.5 * s - 1), int(-s - 1),
+                   int(5 * s + 2), int(2 * s + 2), edge)
+        cell(0, band)                        # grip (at the paw)
+        cell(1, body)
+        cell(2, body)
+        cell(3, headc)                       # metal head
+        cell(4, lensc)                       # bright lens
+        p.setRenderHint(QPainter.Antialiasing, aa_was)
+        p.restore()
+        # beam origin = the rotated lens centre (cell coords). The overlay
+        # adds (+0.5, +1.0) when it reads this, so subtract them here.
+        lens_x = px + 4.0 * math.cos(ang)
+        lens_y = py + 4.0 * math.sin(ang)
+        self._torch_lens = (lens_x - 0.5, lens_y - 1.0)
 
     def _draw_helmet(self, p, name, s):
         dome, rim, camo = self._helmet_cells(name)
