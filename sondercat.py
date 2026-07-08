@@ -147,7 +147,28 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710s"
+APP_BUILD = "0710t"
+
+# Distribution channel. The GitHub build self-updates from the repo; the
+# Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
+# updates), so its self-updater is disabled. The Store packaging step drops
+# a "STORE_BUILD" marker file next to this script to flip the channel — the
+# source file itself is identical in both builds.
+def _detect_channel():
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        if os.path.exists(os.path.join(here, "STORE_BUILD")):
+            return "store"
+        # MSIX apps install under ...\WindowsApps\... — treat as store too
+        if "windowsapps" in here.replace("/", "\\").lower():
+            return "store"
+    except Exception:
+        pass
+    return "github"
+
+
+APP_CHANNEL = _detect_channel()
+IS_STORE_BUILD = (APP_CHANNEL == "store")
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -1190,7 +1211,8 @@ class Manager(QObject):
         self.anim_test = None
         self.first_run = not os.path.exists(CONFIG_PATH)
         self._call_bridge = _CallBridge()
-        QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
+        if not IS_STORE_BUILD:      # Store build: Microsoft handles updates
+            QTimer.singleShot(20000, lambda: self.check_updates(manual=False))
         self._audio = _AudioMeter()
         self.music_mode = "off"
         self.ai_busy = False
@@ -1211,7 +1233,8 @@ class Manager(QObject):
         self._auto_timer = QTimer()
         self._auto_timer.timeout.connect(
             lambda: self.check_updates(manual=False))
-        self._auto_timer.start(6 * 3600 * 1000)
+        if not IS_STORE_BUILD:      # Store build updates via Microsoft Store
+            self._auto_timer.start(6 * 3600 * 1000)
         self.sprites_reloads = 0
         self._watch = None
         self._watch_timer = None
@@ -1389,6 +1412,13 @@ class Manager(QObject):
 
     def check_updates(self, manual=True):
         """Runs in a worker thread; UI messages go through the bridge."""
+        if IS_STORE_BUILD:
+            # the Microsoft Store keeps this build up to date automatically
+            if manual:
+                self.say_primary(
+                    "the Microsoft Store keeps me updated automatically 🛍️",
+                    3)
+            return
         if getattr(self, "_update_busy", False):
             if manual:
                 self.say_primary("still checking… 🐾", 3)
@@ -2769,21 +2799,27 @@ class CatWindow(QWidget):
         anim.addAction(awatch)
 
         upds = menu.addMenu("Updates ⤓")
-        unow = QAction("Check for updates now  (Ctrl+Shift+Alt+P)", menu)
-        unow.triggered.connect(
-            lambda _=False: mgr.check_updates(manual=True))
-        upds.addAction(unow)
-        aup = QAction("Install updates automatically", menu)
-        aup.setCheckable(True)
-        aup.setChecked(self.gcfg.get("auto_update", True))
-        aup.triggered.connect(mgr.toggle_auto_update)
-        upds.addAction(aup)
+        if IS_STORE_BUILD:
+            managed = QAction("Updates managed by Microsoft Store 🛍️", menu)
+            managed.setEnabled(False)
+            upds.addAction(managed)
+        else:
+            unow = QAction("Check for updates now  (Ctrl+Shift+Alt+P)", menu)
+            unow.triggered.connect(
+                lambda _=False: mgr.check_updates(manual=True))
+            upds.addAction(unow)
+            aup = QAction("Install updates automatically", menu)
+            aup.setCheckable(True)
+            aup.setChecked(self.gcfg.get("auto_update", True))
+            aup.triggered.connect(mgr.toggle_auto_update)
+            upds.addAction(aup)
         rst = QAction("Restart the cat 🔄", menu)
         rst.triggered.connect(mgr._restart)
         upds.addAction(rst)
         upds.addSeparator()
-        uinf = QAction(f"Installed: v{APP_VERSION} · build {APP_BUILD}",
-                       menu)
+        chan = " · Store" if IS_STORE_BUILD else ""
+        uinf = QAction(
+            f"Installed: v{APP_VERSION} · build {APP_BUILD}{chan}", menu)
         uinf.setEnabled(False)
         upds.addAction(uinf)
         tst = menu.addMenu("Test animations")
