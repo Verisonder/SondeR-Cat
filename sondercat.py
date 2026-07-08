@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.2.0"
-APP_BUILD = "0710j"
+APP_BUILD = "0710k"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -4138,12 +4138,14 @@ class CatWindow(QWidget):
                   for x, c in enumerate(g[y])
                   if c != "." and (x <= 8 or x >= 17)]
             L2, R2 = (min(sc), max(sc)) if sc else (4, 21)
+            RIN = 1          # dangle/stretch: right cup 1 closer to the face
             for cy in range(t2 + 3, t2 + 8):
                 for cx in (L2 - 3 - OUT, L2 - 2 - OUT, L2 - 1 - OUT,
-                           R2 + 1 + OUT, R2 + 2 + OUT, R2 + 3 + OUT):
+                           R2 + 1 + OUT - RIN, R2 + 2 + OUT - RIN,
+                           R2 + 3 + OUT - RIN):
                     dark.append((cx, cy))
-            lite += [(L2 - 2 - OUT, t2 + 4), (R2 + 2 + OUT, t2 + 4),
-                     (L2 - 2 - OUT, t2 + 5), (R2 + 2 + OUT, t2 + 5)]
+            lite += [(L2 - 2 - OUT, t2 + 4), (R2 + 2 + OUT - RIN, t2 + 4),
+                     (L2 - 2 - OUT, t2 + 5), (R2 + 2 + OUT - RIN, t2 + 5)]
             W, H = sprites.GRID_W, sprites.GRID_H
             dark = [(x, y) for (x, y) in dark if 0 <= x < W and 0 <= y < H]
             lite = [(x, y) for (x, y) in lite if 0 <= x < W and 0 <= y < H]
@@ -4198,9 +4200,22 @@ class CatWindow(QWidget):
             hp = QPainter(img)
             dkc = QColor("#2a2a33")
             ltc = QColor("#7d7d94")
+            whc = QColor("#ffffff")           # matches the cat-body outline
             # NOTE: the base sprite is never mirrored (facing is shown by
             # the run tilt), so the headset must not mirror either
             dcells, lcells = self._headset_cells(name)
+            # white outline: every empty cell touching the dark shell (8-way)
+            solid = set(dcells) | set(lcells)
+            W, H = sprites.GRID_W, sprites.GRID_H
+            halo = set()
+            for (hx, hy) in dcells:
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        n = (hx + dx, hy + dy)
+                        if n not in solid and 0 <= n[0] < W and 0 <= n[1] < H:
+                            halo.add(n)
+            for (hx, hy) in halo:
+                hp.fillRect(hx * s, hy * s, s, s, whc)
             for (hx, hy) in dcells:
                 hp.fillRect(hx * s, hy * s, s, s, dkc)
             for (hx, hy) in lcells:
