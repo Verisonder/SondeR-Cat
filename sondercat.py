@@ -125,7 +125,7 @@ try:
                             Signal)
     from PySide6.QtGui import (QAction, QColor, QCursor, QFont,
                                QGuiApplication, QIcon, QPainter,
-                               QPainterPath, QPixmap, QFontMetrics, QPolygonF)
+                               QPainterPath, QPixmap, QFontMetrics, QPolygonF, QPen)
     from PySide6.QtWidgets import (QApplication, QColorDialog, QInputDialog,
                                    QLineEdit, QMenu, QMessageBox,
                                    QSystemTrayIcon, QVBoxLayout, QWidget)
@@ -837,12 +837,13 @@ class AskBox(QWidget):
         self.edit.setStyleSheet(
             "QLineEdit{background:transparent;border:none;"
             "color:#40342a;font-family:Arial;font-size:13px;"
-            "selection-background-color:#e6b877;}")
+            "font-weight:bold;selection-background-color:#f0c891;"
+            "selection-color:#40342a;}")
         self.edit.returnPressed.connect(self._send)
 
     def open_above(self, cat, name):
         self.cat = cat
-        self.edit.setPlaceholderText(f"Ask {name}…   (Esc to close)")
+        self.edit.setPlaceholderText(f"🐾  Ask {name}…   (Esc to close)")
         self.edit.clear()
         fm = QFontMetrics(QFont("Arial", 13))
         w = max(268, fm.horizontalAdvance(
@@ -867,15 +868,23 @@ class AskBox(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w, h = self.width(), self.height() - self._TAIL
-        p.setPen(QColor(0, 0, 0, 60))
-        p.setBrush(QColor(255, 253, 246, 244))
-        p.drawRoundedRect(1, 1, w - 2, h - 2, 10, 10)
         cx = w // 2
+        paper = QColor("#fbf6ea")
+        edge = QColor("#c8a06a")           # warm tan, like the cat's outline
+        # tail first, so the body border draws cleanly over its base
         p.setPen(Qt.NoPen)
-        p.setBrush(QColor(255, 253, 246, 244))
-        tail = QPolygonF([QPointF(cx - 8, h - 2), QPointF(cx + 8, h - 2),
-                          QPointF(cx, h + self._TAIL - 1)])
-        p.drawPolygon(tail)
+        p.setBrush(edge)
+        p.drawPolygon(QPolygonF([
+            QPointF(cx - 9, h - 6), QPointF(cx + 9, h - 6),
+            QPointF(cx, h + self._TAIL - 1)]))
+        p.setBrush(paper)
+        p.drawPolygon(QPolygonF([
+            QPointF(cx - 6, h - 8), QPointF(cx + 6, h - 8),
+            QPointF(cx, h + self._TAIL - 4)]))
+        # chunky 3px rounded border + cream fill
+        p.setPen(QPen(edge, 3))
+        p.setBrush(paper)
+        p.drawRoundedRect(3, 3, w - 6, h - 6, 11, 11)
 
     def _send(self):
         t = self.edit.text().strip()
