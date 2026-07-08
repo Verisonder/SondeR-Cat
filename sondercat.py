@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710n"
+APP_BUILD = "0710o"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -4139,13 +4139,17 @@ class CatWindow(QWidget):
                   if c != "." and (x <= 8 or x >= 17)]
             L2, R2 = (min(sc), max(sc)) if sc else (4, 21)
             RIN = 1          # dangle/stretch: right cup 1 closer to the face
+            Lcup = [L2 - 3 - OUT, L2 - 2 - OUT, L2 - 1 - OUT]
+            Rcup = [R2 + 1 + OUT - RIN, R2 + 2 + OUT - RIN, R2 + 3 + OUT - RIN]
+            # keep a 1-cell margin from the sprite edges so the white outline
+            # (drawn just outside the cup) never falls off-canvas and breaks
+            Lcup = [x + max(0, 1 - min(Lcup)) for x in Lcup]
+            Rcup = [x + min(0, (sprites.GRID_W - 2) - max(Rcup)) for x in Rcup]
             for cy in range(t2 + 3, t2 + 8):
-                for cx in (L2 - 3 - OUT, L2 - 2 - OUT, L2 - 1 - OUT,
-                           R2 + 1 + OUT - RIN, R2 + 2 + OUT - RIN,
-                           R2 + 3 + OUT - RIN):
+                for cx in Lcup + Rcup:
                     dark.append((cx, cy))
-            lite += [(L2 - 2 - OUT, t2 + 4), (R2 + 2 + OUT - RIN, t2 + 4),
-                     (L2 - 2 - OUT, t2 + 5), (R2 + 2 + OUT - RIN, t2 + 5)]
+            lite += [(Lcup[1], t2 + 4), (Rcup[1], t2 + 4),
+                     (Lcup[1], t2 + 5), (Rcup[1], t2 + 5)]
             W, H = sprites.GRID_W, sprites.GRID_H
             dark = [(x, y) for (x, y) in dark if 0 <= x < W and 0 <= y < H]
             lite = [(x, y) for (x, y) in lite if 0 <= x < W and 0 <= y < H]
@@ -4155,18 +4159,24 @@ class CatWindow(QWidget):
         # typing/kneading poses look sideways: far cup tucks behind the
         # head; front-facing poses (dancing) wear both cups fully
         tucked = name.startswith(("type_", "knead_"))
+        Wc = sprites.GRID_W
+        Rcup = [R + 1 + OUT, R + 2 + OUT, R + 3 + OUT]
+        Rcup = [x + min(0, (Wc - 2) - max(Rcup)) for x in Rcup]  # edge margin
         for cy in range(top + 5, top + 10):
-            for cx in (R + 1 + OUT, R + 2 + OUT, R + 3 + OUT):
+            for cx in Rcup:
                 dark.append((cx, cy))
         if tucked:
+            fc = max(1, L - 1 - OUT)                 # keep off the left edge
             for cy in range(top + 6, top + 10):
-                dark.append((L - 1 - OUT, cy))
+                dark.append((fc, cy))
         else:
+            Lcup = [L - 3 - OUT, L - 2 - OUT, L - 1 - OUT]
+            Lcup = [x + max(0, 1 - min(Lcup)) for x in Lcup]     # edge margin
             for cy in range(top + 5, top + 10):
-                for cx in (L - 3 - OUT, L - 2 - OUT, L - 1 - OUT):
+                for cx in Lcup:
                     dark.append((cx, cy))
-            lite += [(L - 2 - OUT, top + 6), (L - 2 - OUT, top + 7)]
-        lite += [(R + 2 + OUT, top + 6), (R + 2 + OUT, top + 7)]
+            lite += [(Lcup[1], top + 6), (Lcup[1], top + 7)]
+        lite += [(Rcup[1], top + 6), (Rcup[1], top + 7)]
         mid = (L + R) / 2.0                        # band arcs between them
         for x in range(L - 1, R + 2):
             t = abs(x - mid) / max(1.0, mid - (L - 1))
