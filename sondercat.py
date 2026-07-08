@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "3.3.2"
-APP_BUILD = "0708a"
+APP_BUILD = "0708b"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -2342,6 +2342,20 @@ class CatWindow(QWidget):
         x = max(g.left(), min(self.x(), g.right() - self.width()))
         self._glide_to(QPoint(x, g.bottom() - self.height() + 1))
 
+    def _stand_up_here(self):
+        """Exit hiding by standing up at the bottom — no gliding home."""
+        self.manual_peek = False
+        self.peeking = False
+        self._saved_pos = None
+        try:
+            g = self._ground_point()
+            self.move(g)
+            self._sync_float()
+        except Exception:
+            pass
+        self.state = IDLE
+        self.update()
+
     def _unpeek(self, cancel=True):
         if cancel:
             self.manual_peek = False
@@ -2396,7 +2410,7 @@ class CatWindow(QWidget):
                 if self.gcfg.get("hide_mode", False):
                     self.mgr.exit_hide_mode()
                     return
-                self._unpeek()
+                self._stand_up_here()
                 return
             self.dragging = True
             self.glide_target = None
@@ -2884,6 +2898,29 @@ class CatWindow(QWidget):
                 for x, c in enumerate(g[y]) if c != "."]
         L, R = (min(cols), max(cols)) if cols else (4, 21)
         dark, lite = [], []
+        if L > 8 and R < 17:
+            # topmost content is raised paws (dangle/stretch): anchor on
+            # the ears at the sides instead, and skip the band — it would
+            # cross the raised arms
+            side = [y for y, row in enumerate(g)
+                    if any(c != "." for x, c in enumerate(row)
+                           if x <= 8 or x >= 17)]
+            t2 = side[0] if side else top
+            sc = [x for y in range(t2, min(t2 + 3, len(g)))
+                  for x, c in enumerate(g[y])
+                  if c != "." and (x <= 8 or x >= 17)]
+            L2, R2 = (min(sc), max(sc)) if sc else (4, 21)
+            for cy in range(t2 + 3, t2 + 8):
+                for cx in (L2 - 3, L2 - 2, L2 - 1, R2 + 1, R2 + 2, R2 + 3):
+                    dark.append((cx, cy))
+            lite += [(L2 - 2, t2 + 4), (R2 + 2, t2 + 4),
+                     (L2 - 2, t2 + 5), (R2 + 2, t2 + 5)]
+            W, H = sprites.GRID_W, sprites.GRID_H
+            dark = [(x, y) for (x, y) in dark if 0 <= x < W and 0 <= y < H]
+            lite = [(x, y) for (x, y) in lite if 0 <= x < W and 0 <= y < H]
+            cached = (dark, lite)
+            CatWindow._HEADSET_CACHE[name] = cached
+            return cached
         # typing/kneading poses look sideways: far cup tucks behind the
         # head; front-facing poses (dancing) wear both cups fully
         tucked = name.startswith(("type_", "knead_"))
