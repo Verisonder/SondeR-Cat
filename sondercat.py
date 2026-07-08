@@ -1675,17 +1675,17 @@ class CatWindow(QWidget):
 
         cust = menu.addMenu("Customization 🎨")
         thm = cust.addMenu("Themes ✨")
-        lil = QAction("Lilly 🧡", menu)
+        lil = QAction("Lilly", menu)
         lil.setCheckable(True)
         lil.setChecked(self.ccfg["palette"] == "lilly")
         lil.triggered.connect(lambda _=False: self.set_palette("lilly"))
         thm.addAction(lil)
-        jjt = QAction("JJ 💚", menu)
+        jjt = QAction("JJ", menu)
         jjt.setCheckable(True)
         jjt.setChecked(self.ccfg["palette"] == "jj")
         jjt.triggered.connect(lambda _=False: self.set_palette("jj"))
         thm.addAction(jjt)
-        mmt = QAction("Mimi 💙", menu)
+        mmt = QAction("Mimi", menu)
         mmt.setCheckable(True)
         mmt.setChecked(self.ccfg["palette"] == "mimi")
         mmt.triggered.connect(lambda _=False: self.set_palette("mimi"))
@@ -2210,7 +2210,7 @@ class CatWindow(QWidget):
         if now < mgr.stretch_until:
             self.state = STRETCH
             pass
-        elif overheat:
+        elif overheat and not want_peek:
             if self.state != OVERHEAT and now - self.last_overheat_say > 8:
                 self.last_overheat_say = now
                 self.say(random.choice(["so much typing!!", "*tak tak tak*",
@@ -2222,15 +2222,15 @@ class CatWindow(QWidget):
                     "x": r.left() + random.randint(20, r.width() - 20),
                     "y": r.top() + 6, "vy": 1.3, "life": 1.2,
                     "seed": random.random() * 6})
-        elif (inputs.scrolling()
+        elif (inputs.scrolling() and not want_peek
               and inputs.last_scroll >= inputs.last_key):
             if self.state != SCROLLPLAY and now - self.last_scroll_say > 10:
                 self.last_scroll_say = now
                 self.say("paper!!", 1.2)
             self.state = SCROLLPLAY
-        elif typing_now:
+        elif typing_now and not want_peek:
             self.state = KNEAD
-        elif inputs.scrolling():
+        elif inputs.scrolling() and not want_peek:
             if self.state != SCROLLPLAY and now - self.last_scroll_say > 10:
                 self.last_scroll_say = now
                 self.say("paper!!", 1.2)
@@ -2940,7 +2940,8 @@ class CatWindow(QWidget):
             pw = 2 * s                     # pupil size (px)
             pp = QPainter(img)
             wearing = (self.state == DANCE
-                       or (self.state in (KNEAD, OVERHEAT, SCROLLPLAY)
+                       or (self.state in (KNEAD, OVERHEAT, SCROLLPLAY,
+                                          PEEK)
                            and self.mgr.music_on
                            and self.gcfg.get("dance_music", True)))
             if wearing:
