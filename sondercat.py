@@ -806,19 +806,23 @@ class GuardBeam(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w, h = self.width(), self.height()
-        # beam originates from the cat's head, sweeps side to side and dips
+        # beam originates from a flashlight in the cat's paw (lower part of
+        # the sprite), sweeping across the desktop at a shallow angle
         cat = self.mgr.primary()
         try:
             cr = cat.geometry()
-            ox = cr.center().x() - self.x()
-            oy = cr.top() - self.y() + 6
+            scale = max(1, cat.scale)
+            lens = getattr(cat, "_torch_lens", (24, 21))
+            ox = cr.left() + int(lens[0] * scale) - self.x()
+            oy = cr.top() + int(lens[1] * scale) - self.y()
         except Exception:
-            ox, oy = w // 2, 40
+            ox, oy = w // 2, h // 2
         t = self._phase
-        # sweep angle: wide left-right oscillation, aimed downward
-        ang = (math.pi / 2) + math.sin(t * 1.1) * 0.85
+        # sweep like a held flashlight: pan around the outward/down direction
+        base = 0.5              # ~down-and-slightly-right
+        ang = base + math.sin(t * 0.9) * 0.85
         length = math.hypot(w, h)
-        spread = 0.16
+        spread = 0.13
         a1, a2 = ang - spread, ang + spread
         p1 = QPointF(ox + math.cos(a1) * length, oy + math.sin(a1) * length)
         p2 = QPointF(ox + math.cos(a2) * length, oy + math.sin(a2) * length)
@@ -3681,7 +3685,7 @@ class CatWindow(QWidget):
     _HELMET_CACHE = {}
 
     def _helmet_cells(self, name):
-        """Camo helmet dome cells + rim cells, anchored to the head top."""
+        """Camo helmet dome + brim, sitting ON the head crown."""
         cached = CatWindow._HELMET_CACHE.get(name)
         if cached is not None:
             return cached
@@ -3689,37 +3693,81 @@ class CatWindow(QWidget):
         if not g:
             CatWindow._HELMET_CACHE[name] = ([], [], [])
             return ([], [], [])
-        # find the head's top row and its horizontal extent (ignore ears:
-        # scan the widest solid band in the top third)
-        rows = [y for y, r in enumerate(g) if any(c != "." for c in r)]
-        top = rows[0] if rows else 1
-        # widest row within the head region gives the dome width
-        best_w, best_y, bestL, bestR = 0, top, 4, 21
-        for y in range(top, min(top + 9, len(g))):
+        H = len(g)
+        # the "crown" is the first FULL-WIDTH head row (below the ear gap):
+        # scan down for the row where the head becomes solid across its width
+        crown_y, L, R = None, 4, 21
+        for y in range(1, min(12, H)):
             xs = [x for x, c in enumerate(g[y]) if c != "."]
-            if xs and (max(xs) - min(xs)) > best_w:
-                best_w = max(xs) - min(xs)
-                best_y, bestL, bestR = y, min(xs), max(xs)
-        L, R = bestL, bestR
-        dome, rim, camo = [], [], []
-        # dome sits over the top ~4 rows of the head, hugging its width
-        for i, dy in enumerate(range(best_y - 2, best_y + 2)):
-            inset = 2 - i if i < 2 else 0
-            for x in range(L + inset, R - inset + 1):
-                if 0 <= x < sprites.GRID_W and 0 <= dy < sprites.GRID_H:
+            if not xs:
+                continue
+            span = max(xs) - min(xs)
+            # a wide, mostly-filled row = the top of the skull (not ears)
+            filled = sum(1 for c in g[y] if c != ".")
+            if span >= 12 and filled >= span - 1:
+                crown_y, L, R = y, min(xs), max(xs)
+                break
+        if crown_y is None:
+            CatWindow._HELMET_CACHE[name] = ([], [], [])
+            return ([], [], [])
+        dome, brim, camo = [], [], []
+        cx = (L + R) / 2.0
+        half = (R - L) / 2.0
+        # dome: 3 rows curving over the crown (rows crown_y-1 .. crown_y+1),
+        # narrowing toward the top for a rounded helmet silhouette
+        for row_i, dy in enumerate((crown_y - 1, crown_y, crown_y + 1)):
+            # curvature: top row inset most, lower rows wider
+            inset = (2 - row_i)
+            for x in range(int(L + inset), int(R - inset) + 1):
+                if 0 <= x < sprites.GRID_W and 0 <= dy < H:
                     dome.append((x, dy))
-        # rim: a straight brim line across the brow
+        # brim: one row below the dome, full head width, slight forward jut
+        by = crown_y + 2
         for x in range(L, R + 1):
-            ry = best_y + 2
-            if 0 <= x < sprites.GRID_W and 0 <= ry < sprites.GRID_H:
-                rim.append((x, ry))
-        # camo blotches: a sparse deterministic subset of the dome
+            if 0 <= x < sprites.GRID_W and 0 <= by < H:
+                brim.append((x, by))
+        # camo: deterministic sparse patches on the dome
         for (x, y) in dome:
-            if ((x * 7 + y * 13) % 5) == 0:
+            if ((x * 5 + y * 11) % 4) == 0:
                 camo.append((x, y))
-        cached = (dome, rim, camo)
+        cached = (dome, brim, camo)
         CatWindow._HELMET_CACHE[name] = cached
         return cached
+
+    def _draw_flashlight(self, p, name, s):
+        # a small handheld flashlight at the right front paw, pointing
+        # outward/down (there's canvas room on the right side)
+        g = sprites.FRAMES.get(name)
+        if not g:
+            return
+        H, W = len(g), sprites.GRID_W
+        low_rows = [y for y in range(int(H * 0.66), H)
+                    if any(c != "." for c in g[y])]
+        if not low_rows:
+            return
+        fy = low_rows[0] + 1
+        xs = [x for x, c in enumerate(g[fy]) if c != "."]
+        rpaw = max(xs)                        # right paw edge
+        # keep the whole torch (paw..lens = 4 cells right) on the canvas
+        rpaw = min(rpaw, W - 5)
+        body = QColor("#2c2f36")
+        ring = QColor("#4a4f58")
+        lens = QColor("#fff2b0")
+        glow = QColor(255, 236, 150)
+        cells = [(rpaw, fy), (rpaw + 1, fy + 1), (rpaw + 2, fy + 2)]
+        for (cx, cy) in cells:
+            if 0 <= cx < W and 0 <= cy < H:
+                p.fillRect(cx * s, cy * s, s, s, body)
+        tip = (rpaw + 3, min(fy + 3, H - 1))
+        p.fillRect(tip[0] * s, tip[1] * s, s, s, ring)
+        lx, ly = rpaw + 3, min(fy + 2, H - 1)
+        glow.setAlpha(120)
+        p.setPen(Qt.NoPen)
+        p.setBrush(glow)
+        p.drawEllipse(QPointF(lx * s + s / 2, ly * s + s / 2),
+                      s * 1.6, s * 1.6)
+        p.fillRect(lx * s, ly * s, s, s, lens)   # solid lens on top of glow
+        self._torch_lens = (lx, ly)
 
     def _draw_helmet(self, p, name, s):
         dome, rim, camo = self._helmet_cells(name)
@@ -3830,10 +3878,11 @@ class CatWindow(QWidget):
                 hp.fillRect(hx * s, hy * s, s, s, ltc)
             hp.end()
 
-        # guard mode: tactical helmet on the head + angry look
+        # guard mode: tactical helmet on the head + flashlight in paw
         if self.mgr.cfg["global"].get("guard_mode", False):
             gp = QPainter(img)
             self._draw_helmet(gp, name, s)
+            self._draw_flashlight(gp, name, s)
             gp.end()
 
         eyes = sprites.EYE_CELLS.get(name)
