@@ -147,6 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "3.3.2"
+APP_BUILD = "0708a"
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
 
@@ -958,7 +959,7 @@ class Manager(QObject):
                 auto = self.cfg["global"].get("auto_update", True)
                 if not (auto or getattr(self, "first_run", False)):
                     ui(lambda: self.say_primary(
-                        f"{label} is available! menu → Check for updates",
+                        f"{label} is available! menu → Updates",
                         6))
                     return
                 ui(lambda: self.say_primary(
@@ -1279,7 +1280,9 @@ class Manager(QObject):
         if not lines or lines == ["none"]:
             return "idle", ""
         results = [Manager._classify_line(l) for l in lines]
-        for want in ("dance", "listen"):
+        # listen WINS: if a browser/video is playing you're watching —
+        # the cat only dances when a music app is the only thing playing
+        for want in ("listen", "dance"):
             for st, ti in results:
                 if st == want:
                     return st, ti
@@ -1805,11 +1808,6 @@ class CatWindow(QWidget):
         dnc.setChecked(self.gcfg.get("dance_music", True))
         dnc.triggered.connect(mgr.toggle_dance_music)
         beh.addAction(dnc)
-        aup = QAction("Install updates automatically ⤓", menu)
-        aup.setCheckable(True)
-        aup.setChecked(self.gcfg.get("auto_update", True))
-        aup.triggered.connect(mgr.toggle_auto_update)
-        beh.addAction(aup)
         snd = QAction("Meow sounds", menu)
         snd.setCheckable(True)
         snd.setChecked(self.gcfg.get("sounds", True))
@@ -1866,9 +1864,21 @@ class CatWindow(QWidget):
         about = QAction("About", menu)
         about.triggered.connect(self.show_about)
         menu.addAction(about)
-        upd = QAction("Check for updates ⤓", menu)
-        upd.triggered.connect(lambda _=False: mgr.check_updates(manual=True))
-        menu.addAction(upd)
+        upds = menu.addMenu("Updates ⤓")
+        unow = QAction("Check for updates now", menu)
+        unow.triggered.connect(
+            lambda _=False: mgr.check_updates(manual=True))
+        upds.addAction(unow)
+        aup = QAction("Install updates automatically", menu)
+        aup.setCheckable(True)
+        aup.setChecked(self.gcfg.get("auto_update", True))
+        aup.triggered.connect(mgr.toggle_auto_update)
+        upds.addAction(aup)
+        upds.addSeparator()
+        uinf = QAction(f"Installed: v{APP_VERSION} · build {APP_BUILD}",
+                       menu)
+        uinf.setEnabled(False)
+        upds.addAction(uinf)
         tst = menu.addMenu("Test animations")
         for label, kind in (("Blink", "blink"),
                             ("Typing (kneading)", "knead"),
