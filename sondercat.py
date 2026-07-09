@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.8.0"
-APP_BUILD = "0712b"
+APP_BUILD = "0712c"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1525,6 +1525,23 @@ class Manager(QObject):
         QApplication.instance().quit()
 
     # --------------------------------------------------- animation tests --
+    def test_parachute(self):
+        """Demo the parachute: teleport the cat up near the top of the screen,
+        then let it float back down under the canopy."""
+        c = self.primary()
+        try:
+            if c.perch_hwnd is not None or c.perch_pending is not None:
+                c._end_perch(go_home=False)
+            if c.peeking:
+                c._unpeek(cancel=True)
+            scr = c.screen() or QGuiApplication.primaryScreen()
+            g = scr.availableGeometry()
+            c.move(c.x(), g.top() + 4)
+            c._sync_float()
+            c._parachute_to_ground()
+        except Exception:
+            pass
+
     def start_anim_test(self, kind, secs=4.0):
         if kind == "paper":
             self.test_scroll()
@@ -2809,19 +2826,6 @@ class CatWindow(QWidget):
         nm.triggered.connect(mgr.set_name)
         msgs.addAction(nm)
 
-        anim = menu.addMenu("Animations")
-        aopen = QAction("Open animations file (sprites.py)…", menu)
-        aopen.triggered.connect(mgr.open_sprites)
-        anim.addAction(aopen)
-        areload = QAction("Reload animations now", menu)
-        areload.triggered.connect(lambda _=False: mgr.do_reload_sprites())
-        anim.addAction(areload)
-        awatch = QAction("Auto-reload on save", menu)
-        awatch.setCheckable(True)
-        awatch.setChecked(self.gcfg.get("watch_sprites", False))
-        awatch.triggered.connect(mgr.toggle_watch_sprites)
-        anim.addAction(awatch)
-
         upds = menu.addMenu("Updates ⤓")
         if IS_STORE_BUILD:
             managed = QAction("Updates managed by Microsoft Store 🛍️", menu)
@@ -2866,13 +2870,9 @@ class CatWindow(QWidget):
         wtest.triggered.connect(
             lambda _=False: mgr.primary().try_perch(announce=True))
         tst.addAction(wtest)
-        tst.addSeparator()
-        mdoc = QAction("Music doctor 🎧 (5s live test)", menu)
-        mdoc.triggered.connect(mgr.music_doctor)
-        tst.addAction(mdoc)
-        doctor = QAction("Scroll doctor (5s live test)", menu)
-        doctor.triggered.connect(mgr.scroll_doctor)
-        tst.addAction(doctor)
+        para = QAction("Parachute drop ☂️", menu)
+        para.triggered.connect(lambda _=False: mgr.test_parachute())
+        tst.addAction(para)
 
         hid = QAction("Hide at the bottom 🫣", menu)
         hid.setCheckable(True)
