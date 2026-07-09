@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.2.1"
-APP_BUILD = "0713a"
+APP_BUILD = "0713b"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -5122,7 +5122,7 @@ class CatWindow(QWidget):
             p.drawEllipse(QPointF(st["x"], st["y"]), rad, rad)
 
         # speech bubble (temporary) or pinned note (persistent)
-        text, bg, fg = None, QColor(255, 253, 246, 235), QColor("#40342a")
+        text, bg, fg = None, QColor(255, 253, 246, 252), QColor("#3a2f26")
         if now < self.bubble_until and self.bubble_text:
             text = self.bubble_text
             if self.bubble_color:
@@ -5137,28 +5137,39 @@ class CatWindow(QWidget):
                 fnt.setPointSize(pt)
                 p.setFont(fnt)
                 fm = p.fontMetrics()
-                br = fm.boundingRect(QRect(0, 0, maxw - 18, 1000),
-                                     Qt.TextWordWrap | Qt.AlignCenter, text)
-                th = br.height() + 10
+                br = fm.boundingRect(QRect(0, 0, maxw - 20, 1000),
+                                     Qt.TextWordWrap | Qt.AlignLeft, text)
+                th = br.height() + 12
                 if th <= TOP_MARGIN - 10:
                     break
-            tw = min(maxw, br.width() + 18)
+            tw = min(maxw, br.width() + 20)
             th = min(th, TOP_MARGIN - 10)
             bx = max(2, min(self.width() - tw - 2, r.center().x() - tw // 2))
-            by = 2
+            by = 3
             path = QPainterPath()
-            path.addRoundedRect(bx, by, tw, th, 8, 8)
-            path.moveTo(r.center().x() - 5, by + th)
-            path.lineTo(r.center().x() + 5, by + th)
-            path.lineTo(r.center().x(), by + th + 6)
-            path.closeSubpath()
-            p.setPen(QColor("#40342a") if not self.bubble_color
-                     or now >= self.bubble_until else QColor("#7e1408"))
+            path.addRoundedRect(bx, by, tw, th, 10, 10)
+            tailx = min(max(r.center().x(), bx + 12), bx + tw - 12)
+            tail = QPainterPath()
+            tail.moveTo(tailx - 6, by + th - 1)
+            tail.lineTo(tailx + 6, by + th - 1)
+            tail.lineTo(tailx + 1, by + th + 7)
+            tail.lineTo(tailx - 1, by + th + 7)
+            tail.closeSubpath()
+            path = path.united(tail)
+            # subtle shadow (limited headroom, so keep it light)
+            for off, a in ((3, 22), (1, 30)):
+                p.setPen(Qt.NoPen)
+                p.setBrush(QColor(0, 0, 0, a))
+                p.save(); p.translate(0, off); p.drawPath(path); p.restore()
+            border = (QColor(70, 52, 40, 60) if not self.bubble_color
+                      or now >= self.bubble_until
+                      else QColor(255, 255, 255, 90))
+            p.setPen(QPen(border, 1.5))
             p.setBrush(bg)
             p.drawPath(path)
             p.setPen(fg)
-            p.drawText(QRect(int(bx), int(by), int(tw), int(th)),
-                       Qt.AlignCenter | Qt.TextWordWrap, text)
+            p.drawText(QRect(int(bx + 8), int(by), int(tw - 16), int(th)),
+                       Qt.AlignLeft | Qt.AlignVCenter | Qt.TextWordWrap, text)
 
         # floating pixel Pomodoro timer next to the cat (primary only)
         if self.index == 0 and self.mgr.pomo_end is not None:
