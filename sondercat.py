@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.6.0"
-APP_BUILD = "0711s"
+APP_BUILD = "0711t"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -4037,21 +4037,11 @@ class CatWindow(QWidget):
                 base = sprites.FRAMES[fallback.get(name, "sit_a")]
             grid = sprites.apply_pattern(base, self.ccfg["pattern"])
             pal = sprites.OVERHEAT_PALETTE if hot else self.palette()
-            if name in ("run_a", "run_b") and hasattr(sprites, "render_run_frame"):
-                # gallop uses a higher-resolution source so the reference
-                # detail (face, tail, four legs) survives — rendered into the
-                # SAME footprint the low-res frame would occupy
-                tw = int(sprites.GRID_W * self.scale)
-                th = int(sprites.GRID_H * self.scale)
-                pat_hi = self.ccfg["pattern"]
-                img = sprites.render_run_frame(name, pal, tw, th, flip)
-            else:
-                img = sprites.render_frame(grid, pal, self.scale, flip)
+            img = sprites.render_frame(grid, pal, self.scale, flip)
             self._frame_cache[key] = img
         return img
 
     _HELMET_CACHE = {}
-    _RUNBOX_CACHE = {}   # run-frame content bbox fractions (for clip-safe scaling)
 
     def _helmet_cells(self, name):
         """Camo helmet dome + brim, sitting ON the head crown."""
@@ -4482,33 +4472,14 @@ class CatWindow(QWidget):
         tw_, th_ = r.width(), r.height()
         tx, ty = r.left(), r.top() + jy
         if self.state == CHASE and name in ("run_a", "run_b"):
-            # bigger while galloping. Bottom-anchored, but the vertical
-            # anchor is CLAMPED so the enlarged, rotated sprite can never
-            # poke out of the window — at big cat sizes the fixed
-            # TOP_MARGIN isn't enough headroom for a naive bottom anchor.
-            rf = 1.40
+            # a little bigger while galloping; anchor UP into the top margin
+            # (a chasing cat is airborne, not on the floor) so the enlarged,
+            # rotated sprite doesn't clip the bottom of the window
+            rf = 1.27
             tw_ = int(r.width() * rf)
             th_ = int(r.height() * rf)
             tx = r.center().x() - tw_ // 2
-            box = CatWindow._RUNBOX_CACHE.get(name)
-            if box is None:
-                g = sprites.FRAMES[name]
-                ys = [y for y, row in enumerate(g)
-                      if any(c != "." for c in row)]
-                xs = [x for row in g
-                      for x, c in enumerate(row) if c != "."]
-                box = (min(ys) / sprites.GRID_H,
-                       (max(ys) + 1) / sprites.GRID_H,
-                       (max(xs) - min(xs) + 1) / sprites.GRID_W)
-                CatWindow._RUNBOX_CACHE[name] = box
-            t0, b0, wf = box
-            hw = wf * tw_ / 2.0
-            hh = (b0 - t0) * th_ / 2.0
-            ang = math.radians(30)            # max travel-aim tilt
-            ry = hw * math.sin(ang) + hh * math.cos(ang)
-            cyp = r.bottom() + jy - th_ + (t0 + b0) / 2.0 * th_
-            cy2 = min(max(cyp, ry), self.height() - ry)
-            ty = int(cy2 - (t0 + b0) / 2.0 * th_)
+            ty = r.bottom() - th_ + jy
         if self.mochi > 1.02:                # mochi: sag down from the paws
             m = self.mochi
             th_ = int(r.height() * m)

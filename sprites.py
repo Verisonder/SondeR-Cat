@@ -275,120 +275,65 @@ RUN_A = [
     "..........................",
     "..........................",
     "..........................",
-    ".....K.KK.................",
-    ".....K.KK.................",
-    "....KKKZK.................",
-    "....KBBBK.................",
-    "...KBWBBBK...........KKKK.",
-    "...KBWBBBK...........KKKK.",
-    ".O.KBKEBBBKKKKKK....KBBBBK",
-    ".OONWBBBBBBBBBBBKKKKBBSSK.",
-    ".OONWBBBBBBBBBBBKKKKBBSSK.",
-    "..KKWWBBWBBBBBBBBKBBBKKKK.",
-    "....KKWBBBBBBBBBBBBBK.....",
-    "....KWWWBBBBBBBBBBKK......",
-    "....KWWWBBBBBBBBBBKK......",
-    ".....KWWBBBBBBBBBBK.......",
-    ".....KSSBBKBBBKBBBK.......",
-    ".....KSSBBKBBBKBBBK.......",
-    ".....KSKBKWWWWKBBBBK......",
-    ".....KSBBKKKKKKSBBBK......",
-    "......KBK.....KKKSBK......",
-    "......KBK.....KKKSBK......",
-    ".......KK........KBK......",
-    "................KBK.......",
-    "................KBK.......",
-    "................KK........",
+    "..........................",
+    ".KK.....KK................",
+    ".KZK...KZK................",
+    "..KBBK.ZBK...........KKKK.",
+    "..KBBBKBBBK........KBSSBK.",
+    "..KBBBBBBBBK......KBSBK...",
+    ".KBEKBBBBBBKKKKKKKKBSBK...",
+    ".KBEKBBBBBBBBBBBBBBBBBK...",
+    ".KNBBBBBBBBBBBBBBBBBBK....",
+    ".KWWBBBBBBBBBBBBBBBBBK....",
+    ".KWWWBBBBBBBBBBBBBBBBK....",
+    "..KWWBBWWWWWWWBBBBBBBK....",
+    "...KBKBWWWWWWWBBBBBBBK....",
+    "...KBK..KBBBK..KBBK.KSK...",
+    "...KBWK..KBWK..KBWK.KSK...",
+    "....KK....KK...KBWK.KSK...",
+    "...............KK...KKK...",
+    "..........................",
+    "..........................",
+    "..........................",
+    "..........................",
+    "..........................",
+    "..........................",
+    "..........................",
     "..........................",
 ]
 
 RUN_B = [
     "..........................",
     "..........................",
-    ".......K..................",
-    ".....K.KK.................",
-    ".....K.KK.................",
-    "...KKKKZK.................",
-    "....KBBBBK..........KKKKK.",
-    "...KBWBBBBKKKKK...KKKBBBK.",
-    "...KBWBBBBKKKKK...KKKBBBK.",
-    ".O.KBKEBBBKKKKK..KSSBBBBK.",
-    ".OONWBBBBBBBBBBKKKBBBBSKK.",
-    ".OONWBBBBBBBBBBKKKBBBBSKK.",
-    "...KWWBBWBBBBBBBBKBBSKK...",
-    "....KKWBBBBBBBBBBBBSKK....",
-    "....KWKWBBBBBBBBBBKK......",
-    "....KWKWBBBBBBBBBBKK......",
-    ".....KWBBBBBBBBBBK........",
-    ".....KSBBBBBBBBBBBK.......",
-    ".....KSBBBBBBBBBBBK.......",
-    "..KKKSKBBBWWWWSBBBBKK.....",
-    "..KSSKBBBKKKKKWSBBBBSK....",
-    "...KSSBKK.....KKKKKBBK....",
-    "...KSSBKK.....KKKKKBBK....",
-    "....KBK............KBK....",
-    "....KK..............K.....",
-    "....KK..............K.....",
-    "....KK..............KK....",
+    "..........................",
+    "..........................",
+    ".KK.....KK................",
+    ".KZK...KZK................",
+    "..KBBK.ZBK................",
+    "..KBBBKBBBK......KKKKKKK..",
+    "..KBBBBBBBBK...KKBSSSBBK..",
+    ".KBEKBBBBBBKKKKBSSBKKK....",
+    ".KBEKBBBBBBBBBBBBBBK......",
+    ".KNBBBBBBBBBBBBBBBBK......",
+    ".KWWBBBBBBBBBBBBBBBBK.....",
+    ".KWWWBBBBBBBBBBBBBBBK.....",
+    "..KWWBBWWWWWWWBBBBBBBK....",
+    "...KBKBWWWWWWBBBKKBBBBK...",
+    "...KBK..KBBBK...KSKBBBBK..",
+    "...KBWK..KKK...KSSKBBBWK..",
+    "....KK........KSWK.KBWK...",
+    ".............KKK....KK....",
+    "..........................",
+    "..........................",
+    "..........................",
+    "..........................",
+    "..........................",
+    "..........................",
+    "..........................",
     "..........................",
 ]
 
 # --------------------------------------------------------------- stretching --
-
-
-# High-resolution run frames (drawn from the reference art). These are NOT in
-# FRAMES/REQUIRED_FRAMES (they'd fail the 26x28 size rule); the run frames in
-# FRAMES are low-res stubs. CatWindow renders the gallop from these instead.
-RUN_HI_W, RUN_HI_H = 27, 20
-
-RUN_A_HI = [
-    "...........................",
-    "...........................",
-    ".....K.KK..................",
-    "....KKKZK..................",
-    "....KBBBK..................",
-    "...KBWBBBK...........KKKK..",
-    ".O.KBKEBBBKKKKKK....KBBBBK.",
-    ".OONWBBBBBBBBBBBKKKKBBSSK..",
-    "..KKWWBBWBBBBBBBBKBBBKKKK..",
-    "....KKWBBBBBBBBBBBBBK......",
-    "....KWWWBBBBBBBBBBKK.......",
-    ".....KWWBBBBBBBBBBK........",
-    ".....KSSBBKBBBKBBBK........",
-    ".....KSKBKWWWWKBBBBK.......",
-    ".....KSBBKKKKKKSBBBK.......",
-    "......KBK.....KKKSBK.......",
-    ".......KK........KBK.......",
-    "................KBK........",
-    "................KK.........",
-    "...........................",
-]
-
-RUN_B_HI = [
-    "...........................",
-    ".......K...................",
-    ".....K.KK..................",
-    "...KKKKZK..................",
-    "....KBBBBK..........KKKKK..",
-    "...KBWBBBBKKKKK...KKKBBBK..",
-    ".O.KBKEBBBKKKKK..KSSBBBBK..",
-    ".OONWBBBBBBBBBBKKKBBBBSKK..",
-    "...KWWBBWBBBBBBBBKBBSKK....",
-    "....KKWBBBBBBBBBBBBSKK.....",
-    "....KWKWBBBBBBBBBBKK.......",
-    ".....KWBBBBBBBBBBK.........",
-    ".....KSBBBBBBBBBBBK........",
-    "..KKKSKBBBWWWWSBBBBKK......",
-    "..KSSKBBBKKKKKWSBBBBSK.....",
-    "...KSSBKK.....KKKKKBBK.....",
-    "....KBK............KBK.....",
-    "....KK..............K......",
-    "....KK..............KK.....",
-    "...........................",
-]
-
-RUN_HI = {"run_a": RUN_A_HI, "run_b": RUN_B_HI}
-
 STRETCH = [
     "..........................",
     "...........KWWK...........",
@@ -789,36 +734,6 @@ def render_frame(grid, palette, scale=6, flip=False, halo=True):
                 cache[ch] = col
             x = (GRID_W - 1 - gx) if flip else gx
             p.fillRect(x * scale, gy * scale, scale, scale, col)
-    p.end()
-    return img
-
-
-def render_run_frame(name, palette, target_w, target_h, flip=False, halo=True):
-    """Render a hi-res run frame (RUN_HI) into a target_w x target_h image.
-    Used only for the gallop; other poses use render_frame()."""
-    from PySide6.QtGui import QImage, QColor, QPainter
-    grid = RUN_HI[name]
-    if halo:
-        grid = add_halo(grid)
-    W = len(grid[0]); H = len(grid)
-    img = QImage(target_w, target_h, QImage.Format_ARGB32)
-    img.fill(0)
-    p = QPainter(img)
-    cache = {}
-    # cell size in the target
-    from math import ceil
-    cw = target_w / W; ch = target_h / H
-    for gy, row in enumerate(grid):
-        for gx, cell in enumerate(row):
-            if cell == ".":
-                continue
-            col = cache.get(cell)
-            if col is None:
-                col = QColor(palette.get(cell) or EXTRA_COLORS.get(cell, "#ff00ff"))
-                cache[cell] = col
-            x = (W - 1 - gx) if flip else gx
-            p.fillRect(int(x*cw), int(gy*ch),
-                       int((x+1)*cw)-int(x*cw), int((gy+1)*ch)-int(gy*ch), col)
     p.end()
     return img
 
