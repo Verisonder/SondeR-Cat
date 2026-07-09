@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.6.0"
-APP_BUILD = "0711p"
+APP_BUILD = "0711q"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -4037,7 +4037,16 @@ class CatWindow(QWidget):
                 base = sprites.FRAMES[fallback.get(name, "sit_a")]
             grid = sprites.apply_pattern(base, self.ccfg["pattern"])
             pal = sprites.OVERHEAT_PALETTE if hot else self.palette()
-            img = sprites.render_frame(grid, pal, self.scale, flip)
+            if name in ("run_a", "run_b") and hasattr(sprites, "render_run_frame"):
+                # gallop uses a higher-resolution source so the reference
+                # detail (face, tail, four legs) survives — rendered into the
+                # SAME footprint the low-res frame would occupy
+                tw = int(sprites.GRID_W * self.scale)
+                th = int(sprites.GRID_H * self.scale)
+                pat_hi = self.ccfg["pattern"]
+                img = sprites.render_run_frame(name, pal, tw, th, flip)
+            else:
+                img = sprites.render_frame(grid, pal, self.scale, flip)
             self._frame_cache[key] = img
         return img
 

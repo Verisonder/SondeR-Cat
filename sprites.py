@@ -274,66 +274,141 @@ SLEEP = [
 RUN_A = [
     "..........................",
     "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    ".....KKK..................",
-    "....KKZZK.................",
-    "...SSBBBSK................",
-    "..KKBSWBBSKKKKK..KKK......",
-    "..KSWKBBBBBBBSSKKSBBK.....",
-    "...KNWBBWBBBBBBSBSKK......",
-    "....KSWWBBBBBBBBSK........",
-    ".....KWBBSBBSBBBK.........",
-    ".....KSSBSWWBBBBSK........",
-    ".....KSBSKKKKSSSBK........",
-    ".....KSBK...KKSSBK........",
-    "......KK......KSSK........",
-    "...............KK.........",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
+    "....KBKK..................",
+    "...KKKWWK.................",
+    "...KSWZKW.................",
+    "..KWKKZBK.................",
+    "..WKBBBBKK................",
+    ".KKBBBBBBW..........KKKKKK",
+    ".KWBWWBBBKKKKKKK...KWKKKKW",
+    ".KKKKWBBBBKKKKKWKKKWKBBBBK",
+    ".NBKKWBBBBBBBBBKWWKKBBBBBK",
+    ".KBWBBBBBBBBBBBBKKBBBBSSSW",
+    ".KWWWBBBBBBBBBBBBBBBSKKKKK",
+    ".KKWWWBBBBBBBBBBBKBSKWKKK.",
+    "..KKKWWWBBBBBBBBBBWK......",
+    "....KWWBBBBBBBBBBBKB......",
+    "....WKWKBBBBBKBBBBWK......",
+    "....KSKBBBBBWKBBBBKW......",
+    "....KSSBBKWWWKBBBBSK......",
+    "....KSKBBKKKKKKBBBBK......",
+    "....KSKBKWKKWSSKKSBK......",
+    "....WKKBKK..KKKSSKBK......",
+    "....KWKBBK...KKKKKBK......",
+    ".....KWKKK.....KWBKW......",
+    "......KKK......KKBWK......",
+    "...............KKKK.......",
+    "................KK........",
     "..........................",
 ]
 
 RUN_B = [
     "..........................",
     "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "......KKK.................",
-    ".....KKZZK................",
-    "....KSBBBK........KKKK....",
-    "...KSBBWBBKKKKK..KSBBBK...",
-    "...KSBKEBBBBBBSKKBBBBSK...",
-    "....NWWBBWBBBBBSSBSSKK....",
-    ".....KWWWBBBBBBBSSKK......",
-    "......KWWBBBBBBBSK........",
-    ".....KSSBBBBWWBBBBK.......",
-    "....KSSSBSKKKKSBBBK.......",
-    "....KBSBKK....KKKBSK......",
-    ".....KKK.........KBK......",
-    "..................K.......",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
+    "....KBKK..................",
+    "...KKKWWK.................",
+    "...KSWZSW.................",
+    "..KWKKZBS.............KKKK",
+    "..WSBBBBSK...........KWKKW",
+    ".KSSBBBBBW.........KKWSBBS",
+    ".KWBWWBBBSKKKKKKK.KWKSBBBK",
+    ".KKKKWBBBBSSSSSSWBWSSBBBBW",
+    ".NSKKWBBWBSSSSSBBKSSBBBBSK",
+    ".KBWSBBBBBBBBBBSSSSBBBBSSK",
+    ".KWWWBBWWBBBBBBBBBBBBBSSB.",
+    ".KSWWWBBWBBBBBBBBSBBSSKKK.",
+    "..KKSWWWBBBBBBBBBBKSK.....",
+    "....KWWWBBBBBBBBBBKW......",
+    "....KSWBBBBBBBBBBBKK......",
+    "...KBKBBBBBBWWBBBBSW......",
+    "..KWBSKBBBBBWWWBBBBKK.....",
+    ".KKKSKKBBBBWWWSBBBBSWK....",
+    ".KSSSKBBSSSSSSSSSBBBKK....",
+    ".KSSWBBSKKKKKKKWKBBBKW....",
+    ".KKWSBBWK......KKKKSBKK...",
+    "..KWBKKK.........KWKBBK...",
+    "...KBWK...........KWBBK...",
+    "...KKK.............KKKK...",
+    "....K...............KK....",
     "..........................",
 ]
 
 # --------------------------------------------------------------- stretching --
+
+
+# High-resolution run frames (drawn from the reference art). These are NOT in
+# FRAMES/REQUIRED_FRAMES (they'd fail the 26x28 size rule); the run frames in
+# FRAMES are low-res stubs. CatWindow renders the gallop from these instead.
+RUN_HI_W, RUN_HI_H = 42, 30
+
+RUN_A_HI = [
+    "..........................................",
+    "..........................................",
+    ".....KKKBKKK..............................",
+    "....KWKWKWKWK.............................",
+    "....KKSKWZZKWK............................",
+    "...KWKKKKZWBKK............................",
+    "..KWKBBBBBBBKWK...........................",
+    ".KWKBBBBBBBBBKWK................KKKKKKKKK.",
+    ".KKWBBWWWBBBBBKWKKKKKKKKK.....KKWKKKKKKKWK",
+    ".KKKKKKEWBBBBBBKKKKKKKKKWKBKKKWKKBBBBBBBKK",
+    ".NKBKKKEWBBBBBBSBBBBBBBKKWKWKKKSBBBBBBBBKK",
+    ".KKBWWBBBBBBBBBBBBBBBBBBBKKKBBBBBBSSSSSKWK",
+    ".KKWWWWWBBBBBBBBBBBBBBBBBBKBBBBBSKKKKKKWK.",
+    ".KWKWWWWWBBBBBBBBBBBBBBBBBBKBBSKKWKKKKKK..",
+    "..KWKKWWWWWBBBBBBBBBBBBBBBBBKKKWKK........",
+    "...KKKKKWWWWBBBBBBBBBBBBBBBBKWKK..........",
+    ".....BKKWWWBBBBBBBBBBBBBBBBBKKB...........",
+    ".....KWKKWWKBBBBBBBBBKBBBBBBKWK...........",
+    ".....KKKSKKBBBBKBBWWWKBBBBBBSKWK..........",
+    ".....KKSSSKBBBKWWWWWWKBBBBBBBSKK..........",
+    ".....KKSSKBBBKKKKKKKKKKSBBBBBBKK..........",
+    ".....KKSSKBBKWWKKKKWKSSKKKKSBBKK..........",
+    ".....KWKKKBBKWK....KWKKSSSSKBBKK..........",
+    "......KKWKSBBKK.....KKKKKKSKBBKK..........",
+    "........KWKKKWK.........KWKBBKWK..........",
+    ".........KKKKK..........KKBBKWK...........",
+    "........................KKKKWK............",
+    ".........................KKKK.............",
+    "..........................................",
+    "..........................................",
+]
+
+RUN_B_HI = [
+    "..........................................",
+    "..........................................",
+    ".....KKKBKKK..............................",
+    "....KWKWKWSWK.............................",
+    "....KSSKWZZSWK............................",
+    "...KWKKKKZBBSK.....................KKKKKK.",
+    "..KWSSBBBBBBSWK..................KKWKKKSWK",
+    ".KWSSBBBBBBBBSWK..............KKKWKSSBBSSK",
+    ".KSWBBWWWBBBBBSWKKKKKKKKKK...KWSKSSBBBBBKK",
+    ".KKKKKKEWBBBBWBSSSSSSSSSSWKBKWSSSBBBBBBSWK",
+    ".NKSKKKEWBBBWWBSSSSSSSSSBBWKWSSBBBBBBBSKK.",
+    ".KKBWWSSBBBBBBBBBBBBBBBBSSSSSSBBBBBBBSSWK.",
+    ".KKWWWWWBBBWWWBBBBBBBBBBBBSBSBBBBBSSKSBK..",
+    ".KBSWWWWWBBBWWBBBBBBBBBBBBBSSBBBSSBKKKK...",
+    "..KBBSWWWWWBBBBBBBBBBBBBBBBBSSSSBKK.......",
+    "...KKKSBWWWWBBBBBBBBBBBBBBBBBKSBK.........",
+    "......KKWWWWBBBBBBBBBBBBBBBBBKWK..........",
+    "......KKSWWBBBBBBBBBBBBBBBBBBKKB..........",
+    "....KKBSKBSBBBBBBBBWWWBBBBBBBSWK..........",
+    "..KKWSBSSKSBBBBBBBWWWWWSBBBBBBKWK.........",
+    ".KWKKSSSKKBBBBBSBWWWWWSBBBBBBBSKWK........",
+    ".KKSSSSKKBBBSSSSSSSSSSSSSSBBBBBBKK........",
+    ".KKSSKWSBBBSKWKKKKKKKKKKWKSBBBBBKWK.......",
+    ".KKKWWSBBBSWKK..........KKWKKKSBBKWK......",
+    "..KKWKBBKKWK..............KKKWKSBBKK......",
+    "....KKBKWKK..................KWKBBKK......",
+    "....KKKWK.....................KWKKWK......",
+    ".....KKK.......................KKKK.......",
+    "..........................................",
+    "..........................................",
+]
+
+RUN_HI = {"run_a": RUN_A_HI, "run_b": RUN_B_HI}
+
 STRETCH = [
     "..........................",
     "...........KWWK...........",
@@ -734,6 +809,36 @@ def render_frame(grid, palette, scale=6, flip=False, halo=True):
                 cache[ch] = col
             x = (GRID_W - 1 - gx) if flip else gx
             p.fillRect(x * scale, gy * scale, scale, scale, col)
+    p.end()
+    return img
+
+
+def render_run_frame(name, palette, target_w, target_h, flip=False, halo=True):
+    """Render a hi-res run frame (RUN_HI) into a target_w x target_h image.
+    Used only for the gallop; other poses use render_frame()."""
+    from PySide6.QtGui import QImage, QColor, QPainter
+    grid = RUN_HI[name]
+    if halo:
+        grid = add_halo(grid)
+    W = len(grid[0]); H = len(grid)
+    img = QImage(target_w, target_h, QImage.Format_ARGB32)
+    img.fill(0)
+    p = QPainter(img)
+    cache = {}
+    # cell size in the target
+    from math import ceil
+    cw = target_w / W; ch = target_h / H
+    for gy, row in enumerate(grid):
+        for gx, cell in enumerate(row):
+            if cell == ".":
+                continue
+            col = cache.get(cell)
+            if col is None:
+                col = QColor(palette.get(cell) or EXTRA_COLORS.get(cell, "#ff00ff"))
+                cache[cell] = col
+            x = (W - 1 - gx) if flip else gx
+            p.fillRect(int(x*cw), int(gy*ch),
+                       int((x+1)*cw)-int(x*cw), int((gy+1)*ch)-int(gy*ch), col)
     p.end()
     return img
 
