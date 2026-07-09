@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.8.0"
-APP_BUILD = "0712l"
+APP_BUILD = "0712m"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -354,6 +354,7 @@ class InputWatcher:
         self.on_ask = None
         self.on_esc = None
         self.on_update = None
+        self.on_restart = None
         self._native = None
         if platform.system() == "Windows":
             try:
@@ -409,6 +410,12 @@ class InputWatcher:
                         or ch == "\x10")          # Ctrl-P control char
                 if has_ctrl and has_shift and has_alt and is_p:
                     self.on_update()
+                if self.on_restart is not None:
+                    is_r = (getattr(key, "vk", None) == 0x52
+                            or (isinstance(ch, str) and ch.lower() == "r")
+                            or ch == "\x12")      # Ctrl-R control char
+                    if has_ctrl and has_shift and has_alt and is_r:
+                        self.on_restart()
         except Exception:
             pass
         now = time.time()
@@ -1257,6 +1264,8 @@ class Manager(QObject):
             self.dismiss_bubble)
         self.inputs.on_update = lambda: self._call_bridge.call.emit(
             lambda: self.check_updates(manual=True))
+        self.inputs.on_restart = lambda: self._call_bridge.call.emit(
+            self._restart)
         self.fs_detect = FullscreenDetector()
         self.meow = Meow()
 
@@ -3173,7 +3182,7 @@ class CatWindow(QWidget):
             aup.setChecked(self.gcfg.get("auto_update", True))
             aup.triggered.connect(mgr.toggle_auto_update)
             upds.addAction(aup)
-        rst = QAction("Restart the cat 🔄", menu)
+        rst = QAction("Restart the cat 🔄  (Ctrl+Shift+Alt+R)", menu)
         rst.triggered.connect(mgr._restart)
         upds.addAction(rst)
         upds.addSeparator()
@@ -3335,7 +3344,8 @@ class CatWindow(QWidget):
         # wiggle up-down near the bottom edge -> the cat goes to hide
         if self.gcfg.get("wiggle_hide", True) and not self.dragging \
                 and not self.peeking and now > self._hide_wig_cd \
-                and not self.gcfg.get("guard_mode", False):
+                and not self.gcfg.get("guard_mode", False) \
+                and not mgr.guide_active:
             scr_c = QGuiApplication.screenAt(cur) \
                 or QGuiApplication.primaryScreen()
             if (cur.y() > scr_c.geometry().bottom() - 90
@@ -3496,7 +3506,8 @@ class CatWindow(QWidget):
         # --- startle ---
         d_cur = self._dist_to_cursor(cur)
         if (self.state == IDLE and d_cur < 130 and self.cursor_speed > 3200
-                and now > self.startle_cooldown):
+                and now > self.startle_cooldown
+                and not mgr.guide_active):
             self.startle_cooldown = now + 6
             self.jump_until = now + 0.7
             self.wobble = 10
@@ -3513,7 +3524,20 @@ class CatWindow(QWidget):
                        and self.state in (IDLE, PEEK, THINK))
 
         # --- state selection (priority order) ---
-        if now < mgr.stretch_until:
+        if mgr.guide_active:
+            # 🧭 GUIDED TOUR LOCK: nothing interrupts the tour — no stretch,
+            # overheat, scroll-play, typing, chase, hide, sleep, groom,
+            # perch or corner-standing. The cat only glides to the spot it's
+            # pointing at (its _glide_to is driven by the guide step) and
+            # otherwise stands idle until the task finishes.
+            self.groom_until = 0.0
+            self.sleep_at = now + self.gcfg["sleep_seconds"]
+            self.next_perch_try = now + 999
+            self.next_corner_at = now + 999
+            self._corner_until = 0.0
+            if self.state not in (IDLE,):
+                self.state = IDLE
+        elif now < mgr.stretch_until:
             self.state = STRETCH
             pass
         elif overheat and not want_peek:
