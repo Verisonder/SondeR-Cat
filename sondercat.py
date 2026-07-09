@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.6.0"
-APP_BUILD = "0711u"
+APP_BUILD = "0711v"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2460,6 +2460,7 @@ class CatWindow(QWidget):
         self._shake_quiet_until = 0.0
         self._shake_strikes = 0
         self._falling = False
+        self._parachute = False          # ☂ drifting down after a lost perch
         self._cover_miss = 0
         self.perch_asleep = False
         self.wobble = 0.0
@@ -3499,6 +3500,8 @@ class CatWindow(QWidget):
                     "unauthorized touch!!"]), 1.6)
             self.dragging = True
             self.glide_target = None
+            self._parachute = False       # grabbed mid-air: chute packed away
+            self._falling = False
             self.drag_offset = ev.globalPosition().toPoint() - self.pos()
             # the cat should hang from its raised paws (top-center of sprite)
             self._drag_target_offset = QPoint(
@@ -3839,11 +3842,73 @@ class CatWindow(QWidget):
         self._glide_to(QPoint(x, y), speed=300)   # walk, don't run
         return True
 
+
+    def _draw_parachute(self, p, now):
+        """Pixel-art parachute above the cat while it drifts down.
+        Cell-styled (like the helmet/flashlight overlays) so it matches the
+        art; sized adaptively so it never pokes out of the window top even
+        at big cat sizes."""
+        from PySide6.QtGui import QColor, QPen
+        s = max(2, int(self.scale))
+        # top of the dangle sprite's actual content (cached)
+        top_row = getattr(CatWindow, "_DANGLE_TOP", None)
+        if top_row is None:
+            g = sprites.FRAMES.get("dangle", [])
+            top_row = next((y for y, row in enumerate(g)
+                            if any(c != "." for c in row)), 2)
+            CatWindow._DANGLE_TOP = top_row
+        head_top = TOP_MARGIN + top_row * s
+        cx = self.cat_rect().center().x()
+        # vertical budget above the head
+        strings_h = max(2 * s, 8)
+        canopy_rows = 5
+        cell = s
+        while canopy_rows * cell + strings_h + 2 > head_top and cell > 2:
+            cell -= 1                      # shrink cells before losing rows
+        while canopy_rows * cell + strings_h + 2 > head_top and canopy_rows > 3:
+            canopy_rows -= 1
+        canopy_h = canopy_rows * cell
+        half_cells = 8                     # canopy is 2*8 cells wide
+        max_half = (self.width() // 2 - 2) // cell
+        half_cells = max(4, min(half_cells, max_half))
+        y0 = head_top - strings_h - canopy_h
+        red = QColor("#d9534f"); cream = QColor("#f6ead8")
+        dark = QColor("#4a2f1a")
+        # canopy: widest at the bottom row, arcing narrower toward the top
+        for ry in range(canopy_rows):
+            frac = (ry + 1) / canopy_rows
+            hw = max(2, int(round(half_cells * math.sqrt(frac * (2 - frac)))))
+            yy = y0 + ry * cell
+            for k in range(-hw, hw):
+                col = red if ((k + 100) // 3) % 2 == 0 else cream
+                if ry == 0 or k in (-hw, hw - 1):
+                    col = dark             # outline: top row + side edges
+                p.fillRect(cx + k * cell, yy, cell, cell, col)
+            # 1-cell dark rim under the bottom row edge cells
+            if ry == canopy_rows - 1:
+                for k in (-hw, hw - 1):
+                    p.fillRect(cx + k * cell, yy + cell, cell,
+                               max(2, cell // 2), dark)
+        # strings: canopy corners + centre down to the raised paws
+        pen = QPen(dark); pen.setWidth(max(2, s // 2)); p.setPen(pen)
+        yb = y0 + canopy_h
+        paw_y = head_top + int(1.5 * s)
+        p.drawLine(cx - (half_cells - 1) * cell, yb,
+                   cx - int(2.5 * s), paw_y)
+        p.drawLine(cx, yb, cx, head_top + s)
+        p.drawLine(cx + (half_cells - 1) * cell, yb,
+                   cx + int(2.5 * s), paw_y)
+
     def _fall_off(self, now):
         self._end_perch(go_home=False)
         try:
-            self._glide_to(self._ground_point(), speed=1900)  # drop!
+            # ☂ deploy the parachute: a slow, swaying drift to the ground
+            # (instead of plummeting) — the cat hangs in its pickup pose
+            # under a little canopy the whole way down.
+            self._glide_to(self._ground_point(), speed=160)
             self._falling = True
+            self._parachute = True
+            self.say("☂️!", 1.4)
         except Exception:
             pass
         lo, hi = self.mgr.perch_interval()
@@ -3860,9 +3925,14 @@ class CatWindow(QWidget):
     def _perch_tick(self, now):
         if self._falling and self.glide_target is None:
             self._falling = False
-            self.wobble = max(self.wobble, 3.0)
-            self.say(random.choice(["oouch!!", "oof.", "😾 rude.",
-                                    "I meant to do that."]), 2.2)
+            if getattr(self, "_parachute", False):
+                self._parachute = False        # ☂ packed away
+                self.say(random.choice(["☂️ smooth landing.", "phew. ☂️",
+                                        "touchdown 🪂", "nailed it. 😌"]), 2.2)
+            else:
+                self.wobble = max(self.wobble, 3.0)
+                self.say(random.choice(["oouch!!", "oof.", "😾 rude.",
+                                        "I meant to do that."]), 2.2)
         if self.perch_pending is not None and self.glide_target is None:
             self.perch_hwnd = self.perch_pending
             self.perch_pending = None
@@ -4408,7 +4478,10 @@ class CatWindow(QWidget):
         tilt = 0.0
         if self.wobble > 0.5:
             tilt += math.sin(now * 18) * self.wobble
-        if self.state == CHASE or self.glide_target is not None:
+        if getattr(self, "_parachute", False) and self.glide_target is not None:
+            # ☂ gentle pendulum swing under the canopy
+            tilt += math.sin(now * 2.0) * 6.0
+        elif self.state == CHASE or self.glide_target is not None:
             tilt += -9.0 if self.flip else 9.0
         if abs(tilt) > 0.3:
             p.translate(r.center())
@@ -4436,6 +4509,12 @@ class CatWindow(QWidget):
             ty = r.top() + jy + (r.height() - th_)
         p.drawImage(QRect(tx, ty, tw_, th_), img)
         p.restore()
+
+        # ☂ parachute canopy: drawn level (unrotated) above the cat, so the
+        # cat pendulums beneath it. Drawn AFTER restore so the swing tilt
+        # doesn't rotate the canopy.
+        if getattr(self, "_parachute", False) and self.glide_target is not None:
+            self._draw_parachute(p, now)
 
         # paper roll + unrolling strip — chunky pixel-art style, ON TOP
         if self.state == SCROLLPLAY:
