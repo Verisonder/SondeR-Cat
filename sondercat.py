@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.0.0"
-APP_BUILD = "0712o"
+APP_BUILD = "0712p"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2388,8 +2388,16 @@ class Manager(QObject):
         models = []
         if getattr(self, "_gemini_model", None):
             models.append(self._gemini_model)
-        for m in ("gemini-2.5-flash", "gemini-2.5-flash-lite",
-                  "gemini-2.0-flash", "gemini-1.5-flash"):
+        # Current Gemini lineup (as of mid-2026). Gemini 1.5 and 2.0 are shut
+        # down (they 404), so they're gone. Ordered fast→fallback; the
+        # "-latest" aliases auto-track Google's current pick so this list
+        # keeps working as models roll over (2.5-flash retires Oct 2026).
+        for m in ("gemini-flash-latest",       # → current GA flash (3.5)
+                  "gemini-3.5-flash",
+                  "gemini-3.1-flash-lite",
+                  "gemini-flash-lite-latest",
+                  "gemini-2.5-flash",           # still live today; older
+                  "gemini-2.5-flash-lite"):
             if m not in models:
                 models.append(m)
         has_image = any("inline_data" in pt
@@ -2403,12 +2411,13 @@ class Manager(QObject):
                                      "temperature": 0.8},
             }
             if grounded and not has_image:
-                # live Google Search: 2.x uses google_search,
-                # 1.5 uses the older google_search_retrieval
-                if model.startswith(("gemini-2", "gemini-3")):
-                    b["tools"] = [{"google_search": {}}]
-                else:
+                # live Google Search. All current models (3.x, 2.5, and the
+                # -latest aliases) use the new google_search tool; only the
+                # long-gone 1.x used google_search_retrieval.
+                if model.startswith("gemini-1"):
                     b["tools"] = [{"google_search_retrieval": {}}]
+                else:
+                    b["tools"] = [{"google_search": {}}]
             return json.dumps(b).encode()
 
         last = "no reply"
