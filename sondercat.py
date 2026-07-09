@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.2.0"
-APP_BUILD = "0712v"
+APP_BUILD = "0712w"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2521,6 +2521,24 @@ class Manager(QObject):
     def _wants_screen(self, q):
         return bool(self._SCREEN_HINTS.search(q))
 
+    _GUIDE_HINTS = re.compile(
+        r"how (do|can|would|to|d) i\b|how do you\b|how to\b|"
+        r"\bwhere('?s| is| do| can| are)\b|\bwhere'?s\b|"
+        r"show me (how|where)|walk me through|guide me\b|"
+        r"help me (find|do|make|set|create|add|change|enable|turn|open|get)|"
+        r"which (button|menu|option|setting|tab|icon)|"
+        r"\bfind the\b|how would i\b|steps to\b|"
+        r"i (want|need) to\b.*\?|can you (show|guide|walk)", re.I)
+
+    def _is_guide_request(self, q):
+        """True for genuine 'how do I / where is …' help questions — NOT for
+        greetings, thanks, or plain chit-chat (those answer normally so guide
+        mode doesn't screenshot the screen for a 'hi')."""
+        q = q.strip()
+        if len(q) < 5:                     # 'hi', 'hey', 'yo' → chat
+            return False
+        return bool(self._GUIDE_HINTS.search(q))
+
     def _grab_screen_b64(self):
         """Fast full-screen JPEG as base64, via Qt. None on failure."""
         try:
@@ -2545,11 +2563,12 @@ class Manager(QObject):
     def ask_ai(self, question):
         import threading
         p = self.primary()
-        # 🧭 guide mode: questions become guided tours; 'next' advances,
-        # 'stop'/'done'/'cancel' ends the tour.
+        # 🧭 guide mode: "how do I…" questions become guided tours; 'next'
+        # advances, 'stop'/'done'/'cancel' ends. Greetings and plain chit-chat
+        # fall through to normal chat instead of screenshotting the screen.
         if self.cfg["global"].get("guide_mode", False) \
                 and self.cfg["global"].get("screen_vision", False):
-            q = question.strip().lower().rstrip(".!")
+            q = question.strip().lower().rstrip(".!?")
             if self.guide_active and q in ("stop", "cancel", "done",
                                            "end", "quit", "exit"):
                 self._end_guide(walk_home=True)
@@ -2559,9 +2578,11 @@ class Manager(QObject):
                                            "what's next", "whats next"):
                 self._guide_step_run(self._guide_task, first=False)
                 return
-            self._guide_done = []
-            self._guide_step_run(question, first=True)
-            return
+            if self._is_guide_request(question):
+                self._guide_done = []
+                self._guide_step_run(question, first=True)
+                return
+            # not a how-to — let it answer normally (no screenshot)
         if self.ai_busy:
             p.say("one sec, still thinking… 🤔", 2)
             return
