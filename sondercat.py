@@ -4199,24 +4199,40 @@ class CatWindow(QWidget):
             return cached
         g = sprites.FRAMES.get(name, sprites.FRAMES["sit_a"])
         if name.startswith("run_"):
-            # SIDE-VIEW gallop frames: one cup on the visible ear/cheek plus
-            # a short band over the crown. The head is the content in the
-            # left columns (the cat faces left; running right is mirrored at
-            # composite time, so this mirrors for free).
-            head_rows = [y for y, row in enumerate(g)
-                         if any(c != "." for x, c in enumerate(row) if x <= 10)]
-            ht = head_rows[0] if head_rows else 5      # ear tip row
+            # SIDE-VIEW gallop: a cup on the visible ear/cheek + a short band
+            # over the crown. Positions derive from the actual head geometry
+            # (content in the left/top region) and are filtered to cells that
+            # sit ON the head, so this self-adjusts if the head art changes.
+            head = [(x, y) for y, row in enumerate(g)
+                    for x, c in enumerate(row)
+                    if c != "." and x <= 12 and y <= 16]
+            if head:
+                hx0 = min(x for x, y in head)
+                hy0 = min(y for x, y in head)
+            else:
+                hx0, hy0 = 2, 5
+            hset = set(head)
+
+            def on_head(x, y):
+                return any((x + dx, y + dy) in hset
+                           for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+
             dark, lite = [], []
-            # cup: 3 wide x 4 tall over the ear/cheek
-            for cy in range(ht + 3, ht + 7):
-                for cx in (6, 7, 8):
-                    dark.append((cx, cy))
-            lite += [(7, ht + 4), (7, ht + 5)]
-            # band: 2-tall arc from the cup up over the crown toward the face
-            for cx in (3, 4, 5):
-                dark.append((cx, ht + 1))
-                dark.append((cx, ht + 2))
-            dark.append((6, ht + 2))
+            # cup: 3 wide x 4 tall over the near ear/cheek
+            cup_x0, cup_y0 = hx0 + 2, hy0 + 3
+            for cy in range(cup_y0, cup_y0 + 4):
+                for cx in range(cup_x0, cup_x0 + 3):
+                    if on_head(cx, cy):
+                        dark.append((cx, cy))
+            lite += [(cup_x0 + 1, cup_y0 + 1), (cup_x0 + 1, cup_y0 + 2)]
+            # band: a short 2-tall arc over the crown, toward the face
+            for cx in range(hx0, hx0 + 4):
+                for cy in (hy0 + 1, hy0 + 2):
+                    if on_head(cx, cy):
+                        dark.append((cx, cy))
+            # keep only cells sitting on the head; de-dupe
+            dark = [c for c in dict.fromkeys(dark) if on_head(*c)]
+            lite = [c for c in lite if on_head(*c)]
             cached = (dark, lite)
             CatWindow._HEADSET_CACHE[name] = cached
             return cached
@@ -4474,7 +4490,7 @@ class CatWindow(QWidget):
             # a little bigger while galloping; anchor UP into the top margin
             # (a chasing cat is airborne, not on the floor) so the enlarged,
             # rotated sprite doesn't clip the bottom of the window
-            rf = 1.25
+            rf = 1.30
             tw_ = int(r.width() * rf)
             th_ = int(r.height() * rf)
             tx = r.center().x() - tw_ // 2
