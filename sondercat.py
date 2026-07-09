@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.8.0"
-APP_BUILD = "0712g"
+APP_BUILD = "0712h"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2915,9 +2915,11 @@ class CatWindow(QWidget):
         para.triggered.connect(lambda _=False: mgr.test_parachute())
         tst.addAction(para)
 
-        hid = QAction("Hide at the bottom 🫣", menu)
+        hidden = self.gcfg.get("hide_mode", False)
+        hid = QAction("Come back out 🫣" if hidden
+                      else "Hide at the bottom 🫣", menu)
         hid.setCheckable(True)
-        hid.setChecked(self.gcfg.get("hide_mode", False))
+        hid.setChecked(hidden)
         hid.triggered.connect(mgr.toggle_hide_mode)
         menu.addAction(hid)
         slp = QAction("Deep sleep 💤", menu)
