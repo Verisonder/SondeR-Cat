@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.2.0"
-APP_BUILD = "0712w"
+APP_BUILD = "0712x"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2479,36 +2479,48 @@ class Manager(QObject):
                     b["tools"] = [{"google_search": {}}]
             return json.dumps(b).encode()
 
+        import time as _time
         last = "no reply"
-        for m in models:
-            url = ("https://generativelanguage.googleapis.com/v1beta/"
-                   f"models/{m}:generateContent?key={key}")
-            # grounded first (web + knowledge), then a raw fallback
-            for grounded in ((True, False) if want_ground else (False,)):
-                body = make_body(m, grounded)
-                req = urllib.request.Request(
-                    url, data=body,
-                    headers={"Content-Type": "application/json"})
-                try:
-                    with urllib.request.urlopen(req, timeout=35) as r:
-                        self._gemini_model = m    # worked → prefer it next time
-                        return self._gemini_parse(
-                            json.loads(r.read().decode()))
-                except urllib.error.HTTPError as e:
-                    last = f"HTTP {e.code}"
-                    if e.code in (401, 403):
-                        raise RuntimeError(
-                            "the API key was rejected") from None
-                    if e.code == 400 and grounded:
-                        continue          # this model won't ground: retry raw
-                    break                 # 404/429/other: try the NEXT model
-                except Exception as ex:
-                    last = str(ex)[:60]
-                    break
-            # if a cached preferred model keeps failing, stop trusting it so
-            # the next call starts fresh from the full list
-            if getattr(self, "_gemini_model", None) == m:
-                self._gemini_model = None
+        transient = False
+        # Try the whole model list up to 3 times — a 404/503 from Google is
+        # often transient (endpoint hiccup, alias rolling over), so a short
+        # wait and a fresh pass usually succeeds.
+        for attempt in range(3):
+            transient = False
+            for m in models:
+                url = ("https://generativelanguage.googleapis.com/v1beta/"
+                       f"models/{m}:generateContent?key={key}")
+                # grounded first (web + knowledge), then a raw fallback
+                for grounded in ((True, False) if want_ground else (False,)):
+                    body = make_body(m, grounded)
+                    req = urllib.request.Request(
+                        url, data=body,
+                        headers={"Content-Type": "application/json"})
+                    try:
+                        with urllib.request.urlopen(req, timeout=35) as r:
+                            self._gemini_model = m   # worked → prefer it next
+                            return self._gemini_parse(
+                                json.loads(r.read().decode()))
+                    except urllib.error.HTTPError as e:
+                        last = f"HTTP {e.code}"
+                        if e.code in (401, 403):
+                            raise RuntimeError(
+                                "the API key was rejected") from None
+                        if e.code == 400 and grounded:
+                            continue      # this model won't ground: retry raw
+                        if e.code in (404, 429, 500, 502, 503, 504):
+                            transient = True   # worth another pass
+                        break             # try the NEXT model
+                    except Exception as ex:
+                        last = str(ex)[:60]
+                        transient = True
+                        break
+                # a cached preferred model that keeps failing: stop trusting it
+                if getattr(self, "_gemini_model", None) == m:
+                    self._gemini_model = None
+            if not transient:
+                break                     # a real error (not transient): stop
+            _time.sleep(1.2 * (attempt + 1))   # brief backoff, then retry all
         raise RuntimeError(last)
 
     _SCREEN_HINTS = re.compile(
