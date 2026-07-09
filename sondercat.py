@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.8.0"
-APP_BUILD = "0712f"
+APP_BUILD = "0712g"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2891,30 +2891,6 @@ class CatWindow(QWidget):
         nm.triggered.connect(mgr.set_name)
         msgs.addAction(nm)
 
-        upds = menu.addMenu("Updates ⤓")
-        if IS_STORE_BUILD:
-            managed = QAction("Updates managed by Microsoft Store 🛍️", menu)
-            managed.setEnabled(False)
-            upds.addAction(managed)
-        else:
-            unow = QAction("Check for updates now  (Ctrl+Shift+Alt+P)", menu)
-            unow.triggered.connect(
-                lambda _=False: mgr.check_updates(manual=True))
-            upds.addAction(unow)
-            aup = QAction("Install updates automatically", menu)
-            aup.setCheckable(True)
-            aup.setChecked(self.gcfg.get("auto_update", True))
-            aup.triggered.connect(mgr.toggle_auto_update)
-            upds.addAction(aup)
-        rst = QAction("Restart the cat 🔄", menu)
-        rst.triggered.connect(mgr._restart)
-        upds.addAction(rst)
-        upds.addSeparator()
-        chan = " · Store" if IS_STORE_BUILD else ""
-        uinf = QAction(
-            f"Installed: v{APP_VERSION} · build {APP_BUILD}{chan}", menu)
-        uinf.setEnabled(False)
-        upds.addAction(uinf)
         tst = menu.addMenu("Test animations")
         for label, kind in (("Blink", "blink"),
                             ("Typing (kneading)", "knead"),
@@ -2976,6 +2952,32 @@ class CatWindow(QWidget):
         donate = QAction("Support the cat 💛 (Ko-fi)", menu)
         donate.triggered.connect(lambda _=False: mgr.open_donate())
         menu.addAction(donate)
+
+        upds = menu.addMenu("Updates ⤓")
+        if IS_STORE_BUILD:
+            managed = QAction("Updates managed by Microsoft Store 🛍️", menu)
+            managed.setEnabled(False)
+            upds.addAction(managed)
+        else:
+            unow = QAction("Check for updates now  (Ctrl+Shift+Alt+P)", menu)
+            unow.triggered.connect(
+                lambda _=False: mgr.check_updates(manual=True))
+            upds.addAction(unow)
+            aup = QAction("Install updates automatically", menu)
+            aup.setCheckable(True)
+            aup.setChecked(self.gcfg.get("auto_update", True))
+            aup.triggered.connect(mgr.toggle_auto_update)
+            upds.addAction(aup)
+        rst = QAction("Restart the cat 🔄", menu)
+        rst.triggered.connect(mgr._restart)
+        upds.addAction(rst)
+        upds.addSeparator()
+        chan = " · Store" if IS_STORE_BUILD else ""
+        uinf = QAction(
+            f"Installed: v{APP_VERSION} · build {APP_BUILD}{chan}", menu)
+        uinf.setEnabled(False)
+        upds.addAction(uinf)
+
         quit_act = QAction("Quit", menu)
         quit_act.triggered.connect(QApplication.instance().quit)
         menu.addAction(quit_act)
