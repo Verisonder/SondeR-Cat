@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713g"
+APP_BUILD = "0713h"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -386,58 +386,62 @@ class InputWatcher:
     def _on_release(self, key):
         try:
             self._down.discard(key)
+            if hasattr(self, "_typed_down"):
+                self._typed_down.discard(key)
         except Exception:
             pass
 
     def _on_press(self, key):
+        # --- global shortcuts FIRST, before any filtering, so nothing can
+        # block them (Ctrl+Space ask, Ctrl+Shift+Alt+P update / +R restart) ---
         try:
-            if key in self._down:
-                if getattr(key, "name", None) not in self._NO_TYPE_KEYS:
-                    self.last_key = time.time()  # auto-repeat: still held, but
-                return                           # don't re-count (parity stays)
             self._down.add(key)
-            if len(self._down) > 24:   # safety net for missed releases
+            if len(self._down) > 24:
                 self._down.clear()
-        except Exception:
-            pass
-        try:
+            names = {getattr(k, "name", None) for k in self._down}
             kn = getattr(key, "name", None)
+            ch = getattr(key, "char", None)
+            vk = getattr(key, "vk", None)
             if kn == "space" and self.on_ask is not None \
-                    and any(getattr(k, "name", None) in
-                            ("ctrl", "ctrl_l", "ctrl_r")
-                            for k in self._down):
+                    and (names & {"ctrl", "ctrl_l", "ctrl_r"}):
                 self.on_ask()
             elif kn == "esc" and self.on_esc is not None:
                 self.on_esc()
-            # global failsafe: Ctrl+Shift+Alt+P forces an update check even
-            # if the right-click menu is somehow broken
-            if self.on_update is not None:
-                names = {getattr(k, "name", None) for k in self._down}
-                has_ctrl = bool(names & {"ctrl", "ctrl_l", "ctrl_r"})
-                has_shift = bool(names & {"shift", "shift_l", "shift_r"})
-                has_alt = bool(names & {"alt", "alt_l", "alt_r", "alt_gr"})
-                ch = getattr(key, "char", None)
-                is_p = (getattr(key, "vk", None) == 0x50
+            has_ctrl = bool(names & {"ctrl", "ctrl_l", "ctrl_r"})
+            has_shift = bool(names & {"shift", "shift_l", "shift_r"})
+            has_alt = bool(names & {"alt", "alt_l", "alt_r", "alt_gr"})
+            if has_ctrl and has_shift and has_alt:
+                is_p = (vk == 0x50
                         or (isinstance(ch, str) and ch.lower() == "p")
-                        or ch == "\x10")          # Ctrl-P control char
-                if has_ctrl and has_shift and has_alt and is_p:
+                        or ch == "\x10")
+                is_r = (vk == 0x52
+                        or (isinstance(ch, str) and ch.lower() == "r")
+                        or ch == "\x12")
+                if is_p and self.on_update is not None:
                     self.on_update()
-                if self.on_restart is not None:
-                    is_r = (getattr(key, "vk", None) == 0x52
-                            or (isinstance(ch, str) and ch.lower() == "r")
-                            or ch == "\x12")      # Ctrl-R control char
-                    if has_ctrl and has_shift and has_alt and is_r:
-                        self.on_restart()
+                if is_r and self.on_restart is not None:
+                    self.on_restart()
+        except Exception:
+            pass
+
+        # --- typing reaction (skip modifier/nav keys, handle auto-repeat) ---
+        try:
+            if getattr(key, "name", None) in self._NO_TYPE_KEYS:
+                return                       # don't count AND don't refresh
         except Exception:
             pass
         now = time.time()
-        # ignore modifier / navigation keys — the cat only "types along" to
-        # actual text entry. space, backspace, enter, arrows-as-typing etc.
-        # still count (they're part of writing); shift/tab/esc/ctrl/alt/win/
-        # fn and friends don't.
-        kn2 = getattr(key, "name", None)
-        if kn2 in self._NO_TYPE_KEYS:
-            return                       # don't count AND don't refresh
+        if key in getattr(self, "_typed_down", set()):
+            self.last_key = now              # held real key: keep pose, no count
+            return
+        try:
+            if not hasattr(self, "_typed_down"):
+                self._typed_down = set()
+            self._typed_down.add(key)
+            if len(self._typed_down) > 24:
+                self._typed_down.clear()
+        except Exception:
+            pass
         self.last_key = now
         self.key_count += 1          # drives the typing-paw alternation
         self.key_times.append(now)
