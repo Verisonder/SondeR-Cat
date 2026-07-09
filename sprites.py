@@ -634,6 +634,14 @@ def apply_pattern(grid, pattern, head_only=False):
     if head_only:
         return grid
     h, w = len(grid), len(grid[0])
+    # Region markings (chin, chest bib, crown, mackerel split) are placed by
+    # row fraction of the FULL grid. Compact poses that sit higher/lower than
+    # a sitting cat (e.g. the curled sleep loaf, head at rows ~6-13) would get
+    # body markings smeared onto the head. Guard against that below by never
+    # letting a body marking land on or above the face: find the nose row (the
+    # face anchor) and protect everything from there up.
+    _face = [yy for yy, r in enumerate(grid) if "N" in r]
+    _head_guard = (_face[0] + 1) if _face else -1     # rows <= this are head
     out = []
     for y, row in enumerate(grid):
         py = y
@@ -697,6 +705,15 @@ def apply_pattern(grid, pattern, head_only=False):
                     c = "B"
                 if c == "B" and (py <= 4 or py >= h - 4 or x >= w - 4):
                     c = "S"
+            # head guard: on/above the nose row, don't let a body marking
+            # (white chin/chest bib, or a random spot) overwrite the face —
+            # keep the original fur so patterns never smear onto the head of
+            # compact poses like the curled sleep loaf. Deliberate head marks
+            # (JJ forehead lines, mimi crown) are placed by head-region logic
+            # and stay; this only reverts B->W/spot bleed above the nose.
+            if 0 <= _head_guard and y <= _head_guard and ch == "B" \
+                    and c != ch and (c == "W" or pattern == "spots"):
+                c = ch
             new.append(c)
         out.append("".join(new))
     return out
