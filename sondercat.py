@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "9.1.0"
-APP_BUILD = "0712t"
+APP_VERSION = "9.2.0"
+APP_BUILD = "0712u"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2311,22 +2311,28 @@ class Manager(QObject):
                                 for i, d in enumerate(self._guide_done))
                     if self._guide_done else "This is the FIRST step.")
         persona = (
-            "You are an on-screen guide inside a desktop-pet app. Look at "
-            "the screenshot and find the SINGLE next UI element the user "
-            "must interact with for their task. Respond with ONLY minified "
-            "JSON, no markdown, no code fences, exactly this shape: "
+            "You are an on-screen guide inside a desktop-pet app. The user "
+            "asked how to do something in the app shown in the screenshot. "
+            "Figure out the ACTUAL correct way to do it using what you know "
+            "and Google Search when useful — do NOT guess from the "
+            "screenshot alone. Then find the SINGLE next UI element the "
+            "user must interact with, and locate it in the screenshot. "
+            "Respond with ONLY minified JSON, no markdown, no code fences, "
+            "exactly this shape: "
             '{"found":true,"x":500,"y":500,"label":"element name",'
             '"say":"short friendly instruction","last":false,"done":false}'
             " . x and y are the CENTER of that element, normalized to "
             "0-1000 of the image width and height. Keep 'say' under 22 "
-            "words. Set \"last\":true when THIS element is the FINAL step "
-            "that completes the whole task (a simple one-click task is "
-            "last:true on the very first step) — do NOT set last:true if "
-            "the user will still need another step after this one. Set "
-            "done=true (and make 'say' a short wrap-up) only when the task "
-            "is ALREADY fully complete in the screenshot with nothing left "
-            "to point at. Set found=false if you can't locate anything "
-            "relevant (then 'say' explains what to open first).")
+            "words and make it match how the app actually works. Set "
+            "\"last\":true when THIS element is the FINAL step that "
+            "completes the whole task (a simple one-click task is last:true "
+            "on the very first step) — do NOT set last:true if the user "
+            "will still need another step after this one. Set done=true "
+            "(and make 'say' a short wrap-up) only when the task is ALREADY "
+            "fully complete in the screenshot with nothing left to point "
+            "at. Set found=false if the needed element isn't on screen yet "
+            "(then 'say' explains what to open or click first to get "
+            "there).")
         contents = [{"role": "user", "parts": [
             {"text": f"Task: {task}\nStep number: {step_no}\n{done_txt}"},
             {"inline_data": {"mime_type": "image/jpeg", "data": shot}}]}]
@@ -2336,12 +2342,20 @@ class Manager(QObject):
 
         def work():
             try:
-                raw = self._gemini_call(contents, persona).strip()
+                raw = self._gemini_call(contents, persona,
+                                        ground_with_image=True).strip()
                 if raw.startswith("```"):
                     raw = raw.strip("`")
                     if raw.lower().startswith("json"):
                         raw = raw[4:]
-                d = _json.loads(raw.strip())
+                raw = raw.strip()
+                if not raw.startswith("{"):
+                    # grounding can prepend/append citation text — pull out
+                    # the JSON object itself
+                    i, j = raw.find("{"), raw.rfind("}")
+                    if i != -1 and j != -1 and j > i:
+                        raw = raw[i:j + 1]
+                d = _json.loads(raw)
 
                 def apply():
                     self.ai_busy = False
@@ -2421,7 +2435,7 @@ class Manager(QObject):
             raise RuntimeError("empty answer")
         return text
 
-    def _gemini_call(self, contents, persona):
+    def _gemini_call(self, contents, persona, ground_with_image=False):
         import urllib.request
         import urllib.error
         key = self.cfg["global"].get("gemini_key", "").strip()
@@ -2442,6 +2456,11 @@ class Manager(QObject):
                 models.append(m)
         has_image = any("inline_data" in pt
                         for msg in contents for pt in msg.get("parts", []))
+        # current models (3.x + -latest aliases) CAN combine google_search
+        # grounding with an image; older ones can't. When ground_with_image
+        # is set we still try grounded first, then fall back to image-only if
+        # a given model rejects the combo.
+        want_ground = (not has_image) or ground_with_image
 
         def make_body(model, grounded):
             b = {
@@ -2450,7 +2469,7 @@ class Manager(QObject):
                 "generationConfig": {"maxOutputTokens": 400,
                                      "temperature": 0.8},
             }
-            if grounded and not has_image:
+            if grounded:
                 # live Google Search. All current models (3.x, 2.5, and the
                 # -latest aliases) use the new google_search tool; only the
                 # long-gone 1.x used google_search_retrieval.
@@ -2464,8 +2483,8 @@ class Manager(QObject):
         for m in models:
             url = ("https://generativelanguage.googleapis.com/v1beta/"
                    f"models/{m}:generateContent?key={key}")
-            # live search first, unless we're sending an image (can't mix)
-            for grounded in ((False,) if has_image else (True, False)):
+            # grounded first (web + knowledge), then a raw fallback
+            for grounded in ((True, False) if want_ground else (False,)):
                 body = make_body(m, grounded)
                 req = urllib.request.Request(
                     url, data=body,
