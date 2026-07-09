@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.6.0"
-APP_BUILD = "0711w"
+APP_BUILD = "0711x"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1875,11 +1875,11 @@ class Manager(QObject):
                 self.say_primary("at ease. 😌", 3)
             if self._guard_beam is not None:
                 self._guard_beam.hide()
-            for c in self.cats:         # climb back down off the post
+            for c in self.cats:         # ☂ float back down off the post
                 try:
                     if c.glide_target is None and c.perch_hwnd is None \
                             and not c.peeking:
-                        c._glide_to(c._ground_point(), speed=600)
+                        c._parachute_to_ground()
                 except Exception:
                     pass
 
@@ -3894,6 +3894,22 @@ class CatWindow(QWidget):
                    cx + int(1.2 * s), head_top + s)
         p.drawLine(cx + (half_cells - 1) * cell_w, yb,
                    cx + int(2.5 * s), paw_y)
+
+    def _parachute_to_ground(self):
+        """Deploy the parachute and drift down to the floor from wherever the
+        cat is (guard-post stand-down, lost perch, …). Only floats if there's
+        actually height to fall; otherwise just walks down."""
+        try:
+            g = self._ground_point()
+            if g.y() - self.y() > 3 * self.scale:      # high enough to float
+                self._glide_to(g, speed=160)
+                self._falling = True
+                self._parachute = True
+                self.say("\u2602\ufe0f!", 1.4)
+            else:
+                self._glide_to(g, speed=400)
+        except Exception:
+            pass
 
     def _fall_off(self, now):
         self._end_perch(go_home=False)
