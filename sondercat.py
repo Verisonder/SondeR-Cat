@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710x"
+APP_BUILD = "0710y"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2523,7 +2523,8 @@ class CatWindow(QWidget):
 
     def _resize_to_sprite(self):
         self._frame_cache = {}
-        self.side = max(14, 3 * self.scale)
+        self.side = max(14, 5 * self.scale)   # extra room so the rotated,
+        #   wide gallop frames don't clip at the sides
         self.setFixedSize(int(sprites.GRID_W * self.scale * self.grow)
                           + 2 * self.side,
                           int(sprites.GRID_H * self.scale * self.grow)
@@ -4438,6 +4439,13 @@ class CatWindow(QWidget):
             p.translate(-r.center())
         tw_, th_ = r.width(), r.height()
         tx, ty = r.left(), r.top() + jy
+        if self.state == CHASE and name in ("run_a", "run_b"):
+            # a little bigger while galloping; centered on the rotation pivot
+            rf = 1.15
+            tw_ = int(r.width() * rf)
+            th_ = int(r.height() * rf)
+            tx = r.center().x() - tw_ // 2
+            ty = r.center().y() - th_ // 2 + jy
         if self.mochi > 1.02:                # mochi: sag down from the paws
             m = self.mochi
             th_ = int(r.height() * m)
