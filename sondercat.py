@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.6.0"
-APP_BUILD = "0711d"
+APP_BUILD = "0711e"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2523,8 +2523,7 @@ class CatWindow(QWidget):
 
     def _resize_to_sprite(self):
         self._frame_cache = {}
-        self.side = max(14, 12 * self.scale)   # extra room so the bigger,
-        #   rotated, wide gallop frames don't clip at the sides
+        self.side = max(14, 3 * self.scale)
         self.setFixedSize(int(sprites.GRID_W * self.scale * self.grow)
                           + 2 * self.side,
                           int(sprites.GRID_H * self.scale * self.grow)
@@ -4007,22 +4006,6 @@ class CatWindow(QWidget):
             return "blink"
         return "sit_a" if slow else "sit_b"
 
-    def _aim_deg_vec(self, dx, dy):
-        """Rotation (degrees, Qt clockwise) so the side-view run sprite's
-        HEAD points along the travel vector (dx, dy). Left/right facing is
-        the mirror (self.flip); this is the up/down aim, clamped."""
-        if dx == 0 and dy == 0:
-            return 0.0
-        if self.flip:                    # facing LEFT (native art)
-            ang = math.degrees(math.atan2(-dy, -dx))
-        else:                            # mirrored — facing RIGHT
-            ang = math.degrees(math.atan2(dy, dx))
-        return max(-40.0, min(40.0, ang))
-
-    def _run_aim_deg(self, cur):
-        c = self.mapToGlobal(self.cat_rect().center())
-        return self._aim_deg_vec(cur.x() - c.x(), cur.y() - c.y())
-
     def _frame_image(self, name, flip, hot=False):
         key = (name, flip, hot, self.ccfg["pattern"], self.ccfg["palette"],
                self.ccfg.get("custom_body"), self.scale)
@@ -4198,44 +4181,6 @@ class CatWindow(QWidget):
         if cached is not None:
             return cached
         g = sprites.FRAMES.get(name, sprites.FRAMES["sit_a"])
-        if name.startswith("run_"):
-            # SIDE-VIEW gallop: a cup on the visible ear/cheek + a short band
-            # over the crown. Positions derive from the actual head geometry
-            # (content in the left/top region) and are filtered to cells that
-            # sit ON the head, so this self-adjusts if the head art changes.
-            head = [(x, y) for y, row in enumerate(g)
-                    for x, c in enumerate(row)
-                    if c != "." and x <= 12 and y <= 16]
-            if head:
-                hx0 = min(x for x, y in head)
-                hy0 = min(y for x, y in head)
-            else:
-                hx0, hy0 = 2, 5
-            hset = set(head)
-
-            def on_head(x, y):
-                return any((x + dx, y + dy) in hset
-                           for dy in (-1, 0, 1) for dx in (-1, 0, 1))
-
-            dark, lite = [], []
-            # cup: 3 wide x 4 tall over the near ear/cheek
-            cup_x0, cup_y0 = hx0 + 2, hy0 + 3
-            for cy in range(cup_y0, cup_y0 + 4):
-                for cx in range(cup_x0, cup_x0 + 3):
-                    if on_head(cx, cy):
-                        dark.append((cx, cy))
-            lite += [(cup_x0 + 1, cup_y0 + 1), (cup_x0 + 1, cup_y0 + 2)]
-            # band: a short 2-tall arc over the crown, toward the face
-            for cx in range(hx0, hx0 + 4):
-                for cy in (hy0 + 1, hy0 + 2):
-                    if on_head(cx, cy):
-                        dark.append((cx, cy))
-            # keep only cells sitting on the head; de-dupe
-            dark = [c for c in dict.fromkeys(dark) if on_head(*c)]
-            lite = [c for c in lite if on_head(*c)]
-            cached = (dark, lite)
-            CatWindow._HEADSET_CACHE[name] = cached
-            return cached
         rows = [y for y, row in enumerate(g)
                 if any(c != "." for c in row)]
         top = rows[0] if rows else 1
@@ -4359,9 +4304,9 @@ class CatWindow(QWidget):
                            (hx + out, hy - 1), (hx + out, hy + 1)):  # corners
                     if nb not in solid and 0 <= nb[0] < W and 0 <= nb[1] < H:
                         halo.add(nb)
-            # no outline in the typing/kneading (side) poses or the side-view
-            # run frames — just draw the cups cleanly
-            if not name.startswith(("type_", "knead_", "run_")):
+            # no outline in the typing/kneading (side) poses — it caused
+            # rendering trouble there; just draw the cups cleanly
+            if not name.startswith(("type_", "knead_")):
                 for (hx, hy) in halo:
                     hp.fillRect(hx * s, hy * s, s, s, whc)
             for (hx, hy) in dcells:
@@ -4463,22 +4408,7 @@ class CatWindow(QWidget):
         tilt = 0.0
         if self.wobble > 0.5:
             tilt += math.sin(now * 18) * self.wobble
-        if self.state == CHASE and name in ("run_a", "run_b"):
-            # gallop TOWARD the cursor: rotate the whole body so the head
-            # tracks the target, diagonals included
-            try:
-                tilt += self._run_aim_deg(QCursor.pos())
-            except Exception:
-                tilt += -9.0 if self.flip else 9.0
-        elif self.glide_target is not None and name in ("run_a", "run_b"):
-            # going anywhere (guard post, coming down, hide spot…): the head
-            # points in the direction of travel
-            try:
-                tilt += self._aim_deg_vec(self.glide_target.x() - self.x(),
-                                          self.glide_target.y() - self.y())
-            except Exception:
-                tilt += -9.0 if self.flip else 9.0
-        elif self.state == CHASE or self.glide_target is not None:
+        if self.state == CHASE or self.glide_target is not None:
             tilt += -9.0 if self.flip else 9.0
         if abs(tilt) > 0.3:
             p.translate(r.center())
@@ -4486,15 +4416,6 @@ class CatWindow(QWidget):
             p.translate(-r.center())
         tw_, th_ = r.width(), r.height()
         tx, ty = r.left(), r.top() + jy
-        if self.state == CHASE and name in ("run_a", "run_b"):
-            # a little bigger while galloping; anchor UP into the top margin
-            # (a chasing cat is airborne, not on the floor) so the enlarged,
-            # rotated sprite doesn't clip the bottom of the window
-            rf = 1.30
-            tw_ = int(r.width() * rf)
-            th_ = int(r.height() * rf)
-            tx = r.center().x() - tw_ // 2
-            ty = r.bottom() - th_ + jy
         if self.mochi > 1.02:                # mochi: sag down from the paws
             m = self.mochi
             th_ = int(r.height() * m)
@@ -4513,15 +4434,6 @@ class CatWindow(QWidget):
             tw_ = int(r.width() * 0.96)
             tx = r.center().x() - tw_ // 2
             ty = r.top() + jy + (r.height() - th_)
-        # side-view run frames face LEFT natively; mirror the FINISHED
-        # composite (sprite + headset + helmet + torch, all already drawn)
-        # when the cat is running right, so every overlay stays aligned.
-        # self.flip is True when moving left (see the chase direction logic).
-        if name in ("run_a", "run_b") and not self.flip:
-            img = img.mirrored(True, False)
-            if getattr(self, "_torch_lens", None):
-                lx, ly = self._torch_lens          # beam origin, cell coords
-                self._torch_lens = (sprites.GRID_W - 1 - lx, ly)
         p.drawImage(QRect(tx, ty, tw_, th_), img)
         p.restore()
 
