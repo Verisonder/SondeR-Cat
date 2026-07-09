@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713h"
+APP_BUILD = "0713i"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -332,6 +332,7 @@ class InputWatcher:
     def __init__(self, on_event=None):
         self.on_event = on_event
         self.last_key = 0.0
+        self.last_any_key = 0.0     # ANY key incl. modifiers (phantom check)
         self.key_count = 0            # increments per real keypress
         self.key_times = deque(maxlen=80)
         self._MODS = {"ctrl", "ctrl_l", "ctrl_r", "shift", "shift_l",
@@ -395,6 +396,8 @@ class InputWatcher:
         # --- global shortcuts FIRST, before any filtering, so nothing can
         # block them (Ctrl+Space ask, Ctrl+Shift+Alt+P update / +R restart) ---
         try:
+            self.last_any_key = time.time()   # modifiers count here — keeps
+                                              # the phantom-purge honest
             self._down.add(key)
             if len(self._down) > 24:
                 self._down.clear()
@@ -478,14 +481,17 @@ class InputWatcher:
         recent key activity so a MISSED release (stale _down entry) can't
         freeze the paw forever: a real hold produces OS auto-repeat, which
         keeps last_key fresh."""
-        if time.time() - self.last_key > 1.2:
-            # no key events lately -> any _down entry is a phantom; drop them
+        if time.time() - max(self.last_key,
+                             getattr(self, "last_any_key", 0.0)) > 1.2:
+            # no key events AT ALL lately -> _down entries are phantoms.
+            # (uses last_any_key, which modifiers DO refresh, so holding
+            # Ctrl/Shift/Alt for a shortcut never gets purged mid-combo)
             if self._down:
                 self._down.clear()
             return False
         try:
             for k in self._down:
-                if getattr(k, "name", None) not in self._MODS:
+                if getattr(k, "name", None) not in self._NO_TYPE_KEYS:
                     return True
         except Exception:
             pass
