@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713d"
+APP_BUILD = "0713e"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -337,6 +337,17 @@ class InputWatcher:
         self._MODS = {"ctrl", "ctrl_l", "ctrl_r", "shift", "shift_l",
                       "shift_r", "alt", "alt_l", "alt_r", "alt_gr",
                       "cmd", "cmd_l", "cmd_r"}
+        # keys that should NOT make the cat "type along" — modifiers and
+        # navigation/function keys. Space, backspace, enter, delete, arrows
+        # etc. are NOT here, so they still count as writing.
+        self._NO_TYPE_KEYS = self._MODS | {
+            "tab", "esc", "caps_lock", "num_lock", "scroll_lock",
+            "cmd", "cmd_l", "cmd_r",                     # Win key
+            "menu", "print_screen", "pause", "insert",
+            "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9",
+            "f10", "f11", "f12", "f13", "f14", "f15", "f16", "f17",
+            "f18", "f19", "f20",
+        }
         self.last_scroll = 0.0
         self.scroll_accum = 0.0
         self.kb_ok = self.mouse_ok = False
@@ -419,6 +430,14 @@ class InputWatcher:
         except Exception:
             pass
         now = time.time()
+        # ignore modifier / navigation keys — the cat only "types along" to
+        # actual text entry. space, backspace, enter, arrows-as-typing etc.
+        # still count (they're part of writing); shift/tab/esc/ctrl/alt/win/
+        # fn and friends don't.
+        kn2 = getattr(key, "name", None)
+        if kn2 in self._NO_TYPE_KEYS:
+            self.last_key = now
+            return
         self.last_key = now
         self.key_count += 1          # drives the typing-paw alternation
         self.key_times.append(now)
@@ -4843,7 +4862,16 @@ class CatWindow(QWidget):
 
         name = self._frame_name()
         hot = (self.state == OVERHEAT)
-        img = self._frame_image(name, False, hot).copy()
+        # while typing, face the CENTER of the screen: cat on the right half
+        # looks left, cat on the left half looks right (art faces left by
+        # default, so flip when the cat is on the LEFT half).
+        face_flip = False
+        if self.state in (KNEAD, OVERHEAT):
+            scr = (self.screen() or QGuiApplication.primaryScreen()).geometry()
+            cat_cx = self.x() + self.width() // 2
+            screen_mid = (scr.left() + scr.right()) // 2
+            face_flip = cat_cx < screen_mid       # left half → face right
+        img = self._frame_image(name, face_flip, hot).copy()
 
         # headphones: music app playing = worn while dancing; browser
         # audio = worn quietly on whatever the cat is doing
@@ -4858,6 +4886,10 @@ class CatWindow(QWidget):
             # NOTE: the base sprite is never mirrored (facing is shown by
             # the run tilt), so the headset must not mirror either
             dcells, lcells = self._headset_cells(name)
+            if face_flip:                      # frame is mirrored → mirror cups
+                W0 = sprites.GRID_W - 1
+                dcells = [(W0 - hx, hy) for (hx, hy) in dcells]
+                lcells = [(W0 - hx, hy) for (hx, hy) in lcells]
             # white outline ONLY on the small outer edge of each cup (the bit
             # that sticks out into the background) — never the band. The band
             # is a short 2-cell-tall arc; the cups are tall (4-5 cell) vertical
