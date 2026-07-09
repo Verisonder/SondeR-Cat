@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713k"
+APP_BUILD = "0713l"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -875,7 +875,7 @@ class GuideGlow(QWidget):
     the UI element the guide is pointing at — same electric blue as the
     cat's power-eyes. Purely visual; never blocks input."""
 
-    SIZE = 76                               # widget is a square this big
+    SIZE = 84                               # widget is a square this big
 
     def __init__(self):
         super().__init__(None, Qt.FramelessWindowHint
@@ -908,7 +908,7 @@ class GuideGlow(QWidget):
         cx = cy = self.SIZE / 2.0
         t = time.time()
         pulse = 0.5 + 0.5 * math.sin(t * 3.2)       # slow breathe 0..1
-        base_r = self.SIZE * 0.22
+        base_r = self.SIZE * 0.19
         r = base_r * (1.0 + 0.16 * pulse)
         # layered soft rings, brightest in the middle — the power-eye blues
         for mult, alpha in ((2.1, 26), (1.65, 44), (1.3, 66), (1.0, 92)):
