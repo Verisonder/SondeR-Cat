@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.0.0"
-APP_BUILD = "0712n"
+APP_BUILD = "0712o"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2423,6 +2423,7 @@ class Manager(QObject):
                     headers={"Content-Type": "application/json"})
                 try:
                     with urllib.request.urlopen(req, timeout=35) as r:
+                        self._gemini_model = m    # worked → prefer it next time
                         return self._gemini_parse(
                             json.loads(r.read().decode()))
                 except urllib.error.HTTPError as e:
@@ -2432,13 +2433,14 @@ class Manager(QObject):
                             "the API key was rejected") from None
                     if e.code == 400 and grounded:
                         continue          # this model won't ground: retry raw
-                    break                 # other 400s: try the next model
+                    break                 # 404/429/other: try the NEXT model
                 except Exception as ex:
                     last = str(ex)[:60]
                     break
-            else:
-                continue                  # inner loop exhausted; next model
-            self._gemini_model = m         # this model worked; prefer it
+            # if a cached preferred model keeps failing, stop trusting it so
+            # the next call starts fresh from the full list
+            if getattr(self, "_gemini_model", None) == m:
+                self._gemini_model = None
         raise RuntimeError(last)
 
     _SCREEN_HINTS = re.compile(
