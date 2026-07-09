@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0711b"
+APP_BUILD = "0711c"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2523,8 +2523,8 @@ class CatWindow(QWidget):
 
     def _resize_to_sprite(self):
         self._frame_cache = {}
-        self.side = max(14, 5 * self.scale)   # extra room so the rotated,
-        #   wide gallop frames don't clip at the sides
+        self.side = max(14, 12 * self.scale)   # extra room so the bigger,
+        #   rotated, wide gallop frames don't clip at the sides
         self.setFixedSize(int(sprites.GRID_W * self.scale * self.grow)
                           + 2 * self.side,
                           int(sprites.GRID_H * self.scale * self.grow)
@@ -4017,7 +4017,7 @@ class CatWindow(QWidget):
             ang = math.degrees(math.atan2(-dy, -dx))
         else:                            # mirrored — facing RIGHT
             ang = math.degrees(math.atan2(dy, dx))
-        return max(-55.0, min(55.0, ang))
+        return max(-40.0, min(40.0, ang))
 
     def _run_aim_deg(self, cur):
         c = self.mapToGlobal(self.cat_rect().center())
@@ -4471,12 +4471,14 @@ class CatWindow(QWidget):
         tw_, th_ = r.width(), r.height()
         tx, ty = r.left(), r.top() + jy
         if self.state == CHASE and name in ("run_a", "run_b"):
-            # a little bigger while galloping; centered on the rotation pivot
-            rf = 1.15
+            # a little bigger while galloping; anchor UP into the top margin
+            # (a chasing cat is airborne, not on the floor) so the enlarged,
+            # rotated sprite doesn't clip the bottom of the window
+            rf = 1.25
             tw_ = int(r.width() * rf)
             th_ = int(r.height() * rf)
             tx = r.center().x() - tw_ // 2
-            ty = r.center().y() - th_ // 2 + jy
+            ty = r.bottom() - th_ + jy
         if self.mochi > 1.02:                # mochi: sag down from the paws
             m = self.mochi
             th_ = int(r.height() * m)
