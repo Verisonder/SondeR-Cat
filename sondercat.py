@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.2.1"
-APP_BUILD = "0712y"
+APP_BUILD = "0712z"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -946,8 +946,9 @@ class BubbleWindow(QWidget):
         self.color = None
         self.until = 0.0
         self.cat = None
-        self._pad = 12
-        self._tail = 9
+        self._pad = 14
+        self._tail = 10
+        self._margin = 8                   # room for a soft drop shadow
 
     def show_for(self, cat, text, secs, color=None):
         self.cat = cat
@@ -966,10 +967,11 @@ class BubbleWindow(QWidget):
         # size to the FULL text so the box doesn't jump while typing
         br = fm.boundingRect(QRect(0, 0, maxtext, 2000),
                              Qt.TextWordWrap, text)
-        self._tr = QRect(self._pad, self._pad,
+        m = self._margin
+        self._tr = QRect(self._pad + m, self._pad + m,
                          br.width() + 2, br.height() + 2)
-        self.resize(br.width() + 2 + self._pad * 2,
-                    br.height() + 2 + self._pad * 2 + self._tail)
+        self.resize(br.width() + 2 + self._pad * 2 + m * 2,
+                    br.height() + 2 + self._pad * 2 + self._tail + m * 2)
         self.reposition()
         self.show()
         self.update()
@@ -999,7 +1001,7 @@ class BubbleWindow(QWidget):
         scr = (c.screen() or QGuiApplication.primaryScreen()).geometry()
         x = c.x() + c.width() // 2 - self.width() // 2
         x = max(scr.left() + 2, min(x, scr.right() - self.width() - 2))
-        y = c.y() - self.height() + int(TOP_MARGIN * 0.8)
+        y = c.y() - self.height() + int(TOP_MARGIN * 0.8) + self._margin
         y = max(scr.top() + 2, y)
         self.move(x, y)
 
@@ -1016,25 +1018,52 @@ class BubbleWindow(QWidget):
         self.reposition()
 
     def paintEvent(self, _ev):
+        from PySide6.QtGui import QPainterPath
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
-        w, h = self.width(), self.height() - self._tail
+        m = self._margin
+        w = self.width() - m * 2
+        h = self.height() - self._tail - m * 2
+        r = 12                                     # corner radius
+        cx = m + w // 2
+        by = m + h                                 # bubble bottom (tail base)
+
+        # one path = rounded body + a tail merged into the bottom edge, so
+        # there's no seam where they meet
+        path = QPainterPath()
+        path.addRoundedRect(m, m, w, h, r, r)
+        tail = QPainterPath()
+        tw = 9
+        tail.moveTo(cx - tw, by - 1)
+        tail.lineTo(cx + tw, by - 1)
+        tail.lineTo(cx + 1, by + self._tail)
+        tail.lineTo(cx - 1, by + self._tail)
+        tail.closeSubpath()
+        path = path.united(tail)
+
+        # soft drop shadow: a few offset, fading fills behind the shape
+        for i, a in ((5, 12), (3, 20), (1, 26)):
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(0, 0, 0, a))
+            p.save()
+            p.translate(0, i)
+            p.drawPath(path)
+            p.restore()
+
         bg = QColor(self.color) if self.color \
-            else QColor(255, 253, 246, 240)
+            else QColor(255, 253, 246, 250)
         fg = QColor("#ffffff") if self.color else QColor("#40342a")
-        p.setPen(QColor(0, 0, 0, 60))
+        border = QColor(255, 255, 255, 70) if self.color \
+            else QColor(0, 0, 0, 34)
+        p.setPen(QPen(border, 1.4))
         p.setBrush(bg)
-        p.drawRoundedRect(1, 1, w - 2, h - 2, 9, 9)
-        cx = w // 2
-        tail = QPolygonF([QPointF(cx - 7, h - 1), QPointF(cx + 7, h - 1),
-                          QPointF(cx, h + self._tail - 1)])
-        p.setPen(Qt.NoPen)
-        p.drawPolygon(tail)
+        p.drawPath(path)
+
         p.setPen(fg)
         p.setFont(QFont("Arial", 10))
         shown = self.text
         if not self._type_done and (int(time.time() * 2) & 1):
-            shown = shown + "█"          # blinking block caret
+            shown = shown + "▏"                    # slim blinking caret
         p.drawText(self._tr, Qt.TextWordWrap, shown)
 
 
