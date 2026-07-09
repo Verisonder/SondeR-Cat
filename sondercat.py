@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.6.0"
-APP_BUILD = "0711f"
+APP_BUILD = "0711g"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -4017,7 +4017,7 @@ class CatWindow(QWidget):
             ang = math.degrees(math.atan2(-dy, -dx))
         else:                            # mirrored — facing RIGHT
             ang = math.degrees(math.atan2(dy, dx))
-        return max(-40.0, min(40.0, ang))
+        return max(-30.0, min(30.0, ang))
 
     def _run_aim_deg(self, cur):
         c = self.mapToGlobal(self.cat_rect().center())
@@ -4474,7 +4474,7 @@ class CatWindow(QWidget):
             # a little bigger while galloping; anchor UP into the top margin
             # (a chasing cat is airborne, not on the floor) so the enlarged,
             # rotated sprite doesn't clip the bottom of the window
-            rf = 1.25
+            rf = 1.27
             tw_ = int(r.width() * rf)
             th_ = int(r.height() * rf)
             tx = r.center().x() - tw_ // 2
