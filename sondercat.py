@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.0.0"
-APP_BUILD = "0712q"
+APP_BUILD = "0712r"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2298,13 +2298,17 @@ class Manager(QObject):
             "must interact with for their task. Respond with ONLY minified "
             "JSON, no markdown, no code fences, exactly this shape: "
             '{"found":true,"x":500,"y":500,"label":"element name",'
-            '"say":"short friendly instruction","done":false} . '
-            "x and y are the CENTER of that element, normalized to 0-1000 "
-            "of the image width and height. Keep 'say' under 22 words. "
-            "Set done=true (and make 'say' a short wrap-up) when the task "
-            "is already fully complete in the screenshot. Set found=false "
-            "if you can't locate anything relevant (then 'say' explains "
-            "what to open first).")
+            '"say":"short friendly instruction","last":false,"done":false}'
+            " . x and y are the CENTER of that element, normalized to "
+            "0-1000 of the image width and height. Keep 'say' under 22 "
+            "words. Set \"last\":true when THIS element is the FINAL step "
+            "that completes the whole task (a simple one-click task is "
+            "last:true on the very first step) — do NOT set last:true if "
+            "the user will still need another step after this one. Set "
+            "done=true (and make 'say' a short wrap-up) only when the task "
+            "is ALREADY fully complete in the screenshot with nothing left "
+            "to point at. Set found=false if you can't locate anything "
+            "relevant (then 'say' explains what to open first).")
         contents = [{"role": "user", "parts": [
             {"text": f"Task: {task}\nStep number: {step_no}\n{done_txt}"},
             {"inline_data": {"mime_type": "image/jpeg", "data": shot}}]}]
@@ -2351,8 +2355,21 @@ class Manager(QObject):
                     c._sync_float()
                     c._glide_to(QPoint(wx, wy), speed=800)
                     self._guide_done.append(label)
-                    c.say(f"here — {label}! {say} 👇  "
-                          "(say 'next' when done)", 12)
+                    if d.get("last"):
+                        # final (or only) step — point it out, then wrap up
+                        # on its own; no "next" needed.
+                        c.say(f"here — {label}! {say} 👇  "
+                              "that's the last step! 🎉", 11)
+                        import threading as _th
+                        _t = _th.Timer(
+                            6.5, lambda: self._call_bridge.call.emit(
+                                lambda: self._end_guide(walk_home=True,
+                                                        quiet=True)))
+                        _t.daemon = True
+                        _t.start()
+                    else:
+                        c.say(f"here — {label}! {say} 👇  "
+                              "(say 'next' when done)", 12)
                 ui(apply)
             except Exception as e:
                 msg = str(e)[:60]
