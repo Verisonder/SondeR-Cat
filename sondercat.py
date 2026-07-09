@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.0.0"
-APP_BUILD = "0712p"
+APP_BUILD = "0712q"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2152,6 +2152,10 @@ class Manager(QObject):
         return None
 
     def dismiss_bubble(self):
+        # Esc means "I'm done" — end any guided tour so the glowing
+        # power-eyes switch back off.
+        if self.guide_active or self._guide_task is not None:
+            self._end_guide(walk_home=True, quiet=True)
         bw = getattr(self, "_bubble_win", None)
         if bw is not None and bw.isVisible():
             bw.hide()
@@ -2256,6 +2260,7 @@ class Manager(QObject):
         self.guide_active = False
         self._guide_task = None
         self._guide_done = []
+        self.ai_busy = False             # in case Esc landed mid-request
         if not quiet:
             self.say_primary("tour's over! 🐾", 3)
         if walk_home:
