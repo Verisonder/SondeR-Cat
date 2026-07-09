@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.0.0"
-APP_BUILD = "0712r"
+APP_BUILD = "0712s"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -192,7 +192,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "auto_update": True,
                    "dance_music": True, "dance_on_sound": False,
                    "gemini_key": "", "screen_vision": False,
-                   "guide_mode": False,
+                   "guide_mode": False, "guide_consent": False,
                    "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
 
@@ -2218,6 +2218,24 @@ class Manager(QObject):
                     "guide mode needs 'Let me check your screen 👀' — "
                     "turn that on first!", 5)
                 return
+            # one-time data-collection acknowledgement: guide mode sends a
+            # screenshot of your screen to Google, and the free Gemini tier
+            # may use those requests to improve its models.
+            if not g.get("guide_consent", False):
+                ok = QMessageBox.question(
+                    None, f"{APP_NAME} — Guide me on screen (beta)",
+                    "Guide mode takes a picture of your screen and sends it "
+                    "to Google's Gemini to find what you asked about.\n\n"
+                    "On the free Gemini tier, Google may use what you send "
+                    "to improve their models. So please DON'T guide over "
+                    "passwords, private messages, personal or confidential "
+                    "information on screen.\n\n"
+                    "This feature is in beta and may not always be accurate.\n\n"
+                    "Do you understand and want to turn it on?",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                if ok != QMessageBox.Yes:
+                    return
+                g["guide_consent"] = True
             g["guide_mode"] = True
             save_config(self.cfg)
             self.say_primary(
@@ -3109,7 +3127,7 @@ class CatWindow(QWidget):
         sv.setChecked(self.gcfg.get("screen_vision", False))
         sv.triggered.connect(mgr.toggle_screen_vision)
         agent.addAction(sv)
-        gm = QAction("Guide me on screen 🧭", menu)
+        gm = QAction("Guide me on screen 🧭 (beta)", menu)
         gm.setCheckable(True)
         gm.setChecked(self.gcfg.get("guide_mode", False))
         gm.triggered.connect(mgr.toggle_guide_mode)
