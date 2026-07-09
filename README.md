@@ -10,7 +10,7 @@ For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 ## Features
 
 **Reacts to you**
-- 👀 **Eye follow** — pupils track your cursor anywhere on screen
+- 👀 **Eye follow** — pupils track your cursor anywhere on screen; it blinks now and then too
 - 🔴 **Laser hunt** — wiggle the cursor side-to-side like a laser dot and the cat gallops after it (adjustable sensitivity); wiggle up-down at the bottom edge to send it to hide
 - 🐾 **Purring pets** — rub its head with the mouse → hearts + "purrr…"
 - 🍡 **Mochi drag** — grab it and it hangs from your cursor by its paws, stretching like mochi as you swing it; shake for wobble
@@ -21,6 +21,7 @@ For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 
 **Being a good coworker**
 - 😴 Naps when you're idle; wakes with a "mrrp?"
+- 🧼 **Grooming** — every so often while idle it stops to wash itself, licking a paw and cleaning up before carrying on
 - 🪟 **Climbs on your windows** — occasionally walks over and sits on top of an open window, riding along if you move it. It even naps up there, grumbles if you shake the window, and slides down if you minimize it (toggleable)
 - ☂️ **Parachute drops** — close (or maximize) the window it's sitting on and the cat doesn't plummet: it pops open a big pixel parachute and drifts gently down to the floor, swinging under the canopy, with a soft "smooth landing"
 - 🧍 **Stands in a corner** — an optional idle quirk: now and then it ambles off to a corner of the screen and just stands there a while before wandering back (off by default; pick how often, or Never)
@@ -38,6 +39,7 @@ For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 - Give the cat a name, paste a free **Google Gemini API key**, and press **Ctrl+Space** anywhere
 - A little pixel speech-bubble opens above the cat — type your question and it answers *as your cat, by name*, remembering the conversation
 - Its eyes glow an all-seeing electric blue while it thinks 🔵
+- 👀 **Let it check your screen** (optional) — turn this on and when you ask about something on your screen (*"what's this error?"*, *"what does this mean?"*) it takes a look and answers about what it sees. Off by default; screenshots are sent to Google only for that question and never saved
 - 🧭 **Guide me on screen** *(beta)* — turn it on, then ask *"how do I add a layer mask in Photoshop?"* and the cat figures out the **actual** way to do it — from what it knows **and a live web check**, not just guessing off the screenshot — then finds the right button or panel and **walks over to it** to point it out: *"here — the Layers panel, click this 👇"*. For a multi-step task it walks you through one step at a time (say **"next"**); for a simple one it points, tells you, and finishes on its own — eyes glowing the whole tour. It only shows you around — it never clicks for you
 - ⚠️ Guide mode sends a **screenshot of your screen to Google** to find what you asked about, and the free Gemini tier may use those requests to improve Google's models — so it asks you to confirm once, and you shouldn't guide over passwords or private/confidential info on screen
 - Your key is stored only on your PC and sent nowhere but Google
