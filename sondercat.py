@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.6.0"
-APP_BUILD = "0711j"
+APP_BUILD = "0711k"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -3970,12 +3970,13 @@ class CatWindow(QWidget):
         now = time.time()
         slow = int(now / 0.36) % 2          # time-based: smooth at any fps
         fast = int(now / 0.18) % 2
+        run_flip = int(now / 0.13) % 2      # gallop legs cycle a bit quicker
         if getattr(self, "_falling", False) and self.glide_target is not None:
             return "dangle"
         if self.glide_target is not None and self.state != DRAG:
             if getattr(self, "glide_speed", 1100) <= 600:
                 return "run_a" if int(now / 0.34) % 2 else "run_b"
-            return "run_a" if fast else "run_b"
+            return "run_a" if run_flip else "run_b"
         if self.state == DANCE:
             return "sit_a" if int(now / 0.24) % 2 else "sit_b"
         if self.state == SLEEP:
@@ -3998,7 +3999,7 @@ class CatWindow(QWidget):
             return ("knead_c", "knead_b", "knead_a",
                     "knead_b")[int(now / 0.14) % 4]
         if self.state == CHASE:
-            return "run_a" if fast else "run_b"
+            return "run_a" if run_flip else "run_b"
         if self.state == THINK:
             return "sit_a" if fast else "sit_b"
         if now < self.groom_until:
