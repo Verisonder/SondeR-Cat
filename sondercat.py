@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.6.0"
-APP_BUILD = "0711x"
+APP_BUILD = "0711y"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -3171,8 +3171,10 @@ class CatWindow(QWidget):
             if self.grow > 1.0:
                 self._set_grow(False)
 
-        # deep sleep: stays asleep no matter what, until toggled off
-        if self.gcfg.get("force_sleep"):
+        # deep sleep: stays asleep no matter what, until toggled off —
+        # but guard duty overrides it (a sleeping sentry is no sentry)
+        if self.gcfg.get("force_sleep") \
+                and not self.mgr.cfg["global"].get("guard_mode", False):
             if self.peeking:
                 self._unpeek(cancel=False)
             if self.state != SLEEP:
@@ -3208,6 +3210,9 @@ class CatWindow(QWidget):
 
         want_peek = (self.manual_peek or mgr.fullscreen_active
                      or self.gcfg.get("hide_mode", False))
+        if self.mgr.cfg["global"].get("guard_mode", False):
+            want_peek = False              # on duty: no hiding/peeking
+            self.sleep_at = now + self.gcfg["sleep_seconds"]  # never doze off
         # snappy to start (0.25s); once typing, hold the pose ~1s past the
         # last key. And while a key is physically HELD, stay typing the whole
         # time so the paw stays pressed on it until you let go.
@@ -3310,7 +3315,8 @@ class CatWindow(QWidget):
                     "x": r.center().x() + random.randint(-14, 22),
                     "y": r.top() + 4, "vy": 0.9, "life": 2.2,
                     "seed": random.random() * 6})
-        elif now > self.sleep_at:
+        elif now > self.sleep_at \
+                and not self.mgr.cfg["global"].get("guard_mode", False):
             if self.state != SLEEP:
                 self.yawn_until = now + 0.9
             self.state = SLEEP
