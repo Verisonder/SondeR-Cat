@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.2.1"
-APP_BUILD = "0712z"
+APP_BUILD = "0713a"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -962,15 +962,18 @@ class BubbleWindow(QWidget):
         type_secs = min(2.6, len(text) * 0.022)
         self.until = time.time() + secs + type_secs
         scr = (cat.screen() or QGuiApplication.primaryScreen()).geometry()
-        maxtext = min(400, scr.width() // 3)
+        # a comfortable reading width — not so narrow that a short sentence
+        # gets crammed onto many stubby lines
+        maxtext = max(240, min(460, scr.width() // 2))
         fm = QFontMetrics(QFont("Arial", 10))
-        # size to the FULL text so the box doesn't jump while typing
+        # size to the FULL text so the box doesn't jump while typing; the
+        # extra width keeps words off the rounded corners
         br = fm.boundingRect(QRect(0, 0, maxtext, 2000),
-                             Qt.TextWordWrap, text)
+                             Qt.TextWordWrap | Qt.AlignLeft, text)
         m = self._margin
-        self._tr = QRect(self._pad + m, self._pad + m,
-                         br.width() + 2, br.height() + 2)
-        self.resize(br.width() + 2 + self._pad * 2 + m * 2,
+        tw = br.width() + 6
+        self._tr = QRect(self._pad + m, self._pad + m, tw, br.height() + 2)
+        self.resize(tw + self._pad * 2 + m * 2,
                     br.height() + 2 + self._pad * 2 + self._tail + m * 2)
         self.reposition()
         self.show()
@@ -1042,7 +1045,7 @@ class BubbleWindow(QWidget):
         path = path.united(tail)
 
         # soft drop shadow: a few offset, fading fills behind the shape
-        for i, a in ((5, 12), (3, 20), (1, 26)):
+        for i, a in ((6, 22), (4, 34), (2, 44)):
             p.setPen(Qt.NoPen)
             p.setBrush(QColor(0, 0, 0, a))
             p.save()
@@ -1051,11 +1054,11 @@ class BubbleWindow(QWidget):
             p.restore()
 
         bg = QColor(self.color) if self.color \
-            else QColor(255, 253, 246, 250)
-        fg = QColor("#ffffff") if self.color else QColor("#40342a")
-        border = QColor(255, 255, 255, 70) if self.color \
-            else QColor(0, 0, 0, 34)
-        p.setPen(QPen(border, 1.4))
+            else QColor(255, 253, 246, 252)
+        fg = QColor("#ffffff") if self.color else QColor("#3a2f26")
+        border = QColor(255, 255, 255, 90) if self.color \
+            else QColor(70, 52, 40, 60)
+        p.setPen(QPen(border, 1.5))
         p.setBrush(bg)
         p.drawPath(path)
 
@@ -1064,7 +1067,8 @@ class BubbleWindow(QWidget):
         shown = self.text
         if not self._type_done and (int(time.time() * 2) & 1):
             shown = shown + "▏"                    # slim blinking caret
-        p.drawText(self._tr, Qt.TextWordWrap, shown)
+        p.drawText(self._tr, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignVCenter,
+                   shown)
 
 
 class AskBox(QWidget):
