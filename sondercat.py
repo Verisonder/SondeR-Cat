@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713f"
+APP_BUILD = "0713g"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -4962,8 +4962,6 @@ class CatWindow(QWidget):
                 offy = int(round(math.sin(ang) * f * (s * 0.75)))
             pal = (sprites.OVERHEAT_PALETTE if self.state == OVERHEAT
                    else self.palette())
-            if face_flip:
-                offx = -offx                   # mirror gaze with the frame
             pc = QColor(pal["P"])
             ew_x, ew_y = sprites.EYE_W * s, sprites.EYE_H * s
             pw = 2 * s                     # pupil size (px)
