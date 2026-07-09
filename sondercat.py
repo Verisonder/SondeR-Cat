@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.8.0"
-APP_BUILD = "0712e"
+APP_BUILD = "0712f"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2814,12 +2814,7 @@ class CatWindow(QWidget):
             na.triggered.connect(
                 lambda _=False, ch=chance: mgr.set_perch_nap(ch))
             napm.addAction(na)
-        cst = QAction("Stand in a corner sometimes 🧍", menu)
-        cst.setCheckable(True)
-        cst.setChecked(self.gcfg.get("corner_stand", False))
-        cst.triggered.connect(mgr.toggle_corner_stand)
-        beh.addAction(cst)
-        cfm = beh.addMenu("How often to corner-stand 🧍")
+        cfm = beh.addMenu("Stand in a corner 🧍")
         cur_cf = self.gcfg.get("corner_freq", "sometimes")
         corner_on = self.gcfg.get("corner_stand", False)
         for key, label in (("never", "Never"),
