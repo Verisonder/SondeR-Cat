@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713i"
+APP_BUILD = "0713j"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -868,6 +868,59 @@ class _AudioMeter:
             self._meter = None          # device changed: re-init later
             self._dead_until = now + 5
             return 0.0
+
+
+class GuideGlow(QWidget):
+    """Small click-through overlay that softly pulses a blue glow around
+    the UI element the guide is pointing at — same electric blue as the
+    cat's power-eyes. Purely visual; never blocks input."""
+
+    SIZE = 132                              # widget is a square this big
+
+    def __init__(self):
+        super().__init__(None, Qt.FramelessWindowHint
+                         | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.resize(self.SIZE, self.SIZE)
+        self.until = 0.0
+
+    def show_at(self, x, y, secs=30.0):
+        """Center the glow on screen point (x, y)."""
+        self.move(int(x) - self.SIZE // 2, int(y) - self.SIZE // 2)
+        self.until = time.time() + secs
+        if not self.isVisible():
+            self.show()
+        self.update()
+
+    def tick(self):
+        if not self.isVisible():
+            return
+        if time.time() > self.until:
+            self.hide()
+            return
+        self.update()
+
+    def paintEvent(self, _ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        cx = cy = self.SIZE / 2.0
+        t = time.time()
+        pulse = 0.5 + 0.5 * math.sin(t * 3.2)       # slow breathe 0..1
+        base_r = self.SIZE * 0.26
+        r = base_r * (1.0 + 0.18 * pulse)
+        # layered soft rings, brightest in the middle — the power-eye blues
+        for mult, alpha in ((2.1, 26), (1.65, 44), (1.3, 66), (1.0, 92)):
+            col = QColor("#56d9ff")
+            col.setAlpha(int(alpha * (0.65 + 0.35 * pulse)))
+            p.setPen(Qt.NoPen)
+            p.setBrush(col)
+            p.drawEllipse(QPointF(cx, cy), r * mult, r * mult)
+        core = QColor("#3ec8ff")
+        core.setAlpha(150)
+        p.setBrush(core)
+        p.drawEllipse(QPointF(cx, cy), r * 0.5, r * 0.5)
 
 
 class GuardBeam(QWidget):
@@ -1958,6 +2011,9 @@ class Manager(QObject):
             self._guard_beam = GuardBeam(self)
         if self._guard_beam is not None:
             self._guard_beam.tick()
+        gg = getattr(self, "_guide_glow", None)
+        if gg is not None:
+            gg.tick()                     # pulse/expire the guide highlight
         if on:
             now = time.time()
             if now - self._guard_say > 6 and random.random() < 0.02:
@@ -2341,6 +2397,9 @@ class Manager(QObject):
         self._guide_task = None
         self._guide_done = []
         self.ai_busy = False             # in case Esc landed mid-request
+        gg = getattr(self, "_guide_glow", None)
+        if gg is not None:
+            gg.hide()                    # highlight off with the tour
         if not quiet:
             self.say_primary("tour's over! 🐾", 3)
         if walk_home:
@@ -2428,6 +2487,9 @@ class Manager(QObject):
                         self._end_guide(walk_home=True, quiet=True)
                         return
                     if not d.get("found"):
+                        gg = getattr(self, "_guide_glow", None)
+                        if gg is not None:
+                            gg.hide()    # don't leave a stale highlight
                         self.primary().say(
                             say or "hmm, I can't spot it from here… 🤔", 8)
                         return
@@ -2437,17 +2499,27 @@ class Manager(QObject):
                     tx = geom.left() + nx * geom.width() // 1000
                     ty = geom.top() + ny * geom.height() // 1000
                     c = self.primary()
-                    wx = max(geom.left(),
-                             min(tx - c.width() // 2,
-                                 geom.right() - c.width()))
+                    # stand BESIDE the target (whichever side has room), so
+                    # the cat never covers the thing you need to click; the
+                    # blue glow marks the exact spot instead.
+                    gapx = c.width() // 2 + 40
+                    if tx - geom.left() > geom.right() - tx:
+                        wx = tx - gapx - c.width() // 2   # room on the left
+                    else:
+                        wx = tx + gapx - c.width() // 2   # room on the right
+                    wx = max(geom.left(), min(wx, geom.right() - c.width()))
                     wy = max(geom.top(),
-                             min(ty - TOP_MARGIN // 2,
+                             min(ty - c.height() // 2,
                                  geom.bottom() - c.height()))
                     if c.perch_hwnd is not None:
                         c._end_perch(go_home=False)
                     c.manual_peek = False
                     c._sync_float()
                     c._glide_to(QPoint(wx, wy), speed=800)
+                    # soft power-eye-blue glow on the exact target
+                    if getattr(self, "_guide_glow", None) is None:
+                        self._guide_glow = GuideGlow()
+                    self._guide_glow.show_at(tx, ty, secs=45.0)
                     self._guide_done.append(label)
                     if d.get("last"):
                         # final (or only) step — point it out, then wrap up
