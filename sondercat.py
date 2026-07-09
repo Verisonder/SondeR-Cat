@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.8.0"
-APP_BUILD = "0712c"
+APP_BUILD = "0712d"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -188,6 +188,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "force_sleep": False, "watch_sprites": False,
                    "window_perch": True, "perch_freq": "instant",
                    "perch_nap_chance": 0.3,
+                   "corner_stand": False, "corner_freq": "sometimes",
                    "auto_update": True,
                    "dance_music": True, "dance_on_sound": False,
                    "gemini_key": "", "screen_vision": False,
@@ -2018,6 +2019,46 @@ class Manager(QObject):
     def toggle_window_perch(self):
         g = self.cfg["global"]
         g["window_perch"] = not g.get("window_perch", True)
+
+    CORNER_FREQS = {
+        "rarely":    (420, 900),
+        "sometimes": (180, 420),
+        "often":     (90, 210),
+        "very":      (40, 100),
+    }
+
+    def corner_interval(self):
+        key = self.cfg["global"].get("corner_freq", "sometimes")
+        return self.CORNER_FREQS.get(key, self.CORNER_FREQS["sometimes"])
+
+    def toggle_corner_stand(self):
+        g = self.cfg["global"]
+        g["corner_stand"] = not g.get("corner_stand", False)
+        save_config(self.cfg)
+        if g["corner_stand"]:
+            self.say_primary("I'll go chill in a corner now and then. 🧍",
+                             3)
+            lo, hi = self.corner_interval()
+            for c in self.cats:
+                c.next_corner_at = time.time() + random.uniform(
+                    min(10, lo), min(30, hi))
+        else:
+            self.say_primary("okay, no more corner-standing.", 3)
+
+    def set_corner_freq(self, key):
+        g = self.cfg["global"]
+        g["corner_freq"] = key
+        g["corner_stand"] = True
+        save_config(self.cfg)
+        labels = {"rarely": "I'll rarely go stand in a corner",
+                  "sometimes": "I'll sometimes go stand in a corner",
+                  "often": "I'll often go stand in a corner 🧍",
+                  "very": "I'll go corner-standing a lot! 🧍"}
+        self.say_primary(labels.get(key, ""), 3)
+        lo, hi = self.corner_interval()
+        for c in self.cats:
+            c.next_corner_at = time.time() + random.uniform(
+                min(10, lo), min(30, hi))
         save_config(self.cfg)
         if not g["window_perch"]:
             for c in self.cats:
@@ -2472,6 +2513,8 @@ class CatWindow(QWidget):
         self.perch_until = 0.0
         self.perch_home = None
         self.next_perch_try = time.time() + random.uniform(30, 90)
+        self.next_corner_at = time.time() + random.uniform(60, 180)
+        self._corner_until = 0.0         # sitting in the corner until this time
         self._perch_miss = 0
         self._perch_hist = deque(maxlen=40)
         self._shake_quiet_until = 0.0
@@ -2766,6 +2809,24 @@ class CatWindow(QWidget):
             na.triggered.connect(
                 lambda _=False, ch=chance: mgr.set_perch_nap(ch))
             napm.addAction(na)
+        cst = QAction("Stand in a corner sometimes 🧍", menu)
+        cst.setCheckable(True)
+        cst.setChecked(self.gcfg.get("corner_stand", False))
+        cst.triggered.connect(mgr.toggle_corner_stand)
+        beh.addAction(cst)
+        cfm = beh.addMenu("How often to corner-stand 🧍")
+        cur_cf = self.gcfg.get("corner_freq", "sometimes")
+        for key, label in (("rarely", "Rarely"),
+                           ("sometimes", "Sometimes"),
+                           ("often", "Often"),
+                           ("very", "Very often")):
+            a = QAction(label, menu)
+            a.setCheckable(True)
+            a.setChecked(self.gcfg.get("corner_stand", False)
+                         and cur_cf == key)
+            a.triggered.connect(
+                lambda _=False, k=key: mgr.set_corner_freq(k))
+            cfm.addAction(a)
         dnc = QAction("Headphones when sound plays 🎧", menu)
         dnc.setCheckable(True)
         dnc.setChecked(self.gcfg.get("dance_music", True))
@@ -3359,6 +3420,21 @@ class CatWindow(QWidget):
                 self.next_perch_try = now + random.uniform(lo, hi)
                 self.try_perch()
 
+            # go stand in a corner now and then (opt-in, Behavior menu)
+            if now < self._corner_until:
+                self.sleep_at = now + self.gcfg["sleep_seconds"]  # just stand
+            elif (self.gcfg.get("corner_stand", False)
+                    and not guarding
+                    and now > self.next_corner_at
+                    and self.perch_hwnd is None
+                    and self.perch_pending is None
+                    and self.glide_target is None
+                    and not self.peeking
+                    and not mgr.fullscreen_active):
+                lo, hi = mgr.corner_interval()
+                self.next_corner_at = now + random.uniform(lo, hi)
+                self._go_to_corner(now)
+
         if self.state != PEEK and self.peeking:
             was_fs = self._peek_was_fs
             self._peek_was_fs = False
@@ -3778,6 +3854,29 @@ class CatWindow(QWidget):
                  min(self.x(), scr.right() - self.width() - 8))
         gy = scr.bottom() - self._feet_offset()
         return QPoint(gx, gy)
+
+    def _corner_point(self):
+        """A random bottom corner of the current screen (left or right)."""
+        scr = self.screen().availableGeometry()
+        gy = scr.bottom() - self._feet_offset()
+        if random.random() < 0.5:
+            gx = scr.left() + 6
+        else:
+            gx = scr.right() - self.width() - 6
+        return QPoint(gx, gy)
+
+    def _go_to_corner(self, now):
+        """Amble over to a screen corner and hang out there a while."""
+        if self.perch_hwnd is not None:
+            self._end_perch(go_home=False)
+        self.state = IDLE
+        self.groom_until = 0.0
+        self._sync_float()
+        self._glide_to(self._corner_point(), speed=260)
+        self._corner_until = now + random.uniform(12, 40)
+        if random.random() < 0.6:
+            self.say(random.choice(["off to my corner 🧍", "corner time.",
+                                    "just gonna stand here.", "🧍"]), 2.0)
 
     def _guard_post_point(self):
         """Top-center of the current screen — the watchtower spot.
