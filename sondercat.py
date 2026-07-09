@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.8.0"
-APP_BUILD = "0712i"
+APP_BUILD = "0712j"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2760,6 +2760,7 @@ class CatWindow(QWidget):
         stretch.addAction(scus)
 
         beh = menu.addMenu("Behavior")
+        # --- checkable toggles first ---
         chase = QAction("Chase the cursor", menu)
         chase.setCheckable(True)
         chase.setChecked(self.gcfg["chase_enabled"])
@@ -2775,6 +2776,28 @@ class CatWindow(QWidget):
         wigh.setChecked(self.gcfg.get("wiggle_hide", True))
         wigh.triggered.connect(mgr.toggle_wiggle_hide)
         beh.addAction(wigh)
+        dnc = QAction("Headphones when sound plays 🎧", menu)
+        dnc.setCheckable(True)
+        dnc.setChecked(self.gcfg.get("dance_music", True))
+        dnc.triggered.connect(mgr.toggle_dance_music)
+        beh.addAction(dnc)
+        dps = QAction("Dance + music notes 💃", menu)
+        dps.setCheckable(True)
+        dps.setChecked(self.gcfg.get("dance_on_sound", False))
+        dps.triggered.connect(mgr.toggle_dance_on_sound)
+        beh.addAction(dps)
+        snd = QAction("Meow sounds", menu)
+        snd.setCheckable(True)
+        snd.setChecked(self.gcfg.get("sounds", True))
+        snd.triggered.connect(mgr.toggle_sounds)
+        beh.addAction(snd)
+        auto = QAction("Auto-hide during fullscreen video", menu)
+        auto.setCheckable(True)
+        auto.setChecked(self.gcfg["auto_peek"])
+        auto.triggered.connect(mgr.toggle_auto_peek)
+        beh.addAction(auto)
+        # --- sub-menus at the bottom ---
+        beh.addSeparator()
         sens = beh.addMenu("Wiggle sensitivity")
         for label, key in (("High (easy to trigger)", "high"),
                            ("Medium", "medium"),
@@ -2831,26 +2854,6 @@ class CatWindow(QWidget):
             a.triggered.connect(
                 lambda _=False, k=key: mgr.set_corner_freq(k))
             cfm.addAction(a)
-        dnc = QAction("Headphones when sound plays 🎧", menu)
-        dnc.setCheckable(True)
-        dnc.setChecked(self.gcfg.get("dance_music", True))
-        dnc.triggered.connect(mgr.toggle_dance_music)
-        beh.addAction(dnc)
-        dps = QAction("Dance + music notes 💃", menu)
-        dps.setCheckable(True)
-        dps.setChecked(self.gcfg.get("dance_on_sound", False))
-        dps.triggered.connect(mgr.toggle_dance_on_sound)
-        beh.addAction(dps)
-        snd = QAction("Meow sounds", menu)
-        snd.setCheckable(True)
-        snd.setChecked(self.gcfg.get("sounds", True))
-        snd.triggered.connect(mgr.toggle_sounds)
-        beh.addAction(snd)
-        auto = QAction("Auto-hide during fullscreen video", menu)
-        auto.setCheckable(True)
-        auto.setChecked(self.gcfg["auto_peek"])
-        auto.triggered.connect(mgr.toggle_auto_peek)
-        beh.addAction(auto)
         agent = menu.addMenu("AI 🤖")
         pnm = (mgr.primary().ccfg.get("name") or "").strip()
         ask = QAction(f"Ask {pnm or 'me'} 💬 (Ctrl+Space)", menu)
