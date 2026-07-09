@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710w"
+APP_BUILD = "0710x"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -4006,6 +4006,21 @@ class CatWindow(QWidget):
             return "blink"
         return "sit_a" if slow else "sit_b"
 
+    def _run_aim_deg(self, cur):
+        """Rotation (degrees, Qt clockwise) for the side-view run sprite so
+        the HEAD points at the cursor while chasing. Left/right facing is
+        handled by the mirror (self.flip); this supplies the up/down aim,
+        clamped so the cat angles into diagonals without going vertical."""
+        c = self.mapToGlobal(self.cat_rect().center())
+        dx, dy = cur.x() - c.x(), cur.y() - c.y()
+        if dx == 0 and dy == 0:
+            return 0.0
+        if self.flip:                    # facing LEFT (native art)
+            ang = math.degrees(math.atan2(-dy, -dx))
+        else:                            # mirrored — facing RIGHT
+            ang = math.degrees(math.atan2(dy, dx))
+        return max(-55.0, min(55.0, ang))
+
     def _frame_image(self, name, flip, hot=False):
         key = (name, flip, hot, self.ccfg["pattern"], self.ccfg["palette"],
                self.ccfg.get("custom_body"), self.scale)
@@ -4408,7 +4423,14 @@ class CatWindow(QWidget):
         tilt = 0.0
         if self.wobble > 0.5:
             tilt += math.sin(now * 18) * self.wobble
-        if self.state == CHASE or self.glide_target is not None:
+        if self.state == CHASE and name in ("run_a", "run_b"):
+            # gallop TOWARD the cursor: rotate the whole body so the head
+            # tracks the target, diagonals included
+            try:
+                tilt += self._run_aim_deg(QCursor.pos())
+            except Exception:
+                tilt += -9.0 if self.flip else 9.0
+        elif self.state == CHASE or self.glide_target is not None:
             tilt += -9.0 if self.flip else 9.0
         if abs(tilt) > 0.3:
             p.translate(r.center())
