@@ -623,12 +623,20 @@ def _spot_hash(x, y):
     return ((x * 73856093) ^ (y * 19349663)) % 100
 
 
-def apply_pattern(grid, pattern):
+def apply_pattern(grid, pattern, head_only=False):
     if pattern in (None, "tabby"):
+        return grid
+    # head_only: the peek frame is just a head poking over an edge. Themed
+    # patterns place stripes/bibs by body-row and would smear body markings
+    # across the peeking face (a stripe on the forehead). A poking-out head
+    # reads cleanest plain, so skip pattern recolouring entirely here — the
+    # face keeps its base fur colour, no misplaced body markings.
+    if head_only:
         return grid
     h, w = len(grid), len(grid[0])
     out = []
     for y, row in enumerate(grid):
+        py = y
         new = []
         for x, ch in enumerate(row):
             c = ch
@@ -643,29 +651,29 @@ def apply_pattern(grid, pattern):
             elif pattern == "tuxedo":
                 if c == "S":
                     c = "B"
-                if c == "B" and y >= int(h * 0.55) and w * 0.30 <= x <= w * 0.70:
+                if c == "B" and py >= int(h * 0.55) and w * 0.30 <= x <= w * 0.70:
                     c = "W"
-                if c == "B" and h * 0.36 <= y <= h * 0.46 and w * 0.36 <= x <= w * 0.64:
+                if c == "B" and h * 0.36 <= py <= h * 0.46 and w * 0.36 <= x <= w * 0.64:
                     c = "W"
             elif pattern == "lilly":
-                if c == "B" and y >= int(h * 0.52) \
+                if c == "B" and py >= int(h * 0.52) \
                         and w * 0.28 <= x <= w * 0.72:
                     c = "W"
-                if c == "B" and h * 0.36 <= y <= h * 0.47 \
+                if c == "B" and h * 0.36 <= py <= h * 0.47 \
                         and w * 0.36 <= x <= w * 0.64:
                     c = "W"
             elif pattern == "jj":
-                if c == "B" and h * 0.38 <= y <= h * 0.47 \
+                if c == "B" and h * 0.38 <= py <= h * 0.47 \
                         and w * 0.40 <= x <= w * 0.60:
                     c = "W"                      # white chin/muzzle
-                elif c == "B" and y >= int(h * 0.58) \
+                elif c == "B" and py >= int(h * 0.58) \
                         and w * 0.40 <= x <= w * 0.60:
                     c = "W"                      # chest bib
                 elif c == "B":
                     on_line = (x + (y // 3)) % 3 == 0
-                    if y < h * 0.46:
+                    if py < h * 0.46:
                         # head: only short forehead lines, cheeks clear
-                        if on_line and y < h * 0.30 \
+                        if on_line and py < h * 0.30 \
                                 and w * 0.32 <= x <= w * 0.68 \
                                 and _spot_hash(x, y) > 8:
                             c = "S"
@@ -674,20 +682,20 @@ def apply_pattern(grid, pattern):
                         if on_line and _spot_hash(x, y) > 7:
                             c = "S"
             elif pattern == "mimi":
-                if c == "B" and y <= int(h * 0.22):
+                if c == "B" and py <= int(h * 0.22):
                     c = "S"                      # dusky crown and ears
-                elif c == "B" and h * 0.38 <= y <= h * 0.47 \
+                elif c == "B" and h * 0.38 <= py <= h * 0.47 \
                         and w * 0.40 <= x <= w * 0.60:
                     c = "W"                      # white chin
-                elif c == "B" and h * 0.52 <= y <= h * 0.75 \
+                elif c == "B" and h * 0.52 <= py <= h * 0.75 \
                         and w * 0.34 <= x <= w * 0.66:
                     c = "W"                      # white chest
-                elif c == "B" and y >= int(h * 0.78) and y % 3 == 1:
+                elif c == "B" and py >= int(h * 0.78) and y % 3 == 1:
                     c = "S"                      # ringed paws
             elif pattern == "siamese":
                 if c == "S":
                     c = "B"
-                if c == "B" and (y <= 4 or y >= h - 4 or x >= w - 4):
+                if c == "B" and (py <= 4 or py >= h - 4 or x >= w - 4):
                     c = "S"
             new.append(c)
         out.append("".join(new))
@@ -742,7 +750,7 @@ def render_frame(grid, palette, scale=6, flip=False, halo=True):
 def render_icon(palette, pattern="tabby", scale=12, frame="sit_a"):
     """Frame render + baked-in pupils (they're normally drawn at runtime)."""
     from PySide6.QtGui import QPainter, QColor
-    grid = apply_pattern(FRAMES[frame], pattern)
+    grid = apply_pattern(FRAMES[frame], pattern, head_only=(frame == "peek"))
     img = render_frame(grid, palette, scale)
     cells = EYE_CELLS.get(frame, [])
     p = QPainter(img)

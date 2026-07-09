@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.6.0"
-APP_BUILD = "0711y"
+APP_BUILD = "0711z"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -4105,7 +4105,8 @@ class CatWindow(QWidget):
             base = sprites.FRAMES.get(name)
             if base is None:
                 base = sprites.FRAMES[fallback.get(name, "sit_a")]
-            grid = sprites.apply_pattern(base, self.ccfg["pattern"])
+            grid = sprites.apply_pattern(base, self.ccfg["pattern"],
+                                         head_only=(name == "peek"))
             pal = sprites.OVERHEAT_PALETTE if hot else self.palette()
             img = sprites.render_frame(grid, pal, self.scale, flip)
             self._frame_cache[key] = img
