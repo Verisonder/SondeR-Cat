@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710u"
+APP_BUILD = "0710v"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -4434,6 +4434,15 @@ class CatWindow(QWidget):
             tw_ = int(r.width() * 0.96)
             tx = r.center().x() - tw_ // 2
             ty = r.top() + jy + (r.height() - th_)
+        # side-view run frames face LEFT natively; mirror the FINISHED
+        # composite (sprite + headset + helmet + torch, all already drawn)
+        # when the cat is running right, so every overlay stays aligned.
+        # self.flip is True when moving left (see the chase direction logic).
+        if name in ("run_a", "run_b") and not self.flip:
+            img = img.mirrored(True, False)
+            if getattr(self, "_torch_lens", None):
+                lx, ly = self._torch_lens          # beam origin, cell coords
+                self._torch_lens = (sprites.GRID_W - 1 - lx, ly)
         p.drawImage(QRect(tx, ty, tw_, th_), img)
         p.restore()
 
