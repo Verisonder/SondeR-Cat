@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.8.0"
-APP_BUILD = "0712k"
+APP_BUILD = "0712l"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -192,6 +192,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "auto_update": True,
                    "dance_music": True, "dance_on_sound": False,
                    "gemini_key": "", "screen_vision": False,
+                   "guide_mode": False,
                    "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
 
@@ -1220,6 +1221,9 @@ class Manager(QObject):
         self._audio = _AudioMeter()
         self.music_mode = "off"
         self.ai_busy = False
+        self.guide_active = False        # 🧭 mid guided-tour session
+        self._guide_task = None          # the original "how do I…" question
+        self._guide_done = []            # labels of completed steps
         self._ai_hist = []
         self._ask_box = None
         self._music_hist = deque(maxlen=24)
@@ -1898,6 +1902,7 @@ class Manager(QObject):
         save_config(self.cfg)
         CatWindow._HELMET_CACHE.clear()
         if g["guard_mode"]:
+            self._end_guide(walk_home=False, quiet=True)   # duty calls
             for c in self.cats:
                 c.groom_until = 0.0     # no grooming on duty — focus.
             mins = int(g.get("guard_timer_min", 0) or 0)
@@ -2191,6 +2196,160 @@ class Manager(QObject):
             if g["screen_vision"]
             else "screen peeking off", 4)
 
+    # ------------------------------------------------ guide mode 🧭 --------
+    def toggle_guide_mode(self):
+        g = self.cfg["global"]
+        if not g.get("guide_mode", False):
+            if not g.get("screen_vision", False):
+                self.say_primary(
+                    "guide mode needs 'Let me check your screen 👀' — "
+                    "turn that on first!", 5)
+                return
+            g["guide_mode"] = True
+            save_config(self.cfg)
+            self.say_primary(
+                "guide mode ON 🧭 — ask me how to do something "
+                "(Ctrl+Space) and I'll walk you there! say 'next' between "
+                "steps, 'stop' to end.", 7)
+        else:
+            g["guide_mode"] = False
+            save_config(self.cfg)
+            self._end_guide(walk_home=True, quiet=True)
+            self.say_primary("guide mode off.", 3)
+
+    def _grab_screen_for_guide(self):
+        """Screenshot as base64 JPEG + the LOGICAL screen geometry, so
+        Gemini's normalized coordinates can be mapped back to real window
+        positions. Returns (b64, QRect) or (None, None)."""
+        try:
+            from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+            scr = (self.primary().screen()
+                   or QGuiApplication.primaryScreen())
+            geom = scr.geometry()
+            pm = scr.grabWindow(0)
+            maxw = 1280
+            if pm.width() > maxw:
+                pm = pm.scaledToWidth(maxw, Qt.SmoothTransformation)
+            ba = QByteArray()
+            buf = QBuffer(ba)
+            buf.open(QIODevice.WriteOnly)
+            pm.save(buf, "JPEG", 72)
+            buf.close()
+            import base64
+            return base64.b64encode(bytes(ba)).decode(), geom
+        except Exception:
+            return None, None
+
+    def _end_guide(self, walk_home=True, quiet=False):
+        """Close the guided-tour session (glowy eyes off, cat back home)."""
+        if not self.guide_active and self._guide_task is None:
+            return
+        self.guide_active = False
+        self._guide_task = None
+        self._guide_done = []
+        if not quiet:
+            self.say_primary("tour's over! 🐾", 3)
+        if walk_home:
+            try:
+                c = self.primary()
+                if c.perch_hwnd is None and not c.peeking:
+                    c._glide_to(c._ground_point(), speed=400)
+            except Exception:
+                pass
+
+    def _guide_step_run(self, task, first):
+        """One step of the guided tour: screenshot → Gemini locates the next
+        UI element → the cat walks there and points. Worker-threaded."""
+        import threading, json as _json
+        p = self.primary()
+        if self.ai_busy:
+            p.say("one sec… 🤔", 2)
+            return
+        shot, geom = self._grab_screen_for_guide()
+        if not shot:
+            p.say("I couldn't grab the screen 😿", 4)
+            return
+        self.ai_busy = True
+        self.guide_active = True
+        self._guide_task = task
+        p.say("let me look… 👀" if first else "checking what's next… 👀", 8)
+        step_no = len(self._guide_done) + 1
+        done_txt = ("Steps ALREADY completed by the user: "
+                    + "; ".join(f"{i+1}) {d}"
+                                for i, d in enumerate(self._guide_done))
+                    if self._guide_done else "This is the FIRST step.")
+        persona = (
+            "You are an on-screen guide inside a desktop-pet app. Look at "
+            "the screenshot and find the SINGLE next UI element the user "
+            "must interact with for their task. Respond with ONLY minified "
+            "JSON, no markdown, no code fences, exactly this shape: "
+            '{"found":true,"x":500,"y":500,"label":"element name",'
+            '"say":"short friendly instruction","done":false} . '
+            "x and y are the CENTER of that element, normalized to 0-1000 "
+            "of the image width and height. Keep 'say' under 22 words. "
+            "Set done=true (and make 'say' a short wrap-up) when the task "
+            "is already fully complete in the screenshot. Set found=false "
+            "if you can't locate anything relevant (then 'say' explains "
+            "what to open first).")
+        contents = [{"role": "user", "parts": [
+            {"text": f"Task: {task}\nStep number: {step_no}\n{done_txt}"},
+            {"inline_data": {"mime_type": "image/jpeg", "data": shot}}]}]
+
+        def ui(fn):
+            self._call_bridge.call.emit(fn)
+
+        def work():
+            try:
+                raw = self._gemini_call(contents, persona).strip()
+                if raw.startswith("```"):
+                    raw = raw.strip("`")
+                    if raw.lower().startswith("json"):
+                        raw = raw[4:]
+                d = _json.loads(raw.strip())
+
+                def apply():
+                    self.ai_busy = False
+                    say = str(d.get("say") or "").strip()
+                    if d.get("done"):
+                        self.primary().say(
+                            (say or "all done!") + " 🎉", 8)
+                        self._end_guide(walk_home=True, quiet=True)
+                        return
+                    if not d.get("found"):
+                        self.primary().say(
+                            say or "hmm, I can't spot it from here… 🤔", 8)
+                        return
+                    nx = max(0, min(1000, int(d.get("x", 500))))
+                    ny = max(0, min(1000, int(d.get("y", 500))))
+                    label = str(d.get("label") or "here").strip()
+                    tx = geom.left() + nx * geom.width() // 1000
+                    ty = geom.top() + ny * geom.height() // 1000
+                    c = self.primary()
+                    wx = max(geom.left(),
+                             min(tx - c.width() // 2,
+                                 geom.right() - c.width()))
+                    wy = max(geom.top(),
+                             min(ty - TOP_MARGIN // 2,
+                                 geom.bottom() - c.height()))
+                    if c.perch_hwnd is not None:
+                        c._end_perch(go_home=False)
+                    c.manual_peek = False
+                    c._sync_float()
+                    c._glide_to(QPoint(wx, wy), speed=800)
+                    self._guide_done.append(label)
+                    c.say(f"here — {label}! {say} 👇  "
+                          "(say 'next' when done)", 12)
+                ui(apply)
+            except Exception as e:
+                msg = str(e)[:60]
+
+                def fail():
+                    self.ai_busy = False
+                    self.primary().say(
+                        f"my guide-brain glitched… ({msg})", 6)
+                ui(fail)
+        threading.Thread(target=work, daemon=True).start()
+
     def set_gemini_key(self):
         cur = self.cfg["global"].get("gemini_key", "")
         key, ok = QInputDialog.getText(
@@ -2307,6 +2466,23 @@ class Manager(QObject):
     def ask_ai(self, question):
         import threading
         p = self.primary()
+        # 🧭 guide mode: questions become guided tours; 'next' advances,
+        # 'stop'/'done'/'cancel' ends the tour.
+        if self.cfg["global"].get("guide_mode", False) \
+                and self.cfg["global"].get("screen_vision", False):
+            q = question.strip().lower().rstrip(".!")
+            if self.guide_active and q in ("stop", "cancel", "done",
+                                           "end", "quit", "exit"):
+                self._end_guide(walk_home=True)
+                return
+            if self.guide_active and q in ("next", "next step", "ok",
+                                           "okay", "continue", "go on",
+                                           "what's next", "whats next"):
+                self._guide_step_run(self._guide_task, first=False)
+                return
+            self._guide_done = []
+            self._guide_step_run(question, first=True)
+            return
         if self.ai_busy:
             p.say("one sec, still thinking… 🤔", 2)
             return
@@ -2891,6 +3067,11 @@ class CatWindow(QWidget):
         sv.setChecked(self.gcfg.get("screen_vision", False))
         sv.triggered.connect(mgr.toggle_screen_vision)
         agent.addAction(sv)
+        gm = QAction("Guide me on screen 🧭", menu)
+        gm.setCheckable(True)
+        gm.setChecked(self.gcfg.get("guide_mode", False))
+        gm.triggered.connect(mgr.toggle_guide_mode)
+        agent.addAction(gm)
         nmai = QAction("Name this cat ✏️", menu)
         nmai.triggered.connect(self.rename_cat)
         agent.addAction(nmai)
@@ -3440,6 +3621,7 @@ class CatWindow(QWidget):
                 self.next_groom = now + random.uniform(30, 80)
             if (self.gcfg.get("window_perch", True)
                     and not guarding          # stay at the guard post
+                    and not mgr.guide_active  # not while showing you around
                     and now > self.next_perch_try
                     and self.perch_hwnd is None
                     and self.perch_pending is None
@@ -3455,6 +3637,7 @@ class CatWindow(QWidget):
                 self.sleep_at = now + self.gcfg["sleep_seconds"]  # just stand
             elif (self.gcfg.get("corner_stand", False)
                     and not guarding
+                    and not mgr.guide_active
                     and now > self.next_corner_at
                     and self.perch_hwnd is None
                     and self.perch_pending is None
@@ -4546,6 +4729,7 @@ class CatWindow(QWidget):
             guarding = self.mgr.cfg["global"].get("guard_mode", False)
             power = (self.index == 0
                      and (self.mgr.ai_busy
+                          or self.mgr.guide_active
                           or (self.mgr._ask_box is not None
                               and self.mgr._ask_box.isVisible())))
             if self.state == THINK and not power:
