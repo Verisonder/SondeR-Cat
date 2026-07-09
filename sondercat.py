@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.2.1"
-APP_BUILD = "0713b"
+APP_BUILD = "0713c"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2865,6 +2865,7 @@ class CatWindow(QWidget):
         self.next_perch_try = time.time() + random.uniform(30, 90)
         self.next_corner_at = time.time() + random.uniform(60, 180)
         self._corner_until = 0.0         # sitting in the corner until this time
+        self._corner_going = False       # currently walking to the corner
         self._perch_miss = 0
         self._perch_hist = deque(maxlen=40)
         self._shake_quiet_until = 0.0
@@ -3793,8 +3794,15 @@ class CatWindow(QWidget):
                 self.try_perch()
 
             # go stand in a corner now and then (opt-in, Behavior menu)
-            if now < self._corner_until:
-                self.sleep_at = now + self.gcfg["sleep_seconds"]  # just stand
+            if self._corner_going:
+                # walking to the corner — when we arrive, start standing
+                self.sleep_at = now + self.gcfg["sleep_seconds"]
+                if self.glide_target is None:
+                    self._corner_going = False
+                    self._corner_until = now + random.uniform(15, 45)
+            elif now < self._corner_until:
+                # standing in the corner: just stay put, don't re-trigger
+                self.sleep_at = now + self.gcfg["sleep_seconds"]
             elif (self.gcfg.get("corner_stand", False)
                     and not guarding
                     and not mgr.guide_active
@@ -4229,24 +4237,30 @@ class CatWindow(QWidget):
         return QPoint(gx, gy)
 
     def _corner_point(self):
-        """A random bottom corner of the current screen (left or right)."""
+        """The bottom corner the cat is currently CLOSEST to (left or right),
+        so it doesn't cross the whole screen or keep switching sides."""
         scr = self.screen().availableGeometry()
         gy = scr.bottom() - self._feet_offset()
-        if random.random() < 0.5:
-            gx = scr.left() + 6
-        else:
-            gx = scr.right() - self.width() - 6
+        left_x = scr.left() + 6
+        right_x = scr.right() - self.width() - 6
+        cat_cx = self.x() + self.width() // 2
+        screen_mid = (scr.left() + scr.right()) // 2
+        gx = left_x if cat_cx <= screen_mid else right_x
         return QPoint(gx, gy)
 
     def _go_to_corner(self, now):
-        """Amble over to a screen corner and hang out there a while."""
+        """Amble over to the nearest screen corner and hang out there a while.
+        The 'stand here' timer starts only once it ARRIVES (set in tick), so
+        the walk doesn't eat into the standing time and it can't re-pick a
+        corner mid-trip."""
         if self.perch_hwnd is not None:
             self._end_perch(go_home=False)
         self.state = IDLE
         self.groom_until = 0.0
         self._sync_float()
         self._glide_to(self._corner_point(), speed=260)
-        self._corner_until = now + random.uniform(12, 40)
+        self._corner_going = True          # en route to the corner
+        self._corner_until = 0.0
         if random.random() < 0.6:
             self.say(random.choice(["off to my corner 🧍", "corner time.",
                                     "just gonna stand here.", "🧍"]), 2.0)
@@ -4274,6 +4288,7 @@ class CatWindow(QWidget):
         self.manual_peek = False
         self.groom_until = 0.0
         self._corner_until = 0.0          # abandon any corner-standing
+        self._corner_going = False
         self._glide_to(self._guard_post_point(), speed=600)
 
     def _perch_covered(self, l, t, r, b):
