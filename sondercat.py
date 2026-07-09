@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.8.0"
-APP_BUILD = "0712h"
+APP_BUILD = "0712i"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2851,11 +2851,6 @@ class CatWindow(QWidget):
         auto.setChecked(self.gcfg["auto_peek"])
         auto.triggered.connect(mgr.toggle_auto_peek)
         beh.addAction(auto)
-        manual = QAction("Come back out" if self.manual_peek
-                         else "Hide at the bottom now", menu)
-        manual.triggered.connect(self.toggle_manual_peek)
-        beh.addAction(manual)
-
         agent = menu.addMenu("AI 🤖")
         pnm = (mgr.primary().ccfg.get("name") or "").strip()
         ask = QAction(f"Ask {pnm or 'me'} 💬 (Ctrl+Space)", menu)
