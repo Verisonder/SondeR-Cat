@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.8.0"
-APP_BUILD = "0712d"
+APP_BUILD = "0712e"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2047,6 +2047,11 @@ class Manager(QObject):
 
     def set_corner_freq(self, key):
         g = self.cfg["global"]
+        if key == "never":
+            g["corner_stand"] = False
+            save_config(self.cfg)
+            self.say_primary("okay, no more corner-standing.", 3)
+            return
         g["corner_freq"] = key
         g["corner_stand"] = True
         save_config(self.cfg)
@@ -2816,14 +2821,18 @@ class CatWindow(QWidget):
         beh.addAction(cst)
         cfm = beh.addMenu("How often to corner-stand 🧍")
         cur_cf = self.gcfg.get("corner_freq", "sometimes")
-        for key, label in (("rarely", "Rarely"),
+        corner_on = self.gcfg.get("corner_stand", False)
+        for key, label in (("never", "Never"),
+                           ("rarely", "Rarely"),
                            ("sometimes", "Sometimes"),
                            ("often", "Often"),
                            ("very", "Very often")):
             a = QAction(label, menu)
             a.setCheckable(True)
-            a.setChecked(self.gcfg.get("corner_stand", False)
-                         and cur_cf == key)
+            if key == "never":
+                a.setChecked(not corner_on)
+            else:
+                a.setChecked(corner_on and cur_cf == key)
             a.triggered.connect(
                 lambda _=False, k=key: mgr.set_corner_freq(k))
             cfm.addAction(a)
@@ -3900,6 +3909,7 @@ class CatWindow(QWidget):
             pass
         self.manual_peek = False
         self.groom_until = 0.0
+        self._corner_until = 0.0          # abandon any corner-standing
         self._glide_to(self._guard_post_point(), speed=600)
 
     def _perch_covered(self, l, t, r, b):
