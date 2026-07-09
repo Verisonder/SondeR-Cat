@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.8.0"
-APP_BUILD = "0712j"
+APP_BUILD = "0712k"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1238,7 +1238,7 @@ class Manager(QObject):
         self._auto_timer.timeout.connect(
             lambda: self.check_updates(manual=False))
         if not IS_STORE_BUILD:      # Store build updates via Microsoft Store
-            self._auto_timer.start(6 * 3600 * 1000)
+            self._auto_timer.start(1 * 3600 * 1000)   # hourly
         self.sprites_reloads = 0
         self._watch = None
         self._watch_timer = None
@@ -1414,6 +1414,23 @@ class Manager(QObject):
         m = re.search(r'APP_VERSION = "([^"]+)"', src)
         return (m.group(1) if m else None), src
 
+    @staticmethod
+    def _version_tuple(v):
+        """'8.10.0' -> (8, 10, 0). Non-numeric parts ignored, missing → 0."""
+        parts = []
+        for p in str(v or "").split("."):
+            digits = "".join(ch for ch in p if ch.isdigit())
+            parts.append(int(digits) if digits else 0)
+        return tuple(parts) or (0,)
+
+    def _is_newer_version(self, remote_ver):
+        """True only when the remote APP_VERSION is a HIGHER numbered version
+        than what's installed (e.g. 8.8.0 -> 8.9.0 / 9.0.0). Build-tag-only
+        pushes (same version, new build like 0712k) are NOT 'newer'."""
+        if not remote_ver:
+            return False
+        return self._version_tuple(remote_ver) > self._version_tuple(APP_VERSION)
+
     def check_updates(self, manual=True):
         """Runs in a worker thread; UI messages go through the bridge."""
         if IS_STORE_BUILD:
@@ -1466,6 +1483,13 @@ class Manager(QObject):
                     except Exception:
                         return
                 if not changed:
+                    return
+                # AUTO-UPDATE ONLY FOR A NEW NUMBERED VERSION (8.9, 9.0, …).
+                # A build-tag-only refresh (same APP_VERSION, new build like
+                # 0712k) is NOT auto-installed — the cat stays quiet about it.
+                # (first run always pulls the latest to start fresh.)
+                is_new_ver = self._is_newer_version(ver)
+                if not (is_new_ver or getattr(self, "first_run", False)):
                     return
                 auto = self.cfg["global"].get("auto_update", True)
                 if not (auto or getattr(self, "first_run", False)):
