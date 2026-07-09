@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713e"
+APP_BUILD = "0713f"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -392,8 +392,9 @@ class InputWatcher:
     def _on_press(self, key):
         try:
             if key in self._down:
-                self.last_key = time.time()   # auto-repeat: still held, but
-                return                        # don't re-count (parity stays)
+                if getattr(key, "name", None) not in self._NO_TYPE_KEYS:
+                    self.last_key = time.time()  # auto-repeat: still held, but
+                return                           # don't re-count (parity stays)
             self._down.add(key)
             if len(self._down) > 24:   # safety net for missed releases
                 self._down.clear()
@@ -436,8 +437,7 @@ class InputWatcher:
         # fn and friends don't.
         kn2 = getattr(key, "name", None)
         if kn2 in self._NO_TYPE_KEYS:
-            self.last_key = now
-            return
+            return                       # don't count AND don't refresh
         self.last_key = now
         self.key_count += 1          # drives the typing-paw alternation
         self.key_times.append(now)
@@ -4933,6 +4933,9 @@ class CatWindow(QWidget):
 
         eyes = sprites.EYE_CELLS.get(name)
         if eyes:
+            if face_flip:                      # frame mirrored → mirror eyes
+                W0 = sprites.GRID_W - 1
+                eyes = [(W0 - sprites.EYE_W + 1 - ex, ey) for (ex, ey) in eyes]
             guarding = self.mgr.cfg["global"].get("guard_mode", False)
             power = (self.index == 0
                      and (self.mgr.ai_busy
@@ -4959,6 +4962,8 @@ class CatWindow(QWidget):
                 offy = int(round(math.sin(ang) * f * (s * 0.75)))
             pal = (sprites.OVERHEAT_PALETTE if self.state == OVERHEAT
                    else self.palette())
+            if face_flip:
+                offx = -offx                   # mirror gaze with the frame
             pc = QColor(pal["P"])
             ew_x, ew_y = sprites.EYE_W * s, sprites.EYE_H * s
             pw = 2 * s                     # pupil size (px)
