@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710z"
+APP_BUILD = "0711a"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -4204,19 +4204,19 @@ class CatWindow(QWidget):
             # left columns (the cat faces left; running right is mirrored at
             # composite time, so this mirrors for free).
             head_rows = [y for y, row in enumerate(g)
-                         if any(c != "." for x, c in enumerate(row) if x <= 9)]
+                         if any(c != "." for x, c in enumerate(row) if x <= 10)]
             ht = head_rows[0] if head_rows else 5      # ear tip row
             dark, lite = [], []
             # cup: 3 wide x 4 tall over the ear/cheek
             for cy in range(ht + 3, ht + 7):
-                for cx in (5, 6, 7):
+                for cx in (6, 7, 8):
                     dark.append((cx, cy))
-            lite += [(6, ht + 4), (6, ht + 5)]
+            lite += [(7, ht + 4), (7, ht + 5)]
             # band: 2-tall arc from the cup up over the crown toward the face
-            for cx in (2, 3, 4):
+            for cx in (3, 4, 5):
                 dark.append((cx, ht + 1))
                 dark.append((cx, ht + 2))
-            dark.append((5, ht + 2))
+            dark.append((6, ht + 2))
             cached = (dark, lite)
             CatWindow._HEADSET_CACHE[name] = cached
             return cached
