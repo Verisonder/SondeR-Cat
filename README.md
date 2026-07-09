@@ -22,6 +22,8 @@ For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 **Being a good coworker**
 - 😴 Naps when you're idle; wakes with a "mrrp?"
 - 🪟 **Climbs on your windows** — occasionally walks over and sits on top of an open window, riding along if you move it. It even naps up there, grumbles if you shake the window, and slides down if you minimize it (toggleable)
+- ☂️ **Parachute drops** — close (or maximize) the window it's sitting on and the cat doesn't plummet: it pops open a big pixel parachute and drifts gently down to the floor, swinging under the canopy, with a soft "smooth landing"
+- 🧍 **Stands in a corner** — an optional idle quirk: now and then it ambles off to a corner of the screen and just stands there a while before wandering back (off by default; pick how often, or Never)
 - 💤 **Deep sleep** toggle — sleeps until YOU say otherwise; nothing wakes it
 - 🫣 **Hide at the bottom** — tuck the cat away at the screen edge, or wiggle your cursor up-down at the bottom to send it there. It stays hidden — ignoring typing, scrolling and mouse wiggles — until you **click** it, then it stands up right where it is
 - 📺 Also auto-hides during fullscreen video
@@ -36,11 +38,12 @@ For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 - Give the cat a name, paste a free **Google Gemini API key**, and press **Ctrl+Space** anywhere
 - A little pixel speech-bubble opens above the cat — type your question and it answers *as your cat, by name*, remembering the conversation
 - Its eyes glow an all-seeing electric blue while it thinks 🔵
+- 🧭 **Guide me on screen** (optional) — turn it on, then ask *"how do I add a layer mask in Photoshop?"* and the cat looks at your screen, finds the right button or panel, and **walks over to it** to point it out: *"here — the Layers panel, click this 👇"*. Say **"next"** and it guides you through each following step, one at a time, eyes glowing the whole tour. It only shows you around — it never clicks for you
 - Your key is stored only on your PC and sent nowhere but Google
 
 **🔦 Guard mode** (theatrical patrol — purely for fun, never blocks input)
 - Flip it on and the cat marches to the **top-center of the screen** — the high ground — puts on a **camo tactical helmet**, and stands watch with a **handheld flashlight** casting a sweeping red patrol beam (the torch rotates to follow the beam)
-- **All business on duty** — it won't groom, knead along with your typing, perch on windows, wiggle-hide, play with scroll-paper, or open the AI box (Ctrl+Space just gets "not now — I'm on duty. 🫡")
+- **All business on duty** — it stays wide awake at its post (no napping, deep sleep or hiding) and won't groom, knead along with your typing, perch on windows, wiggle-hide, play with scroll-paper, or open the AI box (Ctrl+Space just gets "not now — I'm on duty. 🫡"). Stand it down and it **parachutes** back off its watchtower
 - Wiggle the cursor and it **pounces on the "intruder"**, pins it for a beat, then marches back to its post; drag it away and it protests and returns; grab or pet it on duty and it snaps ("HEY! hands off! 😾")
 - ⏱️ **Auto-off timer** — set a patrol length (5 min–2 h presets or custom) and it stands down on its own when the shift ends
 
@@ -49,7 +52,7 @@ For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 - 🎨 10 fur colors + any custom color, patterns (tabby / solid / tuxedo / spots / siamese), and **custom eye color** (presets or any color you pick)
 - 🐈🐈 **Multiple cats**, each with its own name, look and eyes
 - 📏 7 sizes from tiny 2× to chunky 10×; positions and settings remembered
-- 🔄 **Updates itself** — new versions install automatically in the background (toggleable); the installer never changes
+- 🔄 **Updates itself** — checks hourly and installs new numbered versions automatically in the background (toggleable); the installer never changes. Restart it any time with **Ctrl+Shift+Alt+R**
 
 ## Install
 
