@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713l"
+APP_BUILD = "0713m"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -5064,10 +5064,12 @@ class CatWindow(QWidget):
                     pp.drawEllipse(QPointF(cxp, cyp),
                                    ew_x * 1.15, ew_y * 1.15)
                 if grid:
+                    W0 = sprites.GRID_W - 1
                     for gy, row in enumerate(grid):
                         for gx, c in enumerate(row):
                             if c == "E":
-                                pp.fillRect(gx * s, gy * s, s, s, tint)
+                                dx = (W0 - gx) if face_flip else gx
+                                pp.fillRect(dx * s, gy * s, s, s, tint)
             for (ex, ey) in eyes:
                 bx, by = ex * s, ey * s
                 px = max(bx, min(bx + offx + (ew_x - pw) // 2, bx + ew_x - pw))
