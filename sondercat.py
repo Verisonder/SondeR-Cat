@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.6.0"
-APP_BUILD = "0711v"
+APP_BUILD = "0711w"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -3844,13 +3844,12 @@ class CatWindow(QWidget):
 
 
     def _draw_parachute(self, p, now):
-        """Pixel-art parachute above the cat while it drifts down.
-        Cell-styled (like the helmet/flashlight overlays) so it matches the
-        art; sized adaptively so it never pokes out of the window top even
-        at big cat sizes."""
+        """Big pixel-art parachute above the cat while it drifts down.
+        Canopy spans the full cat width (26 cells x 8 rows). Cell width
+        always matches the sprite scale; cell HEIGHT flattens slightly at
+        very large cat sizes where the fixed top margin runs out of room."""
         from PySide6.QtGui import QColor, QPen
         s = max(2, int(self.scale))
-        # top of the dangle sprite's actual content (cached)
         top_row = getattr(CatWindow, "_DANGLE_TOP", None)
         if top_row is None:
             g = sprites.FRAMES.get("dangle", [])
@@ -3859,44 +3858,41 @@ class CatWindow(QWidget):
             CatWindow._DANGLE_TOP = top_row
         head_top = TOP_MARGIN + top_row * s
         cx = self.cat_rect().center().x()
-        # vertical budget above the head
-        strings_h = max(2 * s, 8)
-        canopy_rows = 5
-        cell = s
-        while canopy_rows * cell + strings_h + 2 > head_top and cell > 2:
-            cell -= 1                      # shrink cells before losing rows
-        while canopy_rows * cell + strings_h + 2 > head_top and canopy_rows > 3:
-            canopy_rows -= 1
-        canopy_h = canopy_rows * cell
-        half_cells = 8                     # canopy is 2*8 cells wide
-        max_half = (self.width() // 2 - 2) // cell
-        half_cells = max(4, min(half_cells, max_half))
+        rows_n = 8
+        half_cells = 13                    # 26 cells: as wide as the cat
+        strings_h = min(max(2 * s, 8), max(6, head_top // 4))
+        cell_w = s
+        cell_h = min(s, max(2, (head_top - strings_h - 2) // rows_n))
+        max_half = (self.width() // 2 - 2) // cell_w
+        half_cells = max(6, min(half_cells, max_half))
+        canopy_h = rows_n * cell_h
         y0 = head_top - strings_h - canopy_h
         red = QColor("#d9534f"); cream = QColor("#f6ead8")
         dark = QColor("#4a2f1a")
-        # canopy: widest at the bottom row, arcing narrower toward the top
-        for ry in range(canopy_rows):
-            frac = (ry + 1) / canopy_rows
-            hw = max(2, int(round(half_cells * math.sqrt(frac * (2 - frac)))))
-            yy = y0 + ry * cell
+        for ry in range(rows_n):
+            frac = (ry + 1) / rows_n
+            hw = max(3, int(round(half_cells * math.sqrt(frac * (2 - frac)))))
+            yy = y0 + ry * cell_h
             for k in range(-hw, hw):
-                col = red if ((k + 100) // 3) % 2 == 0 else cream
+                col = red if ((k + 130) // 4) % 2 == 0 else cream
                 if ry == 0 or k in (-hw, hw - 1):
-                    col = dark             # outline: top row + side edges
-                p.fillRect(cx + k * cell, yy, cell, cell, col)
-            # 1-cell dark rim under the bottom row edge cells
-            if ry == canopy_rows - 1:
-                for k in (-hw, hw - 1):
-                    p.fillRect(cx + k * cell, yy + cell, cell,
-                               max(2, cell // 2), dark)
-        # strings: canopy corners + centre down to the raised paws
+                    col = dark             # outline: crown row + side edges
+                p.fillRect(cx + k * cell_w, yy, cell_w, cell_h, col)
+            if ry == rows_n - 1:           # scalloped dark rim on the bottom
+                for k in range(-hw, hw, 4):
+                    p.fillRect(cx + k * cell_w, yy + cell_h,
+                               cell_w, max(2, cell_h // 2), dark)
+        # strings: 4 of them, from the canopy edge down to the raised paws
         pen = QPen(dark); pen.setWidth(max(2, s // 2)); p.setPen(pen)
         yb = y0 + canopy_h
         paw_y = head_top + int(1.5 * s)
-        p.drawLine(cx - (half_cells - 1) * cell, yb,
+        p.drawLine(cx - (half_cells - 1) * cell_w, yb,
                    cx - int(2.5 * s), paw_y)
-        p.drawLine(cx, yb, cx, head_top + s)
-        p.drawLine(cx + (half_cells - 1) * cell, yb,
+        p.drawLine(cx - (half_cells // 2) * cell_w, yb,
+                   cx - int(1.2 * s), head_top + s)
+        p.drawLine(cx + (half_cells // 2) * cell_w, yb,
+                   cx + int(1.2 * s), head_top + s)
+        p.drawLine(cx + (half_cells - 1) * cell_w, yb,
                    cx + int(2.5 * s), paw_y)
 
     def _fall_off(self, now):
