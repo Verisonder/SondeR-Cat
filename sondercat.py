@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "8.3.0"
-APP_BUILD = "0710v"
+APP_BUILD = "0710w"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -603,7 +603,7 @@ def clear_agent_status():
 
 # ------------------------------------------------- live sprite reloading -----
 
-SPRITE_CHARS = set(".KBSWENMZHGgO")
+SPRITE_CHARS = set(".KBSWENMZHGgOP")
 REQUIRED_FRAMES = ["sit_a", "sit_b", "blink", "type_a", "type_b",
                    "knead_a", "knead_b", "sleep", "run_a", "run_b",
                    "stretch", "dangle", "peek"]
