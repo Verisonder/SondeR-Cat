@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.7.0"
-APP_BUILD = "0714u"
+APP_BUILD = "0714v"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1111,43 +1111,50 @@ class DuckHuntGame(QWidget):
             p.setPen(Qt.NoPen)
             p.setBrush(col)
             p.drawEllipse(QPointF(pop["x"], pop["y"]), r, r)
-        # HUD — retro arcade score panel: black box, white stroke (so it
-        # never blends into a dark wallpaper), cyan "HIGH SCORE" title with
-        # the numbers below, plus the live score.
+        # HUD — retro arcade score panel, CENTERED at the top, drawn with
+        # chunky 3x5 pixel glyphs (no smooth font) so it reads as pixel-art.
+        # Black box + white stroke so it never blends into a dark wallpaper.
         from PySide6.QtCore import QRectF
-        pw_, ph_ = 300, 96
-        panel = QRectF(24, 22, pw_, ph_)
+        title = "HIGH SCORE"
+        hi = f"{self.high:07d}"
+        sc = f"SCORE {self.score:05d}"
+        tp, np_, sp = 5, 8, 4          # pixel cell sizes for title/number/score
+        tw = sprites.pixel_text_width(title, tp)
+        nw = sprites.pixel_text_width(hi, np_)
+        sw = sprites.pixel_text_width(sc, sp)
+        inner_w = max(tw, nw, sw)
+        pad = 26
+        pw_ = inner_w + pad * 2
+        ph_ = 118
+        px0 = (self.sw - pw_) // 2     # CENTER horizontally
+        py0 = 22
+        panel = QRectF(px0, py0, pw_, ph_)
         p.setBrush(QColor(6, 8, 12, 235))
         p.setPen(QPen(QColor(255, 255, 255), 3))    # white stroke border
-        p.drawRoundedRect(panel, 10, 10)
-        # a thin inner accent line, arcade-cabinet style
+        p.drawRoundedRect(panel, 12, 12)
         p.setBrush(Qt.NoBrush)
-        p.setPen(QPen(QColor(80, 90, 110), 1))
-        p.drawRoundedRect(QRectF(30, 28, pw_ - 12, ph_ - 12), 7, 7)
-
-        def arcade_text(txt, cx, cy, size, col, weight=QFont.Bold):
-            fA = QFont("Consolas", size, weight)
-            fA.setLetterSpacing(QFont.PercentageSpacing, 118)
-            p.setFont(fA)
-            # blocky drop-shadow for a pixel-CRT feel
-            p.setPen(QColor(0, 0, 0, 220))
-            p.drawText(QRectF(cx + 2, cy + 2, pw_, size + 10),
-                       Qt.AlignHCenter, txt)
-            p.setPen(col)
-            p.drawText(QRectF(cx, cy, pw_, size + 10),
-                       Qt.AlignHCenter, txt)
-
-        arcade_text("HIGH SCORE", 24, 30, 15, QColor("#57e8ff"))
-        arcade_text(f"{self.high:07d}", 24, 50, 26, QColor("#ffffff"))
-        arcade_text(f"SCORE {self.score:05d}", 24, 84, 13,
-                    QColor("#ffd23e"))
-        # small hint + tier legend below the panel
+        p.setPen(QPen(QColor(70, 80, 100), 1))      # inner accent line
+        p.drawRoundedRect(QRectF(px0 + 6, py0 + 6, pw_ - 12, ph_ - 12), 8, 8)
+        shadow = QColor(0, 0, 0, 200)
+        # title (cyan), number (white), score (yellow) — each centered
+        sprites.draw_pixel_text(
+            p, title, px0 + (pw_ - tw) // 2, py0 + 14, tp,
+            QColor("#57e8ff"), shadow)
+        sprites.draw_pixel_text(
+            p, hi, px0 + (pw_ - nw) // 2, py0 + 44, np_,
+            QColor("#ffffff"), shadow)
+        sprites.draw_pixel_text(
+            p, sc, px0 + (pw_ - sw) // 2, py0 + 90, sp,
+            QColor("#ffd23e"), shadow)
+        # hint + tier legend, centered under the panel
         fh = QFont("Segoe UI", 11)
         p.setFont(fh)
+        legend = "brown 1 · blue 2 · red 3   ·   click ducks · Esc to quit"
+        lr = QRectF(0, py0 + ph_ + 6, self.sw, 22)
         p.setPen(QColor(0, 0, 0, 200))
-        p.drawText(27, 145, "brown 1 · blue 2 · red 3   ·   click ducks · Esc to quit")
+        p.drawText(lr.translated(1, 1), Qt.AlignHCenter, legend)
         p.setPen(QColor(225, 225, 225))
-        p.drawText(26, 144, "brown 1 · blue 2 · red 3   ·   click ducks · Esc to quit")
+        p.drawText(lr, Qt.AlignHCenter, legend)
         # 3-2-1-GO! countdown, big and centered
         import time as _t2
         elapsed = _t2.time() - self.start_t

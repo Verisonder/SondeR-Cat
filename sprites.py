@@ -855,3 +855,54 @@ def render_duck(wing_down=False, color="brown", scale=4, flip=False):
             p.fillRect(x * scale, gy * scale, scale, scale, col)
     p.end()
     return img
+
+
+# ---------------------------------------------------------------------------
+# Tiny 3x5 pixel font for the Duck Hunt arcade score panel. Each glyph is 5
+# rows of 3 chars ('#'=on). Only the characters we actually display.
+# ---------------------------------------------------------------------------
+PIXFONT = {
+    "0": ["###", "# #", "# #", "# #", "###"],
+    "1": [" # ", "## ", " # ", " # ", "###"],
+    "2": ["###", "  #", "###", "#  ", "###"],
+    "3": ["###", "  #", "###", "  #", "###"],
+    "4": ["# #", "# #", "###", "  #", "  #"],
+    "5": ["###", "#  ", "###", "  #", "###"],
+    "6": ["###", "#  ", "###", "# #", "###"],
+    "7": ["###", "  #", "  #", "  #", "  #"],
+    "8": ["###", "# #", "###", "# #", "###"],
+    "9": ["###", "# #", "###", "  #", "###"],
+    "H": ["# #", "# #", "###", "# #", "# #"],
+    "I": ["###", " # ", " # ", " # ", "###"],
+    "G": ["###", "#  ", "# #", "# #", "###"],
+    "S": ["###", "#  ", "###", "  #", "###"],
+    "C": ["###", "#  ", "#  ", "#  ", "###"],
+    "O": ["###", "# #", "# #", "# #", "###"],
+    "R": ["###", "# #", "###", "## ", "# #"],
+    "E": ["###", "#  ", "###", "#  ", "###"],
+    " ": ["   ", "   ", "   ", "   ", "   "],
+}
+
+
+def draw_pixel_text(painter, text, x, y, px, color, shadow=None):
+    """Draw `text` as chunky 3x5 pixel glyphs. `px` = pixel cell size.
+    Returns the total width drawn. Uses QPainter fillRect (no font)."""
+    from PySide6.QtCore import QRect
+    gap = px                       # 1-cell gap between glyphs
+    cx = x
+    for ch in text.upper():
+        glyph = PIXFONT.get(ch, PIXFONT[" "])
+        for ry, row in enumerate(glyph):
+            for rxi, c in enumerate(row):
+                if c == "#":
+                    if shadow is not None:
+                        painter.fillRect(cx + rxi * px + px, y + ry * px + px,
+                                         px, px, shadow)
+                    painter.fillRect(cx + rxi * px, y + ry * px,
+                                     px, px, color)
+        cx += 3 * px + gap
+    return cx - x - gap
+
+
+def pixel_text_width(text, px):
+    return len(text) * (3 * px + px) - px
