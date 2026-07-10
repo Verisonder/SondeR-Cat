@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.8.0"
-APP_BUILD = "0715k"
+APP_BUILD = "0715l"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -954,8 +954,8 @@ class SoundFX:
     def shot(self):
         self._play("shot")
 
-    def purr(self):
-        self._play("purr")
+    def purr(self, loop=False):
+        self._play("purr", loop=loop)
 
     def purr_sleep(self):
         # the sleeping purr; falls back to the petting one if not present
@@ -3756,7 +3756,8 @@ class CatWindow(QWidget):
         self.next_note = 0.0
         self.pet_accum = 0.0
         self.last_pet_heart = 0.0
-        self._last_purr = 0.0
+        self._petting_until = 0.0       # purr keeps going until this time
+        self._purring = False           # is the pet-purr currently playing
         self._last_sleep_purr = 0.0
         self.bubble_text = ""
         self.bubble_until = 0.0
@@ -4403,6 +4404,16 @@ class CatWindow(QWidget):
     # ------------------------------------------------------------ main tick -
     def tick(self):
         now = time.time()
+        # stop the pet-purr ~10s after the last pet (or immediately if the
+        # index-0 cat and sounds got turned off)
+        if self._purring and (now > self._petting_until
+                              or not self.gcfg.get("sounds", True)):
+            self._purring = False
+            try:
+                if self.mgr._sfx is not None:
+                    self.mgr._sfx.stop_purr()
+            except Exception:
+                pass
         bw = getattr(self.mgr, "_bubble_win", None)
         if bw is not None and bw.cat is self:
             bw.tick()
@@ -5022,17 +5033,16 @@ class CatWindow(QWidget):
                             "x": r.left() + random.randint(20, r.width() - 20),
                             "y": r.top() + 8, "vy": 1.1, "life": 1.6,
                             "seed": random.random() * 6})
-                        # purr ♥ — real recorded purr; long cooldown so it
-                        # plays through once (files are ~12s) rather than
-                        # restarting every tick
-                        if self.gcfg.get("sounds", True) \
-                                and now - self._last_purr > 11.0:
-                            self._last_purr = now
+                        # purr ♥ — start the real purr (looping) while you're
+                        # petting; the tick stops it ~10s after you stop.
+                        self._petting_until = now + 10.0
+                        if self.gcfg.get("sounds", True) and not self._purring:
+                            self._purring = True
                             try:
                                 if self.mgr._sfx is None:
                                     self.mgr._sfx = SoundFX(
                                         self.mgr.cfg["global"].get("sound_volume", 0.6))
-                                self.mgr._sfx.purr()
+                                self.mgr._sfx.purr(loop=True)
                             except Exception:
                                 pass
                         if random.random() < 0.3:
