@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.5.2"
-APP_BUILD = "0714n"
+APP_BUILD = "0714o"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2663,8 +2663,10 @@ class Manager(QObject):
         if self._ver_clicks >= 7:
             self._ver_clicks = 0
             self._start_duck_hunt()
+            return True                 # launched → caller lets the menu close
         elif left <= 3:
             self.say_primary(f"…{left}", 1)
+        return False
 
     def _start_duck_hunt(self):
         if self._duck_game is not None:
@@ -3596,13 +3598,16 @@ class CatWindow(QWidget):
     def eventFilter(self, obj, ev):
         # Intercept clicks on the "Installed: vX" line so the Updates submenu
         # stays open — lets the version be tapped 7 times to unlock Duck Hunt.
+        # On the 7th (trigger) click we DON'T swallow it, so the menu closes.
         try:
             from PySide6.QtCore import QEvent
             if ev.type() == QEvent.MouseButtonRelease:
                 act = getattr(self, "_ver_action", None)
                 if act is not None and obj.actionAt(ev.pos()) is act:
-                    self.mgr._on_version_click()
-                    return True            # swallow → menu does NOT close
+                    launched = self.mgr._on_version_click()
+                    if launched:
+                        return False       # 7th click → let the menu close
+                    return True            # otherwise keep the menu open
         except Exception:
             pass
         return super().eventFilter(obj, ev)
@@ -5650,27 +5655,24 @@ class CatWindow(QWidget):
                                 max(1, pw // 3), max(1, pw // 3),
                                 QColor("#f2ffff"))
             if guarding or self.duck_gunner:
-                # BIG angry slanted brows: thick bars angling down-inward
+                # BIG angry slanted brows: thick bars angling down-INWARD
+                # (toward the nose). Which eye is "inner" flips with the face,
+                # so the brows stay angry — not sad — whichever way it looks.
                 brow = QColor("#261c14")
                 bw = sprites.EYE_W + 1          # one cell wider than the eye
-                for i, (ex, ey) in enumerate(eyes):
-                    inner = (i == 0)            # slant down toward the center
+                # eyes list is ordered left→right on screen; the inner edge of
+                # the LEFT eye slants down-right, the RIGHT eye down-left.
+                xs = [ex for (ex, ey) in eyes]
+                left_ex = min(xs) if xs else 0
+                for (ex, ey) in eyes:
+                    is_left_eye = (ex == left_ex)
                     for k in range(bw):
-                        slant = k if inner else (bw - 1 - k)
-                        bx = (ex - (0 if inner else 1) + k) * s
+                        # down-inward: left eye rises to the left, right eye
+                        # rises to the right (both peak at the outer edge)
+                        slant = (bw - 1 - k) if is_left_eye else k
+                        bx = (ex - (0 if is_left_eye else 1) + k) * s
                         by = int((ey - 1.4) * s) + slant * (s * 2 // 3)
                         pp.fillRect(bx, by, s, s, brow)
-            if self.duck_gunner:
-                # a little blaster held out in front of the cat
-                gun = QColor("#3a3f47")
-                barrel = QColor("#2a2e34")
-                tip = QColor("#e8912e")
-                gx0 = int(sprites.GRID_W * 0.62) * s   # in front of the body
-                gy0 = int(sprites.GRID_H * 0.60) * s
-                pp.fillRect(gx0, gy0, s * 5, s * 2, gun)          # body
-                pp.fillRect(gx0 + s * 5, gy0 + s // 2, s * 4, s, barrel)  # barrel
-                pp.fillRect(gx0 + s * 9, gy0 + s // 2, s, s, tip)  # muzzle
-                pp.fillRect(gx0 + s, gy0 + s * 2, s * 2, s * 2, gun)  # grip
             pp.end()
 
         jy = 0
@@ -5717,6 +5719,26 @@ class CatWindow(QWidget):
             ty = r.top() + jy + (r.height() - th_)
         p.drawImage(QRect(tx, ty, tw_, th_), img)
         p.restore()
+
+        # 🔫 duck-hunt blaster: drawn in screen space, pivoting at the cat's
+        # paw and pointing at the cursor (where you're about to shoot).
+        if self.duck_gunner:
+            cur = QCursor.pos()
+            paw = self.mapToGlobal(self.cat_rect().center())
+            paw_local = self.cat_rect().center()
+            ang = math.atan2(cur.y() - paw.y(), cur.x() - paw.x())
+            p.save()
+            p.translate(paw_local.x(), paw_local.y() + s)
+            p.rotate(math.degrees(ang))
+            gun = QColor("#3a3f47")
+            barrel = QColor("#2a2e34")
+            tip = QColor("#e8912e")
+            # body sits at the pivot; barrel extends along +x (toward cursor)
+            p.fillRect(-s * 2, -s, s * 4, s * 2, gun)            # body
+            p.fillRect(s * 2, -(s // 2), s * 5, s, barrel)       # barrel
+            p.fillRect(s * 7, -(s // 2), s, s, tip)              # muzzle
+            p.fillRect(-s, s, s * 2, int(s * 1.8), gun)          # grip
+            p.restore()
 
         # ☂ parachute canopy: drawn level (unrotated) above the cat, so the
         # cat pendulums beneath it. Drawn AFTER restore so the swing tilt
