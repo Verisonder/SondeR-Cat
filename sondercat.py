@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.8.0"
-APP_BUILD = "0715o"
+APP_BUILD = "0715p"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -195,7 +195,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "vision_consent": False,
                    "guide_mode": False, "guide_consent": False,
                    "guide_quality": "fast",
-                   "duck_high_score": 0, "sound_volume": 0.6,
+                   "duck_high_score": 0, "sound_volume": 1.0,
                    "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
 
@@ -778,7 +778,7 @@ class SoundFX:
 
     SR = 22050
 
-    def __init__(self, volume=0.6):
+    def __init__(self, volume=1.0):
         self._ok = False
         self._is_win = (platform.system() == "Windows")
         self._fx = {}                # non-Windows QSoundEffect cache
@@ -3001,7 +3001,7 @@ class Manager(QObject):
             try:
                 if self._sfx is None:
                     self._sfx = SoundFX(
-                        self.cfg["global"].get("sound_volume", 0.6))
+                        self.cfg["global"].get("sound_volume", 1.0))
                 self._sfx.music_start()
             except Exception:
                 pass
@@ -4095,7 +4095,7 @@ class CatWindow(QWidget):
         vsl = QSlider(Qt.Horizontal)
         vsl.setMinimum(0)
         vsl.setMaximum(100)
-        vsl.setValue(int(self.gcfg.get("sound_volume", 0.6) * 100))
+        vsl.setValue(int(self.gcfg.get("sound_volume", 1.0) * 100))
         vsl.setFixedWidth(120)
         vsl.valueChanged.connect(lambda v: mgr.set_sound_volume(v / 100.0))
         vlay.addWidget(vlab)
@@ -4566,7 +4566,7 @@ class CatWindow(QWidget):
                             if self.mgr._sfx is None:
                                 self.mgr._sfx = SoundFX(
                                     self.mgr.cfg["global"].get(
-                                        "sound_volume", 0.6))
+                                        "sound_volume", 1.0))
                             self.mgr._sfx.purr_sleep()
                         except Exception:
                             pass
@@ -5082,7 +5082,7 @@ class CatWindow(QWidget):
                             try:
                                 if self.mgr._sfx is None:
                                     self.mgr._sfx = SoundFX(
-                                        self.mgr.cfg["global"].get("sound_volume", 0.6))
+                                        self.mgr.cfg["global"].get("sound_volume", 1.0))
                                 self.mgr._sfx.purr(loop=True)
                             except Exception:
                                 pass
