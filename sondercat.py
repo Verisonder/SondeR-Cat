@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.4.2"
-APP_BUILD = "0714a"
+APP_BUILD = "0714b"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2520,7 +2520,7 @@ class Manager(QObject):
             {"inline_data": {"mime_type": "image/jpeg", "data": b64}}]}]
         raw = clean(self._gemini_call(contents2, persona2,
                                       ground_with_image=False,
-                                      max_tokens=1024))
+                                      max_tokens=1024, think="low"))
         d2 = _json.loads(raw)
         if not d2.get("found"):
             return None
@@ -2609,7 +2609,7 @@ class Manager(QObject):
 
                 raw = clean(self._gemini_call(contents, persona,
                                               ground_with_image=first,
-                                              max_tokens=2048))
+                                              max_tokens=2048, think="low"))
                 try:
                     d = _json.loads(raw)
                 except Exception:
@@ -2638,7 +2638,7 @@ class Manager(QObject):
                                 "comments."}]}]
                         raw = clean(self._gemini_call(
                             retry, persona, ground_with_image=False,
-                            max_tokens=2048))
+                            max_tokens=2048, think="low"))
                         try:
                             d = _json.loads(raw)
                         except Exception as je:
@@ -2661,6 +2661,10 @@ class Manager(QObject):
                         if area > 0.40:
                             # boxed a whole panel, not the element — hedge
                             hedge = True
+                        elif area < 0.0015:
+                            # already a tiny, tight box — precise enough;
+                            # skip the zoom call (saves a request + time)
+                            pass
                         else:
                             # ZOOM PASS: crop around the box, re-ask on the
                             # zoomed crop for a precise fix. Any failure →
@@ -2785,7 +2789,7 @@ class Manager(QObject):
         return text
 
     def _gemini_call(self, contents, persona, ground_with_image=False,
-                     max_tokens=400):
+                     max_tokens=400, think=None):
         import urllib.request
         import urllib.error
         key = self.cfg["global"].get("gemini_key", "").strip()
@@ -2812,13 +2816,23 @@ class Manager(QObject):
         # a given model rejects the combo.
         want_ground = (not has_image) or ground_with_image
 
-        def make_body(model, grounded):
+        def make_body(model, grounded, use_think):
             b = {
                 "contents": contents,
                 "systemInstruction": {"parts": [{"text": persona}]},
                 "generationConfig": {"maxOutputTokens": max_tokens,
                                      "temperature": 0.8},
             }
+            if use_think and think == "low":
+                # cap the model's internal reasoning: thinking models
+                # otherwise think as long as they like, which is slow AND
+                # burns free-tier quota (thinking counts as output tokens).
+                if model.startswith("gemini-2.5"):
+                    b["generationConfig"]["thinkingConfig"] = {
+                        "thinkingBudget": 512}
+                else:                     # 3.x and the -latest aliases
+                    b["generationConfig"]["thinkingConfig"] = {
+                        "thinkingLevel": "low"}
             if grounded:
                 # live Google Search. All current models (3.x, 2.5, and the
                 # -latest aliases) use the new google_search tool; only the
@@ -2832,6 +2846,7 @@ class Manager(QObject):
         import time as _time
         last = "no reply"
         transient = False
+        saw_429 = False
         # Try the whole model list up to 3 times — a 404/503 from Google is
         # often transient (endpoint hiccup, alias rolling over), so a short
         # wait and a fresh pass usually succeeds.
@@ -2840,9 +2855,23 @@ class Manager(QObject):
             for m in models:
                 url = ("https://generativelanguage.googleapis.com/v1beta/"
                        f"models/{m}:generateContent?key={key}")
-                # grounded first (web + knowledge), then a raw fallback
-                for grounded in ((True, False) if want_ground else (False,)):
-                    body = make_body(m, grounded)
+                # grounded first (web + knowledge), then a raw fallback;
+                # the thinking cap is dropped ONLY if a model 400s on it
+                gseq = (True, False) if want_ground else (False,)
+                variants = []
+                for gr in gseq:
+                    if think:
+                        variants.append((gr, True))
+                    variants.append((gr, False))
+                if think:
+                    # don't run the no-think fallbacks unless the capped try
+                    # actually 400s — mark them skippable
+                    pass
+                skip_no_think = bool(think)
+                for grounded, use_think in variants:
+                    if skip_no_think and think and not use_think:
+                        continue          # only reached via a 400 below
+                    body = make_body(m, grounded, use_think)
                     req = urllib.request.Request(
                         url, data=body,
                         headers={"Content-Type": "application/json"})
@@ -2856,8 +2885,16 @@ class Manager(QObject):
                         if e.code in (401, 403):
                             raise RuntimeError(
                                 "the API key was rejected") from None
-                        if e.code == 400 and grounded:
-                            continue      # this model won't ground: retry raw
+                        if e.code == 400:
+                            if use_think:
+                                # this model rejects the thinking cap —
+                                # allow its no-think variants
+                                skip_no_think = False
+                                continue
+                            if grounded:
+                                continue  # won't ground: retry raw
+                        if e.code == 429:
+                            saw_429 = True
                         if e.code in (404, 429, 500, 502, 503, 504):
                             transient = True   # worth another pass
                         break             # try the NEXT model
@@ -2870,7 +2907,9 @@ class Manager(QObject):
                     self._gemini_model = None
             if not transient:
                 break                     # a real error (not transient): stop
-            _time.sleep(1.2 * (attempt + 1))   # brief backoff, then retry all
+            # rate limits need a REAL pause, not a hammer; other transients
+            # just need a beat
+            _time.sleep((4.0 if saw_429 else 1.2) * (attempt + 1))
         raise RuntimeError(last)
 
     _SCREEN_HINTS = re.compile(
