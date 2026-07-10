@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.7.0"
-APP_BUILD = "0714v"
+APP_BUILD = "0714w"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1118,34 +1118,34 @@ class DuckHuntGame(QWidget):
         title = "HIGH SCORE"
         hi = f"{self.high:07d}"
         sc = f"SCORE {self.score:05d}"
-        tp, np_, sp = 5, 8, 4          # pixel cell sizes for title/number/score
+        tp, np_, sp = 3, 5, 3          # pixel cell sizes for title/number/score
         tw = sprites.pixel_text_width(title, tp)
         nw = sprites.pixel_text_width(hi, np_)
         sw = sprites.pixel_text_width(sc, sp)
         inner_w = max(tw, nw, sw)
-        pad = 26
+        pad = 18
         pw_ = inner_w + pad * 2
-        ph_ = 118
+        ph_ = 74
         px0 = (self.sw - pw_) // 2     # CENTER horizontally
-        py0 = 22
+        py0 = 20
         panel = QRectF(px0, py0, pw_, ph_)
         p.setBrush(QColor(6, 8, 12, 235))
-        p.setPen(QPen(QColor(255, 255, 255), 3))    # white stroke border
+        p.setPen(QPen(QColor(210, 210, 215), 2))    # soft off-white border
         p.drawRoundedRect(panel, 12, 12)
         p.setBrush(Qt.NoBrush)
         p.setPen(QPen(QColor(70, 80, 100), 1))      # inner accent line
         p.drawRoundedRect(QRectF(px0 + 6, py0 + 6, pw_ - 12, ph_ - 12), 8, 8)
-        shadow = QColor(0, 0, 0, 200)
-        # title (cyan), number (white), score (yellow) — each centered
+        shadow = QColor(0, 0, 0, 170)
+        # muted arcade palette (softer than the vivid originals)
         sprites.draw_pixel_text(
-            p, title, px0 + (pw_ - tw) // 2, py0 + 14, tp,
-            QColor("#57e8ff"), shadow)
+            p, title, px0 + (pw_ - tw) // 2, py0 + 10, tp,
+            QColor("#6bb8c7"), shadow)          # soft cyan
         sprites.draw_pixel_text(
-            p, hi, px0 + (pw_ - nw) // 2, py0 + 44, np_,
-            QColor("#ffffff"), shadow)
+            p, hi, px0 + (pw_ - nw) // 2, py0 + 26, np_,
+            QColor("#e6e6e0"), shadow)          # off-white
         sprites.draw_pixel_text(
-            p, sc, px0 + (pw_ - sw) // 2, py0 + 90, sp,
-            QColor("#ffd23e"), shadow)
+            p, sc, px0 + (pw_ - sw) // 2, py0 + 56, sp,
+            QColor("#d9a94a"), shadow)          # muted amber
         # hint + tier legend, centered under the panel
         fh = QFont("Segoe UI", 11)
         p.setFont(fh)
