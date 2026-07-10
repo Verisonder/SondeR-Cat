@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.7.0"
-APP_BUILD = "0714z"
+APP_BUILD = "0715a"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1166,26 +1166,24 @@ class DuckHuntGame(QWidget):
         sprites.draw_pixel_text(
             p, legend, (self.sw - lw) // 2, py0 + ph_ + 10, lp,
             QColor("#9aa0ac"), shadow)
-        # 3-2-1-GO! countdown, big and centered
+        # 3-2-1-GO! countdown, big and centered — in the pixel font
         import time as _t2
         elapsed = _t2.time() - self.start_t
         if elapsed < self.countdown + 0.6:
             remain = self.countdown - elapsed
-            if remain > 0:
-                txt = str(int(remain) + 1)
-            else:
-                txt = "GO!"
-            fc = QFont("Segoe UI", 120, QFont.Bold)
-            p.setFont(fc)
-            p.setPen(QColor(255, 255, 255, 235))
-            from PySide6.QtCore import QRect as _QR
-            p.drawText(_QR(0, 0, self.sw, self.sh),
-                       Qt.AlignCenter, txt)
-            f3 = QFont("Segoe UI", 22)
-            p.setFont(f3)
-            p.setPen(QColor(230, 230, 230, 220))
-            p.drawText(_QR(0, int(self.sh * 0.60), self.sw, 60),
-                       Qt.AlignHCenter, "get ready to shoot some ducks! 🦆")
+            txt = str(int(remain) + 1) if remain > 0 else "GO!"
+            cpx = 26                       # big pixel cells for the count
+            cw = sprites.pixel_text_width(txt, cpx)
+            ch = 5 * cpx
+            sprites.draw_pixel_text(
+                p, txt, (self.sw - cw) // 2, (self.sh - ch) // 2, cpx,
+                QColor(255, 255, 255, 240), QColor(0, 0, 0, 150))
+            ready = "GET READY!"
+            rpx = 5
+            rw = sprites.pixel_text_width(ready, rpx)
+            sprites.draw_pixel_text(
+                p, ready, (self.sw - rw) // 2, int(self.sh * 0.62), rpx,
+                QColor(220, 220, 225, 220), QColor(0, 0, 0, 140))
 
 
 class GuardBeam(QWidget):
