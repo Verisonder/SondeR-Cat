@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "9.5.1"
-APP_BUILD = "0714i"
+APP_VERSION = "9.5.2"
+APP_BUILD = "0714j"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -194,7 +194,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "gemini_key": "", "screen_vision": False,
                    "vision_consent": False,
                    "guide_mode": False, "guide_consent": False,
-                   "guide_quality": "balanced",
+                   "guide_quality": "fast",
                    "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
 
@@ -2197,8 +2197,8 @@ class Manager(QObject):
     }
 
     def guide_profile(self):
-        key = self.cfg["global"].get("guide_quality", "balanced")
-        return self.GUIDE_QUALITY.get(key, self.GUIDE_QUALITY["balanced"])
+        key = self.cfg["global"].get("guide_quality", "fast")
+        return self.GUIDE_QUALITY.get(key, self.GUIDE_QUALITY["fast"])
 
     def set_guide_quality(self, key):
         self.cfg["global"]["guide_quality"] = key
@@ -3611,7 +3611,7 @@ class CatWindow(QWidget):
         gm.triggered.connect(mgr.toggle_guide_mode)
         agent.addAction(gm)
         gqm = agent.addMenu("Guide speed ⚡")
-        cur_gq = self.gcfg.get("guide_quality", "balanced")
+        cur_gq = self.gcfg.get("guide_quality", "fast")
         for key, label in (("fast", "Fast — snappy, less precise"),
                            ("balanced", "Balanced"),
                            ("accurate",
