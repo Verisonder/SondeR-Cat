@@ -2432,7 +2432,10 @@ class Manager(QObject):
             try:
                 c = self.primary()
                 if c.perch_hwnd is None and not c.peeking:
-                    c._glide_to(c._ground_point(), speed=400)
+                    # float down under the parachute for a cute exit (it
+                    # only actually deploys if the cat is up high; otherwise
+                    # it just walks down)
+                    c._parachute_to_ground()
             except Exception:
                 pass
 
