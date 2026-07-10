@@ -573,6 +573,9 @@ EYE_CELLS = {
 }
 
 HEAD_RECT = (3, 2, 22, 13)
+# the peek pose draws just a head poking up near the BOTTOM of the 26x28
+# grid (see PEEK below) — HEAD_RECT (top-of-grid) misses it entirely.
+PEEK_HEAD_RECT = (1, 14, 25, 26)
 SCROLL_ROLL = (2, 18)           # roll sits under the reaching paw
 SIT_A_REF = SIT_A
 SIT_A = SIT_A                   # tray icon uses this

@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0716k"
+APP_BUILD = "0716l"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -5597,8 +5597,9 @@ class CatWindow(QWidget):
                 self._last_drag_dir = direction
             self._last_drag_x = gp.x()
             return
-        if self.state in (IDLE, KNEAD, SLEEP, THINK):
-            x0, y0, x1, y1 = sprites.HEAD_RECT
+        if self.state in (IDLE, KNEAD, SLEEP, THINK, PEEK):
+            x0, y0, x1, y1 = (sprites.PEEK_HEAD_RECT if self.state == PEEK
+                               else sprites.HEAD_RECT)
             head = QRect(self.side + x0 * self.scale,
                          TOP_MARGIN + y0 * self.scale,
                          (x1 - x0) * self.scale, (y1 - y0) * self.scale)
@@ -5627,9 +5628,11 @@ class CatWindow(QWidget):
                         petted_for = now - getattr(self, "_pet_started", now)
                         if petted_for > 1.0:
                             r = self.cat_rect()
+                            heart_y = (head.top() + 4 if self.state == PEEK
+                                       else r.top() + 8)
                             self.hearts.append({
                                 "x": r.left() + random.randint(20, r.width() - 20),
-                                "y": r.top() + 8, "vy": 1.1, "life": 1.6,
+                                "y": heart_y, "vy": 1.1, "life": 1.6,
                                 "seed": random.random() * 6})
                             self._petting_until = now + 5.0
                             if self.gcfg.get("sounds", True) \
