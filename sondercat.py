@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0716i"
+APP_BUILD = "0716j"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1154,6 +1154,8 @@ class DuckHuntGame(QWidget):
         self.score = 0
         self.shots = 0
         self.hits = 0
+        self.streak = 0             # consecutive hits without a miss
+        self.super_mode = False     # 15-streak → SUPER CAT, 2x points
         self.high = int(mgr.cfg["global"].get("duck_high_score", 0))
         # HUD panel bounds (fixed size, centered at top) — ducks steer clear
         # of this rectangle so they never fly behind the score and become
@@ -1280,7 +1282,14 @@ class DuckHuntGame(QWidget):
             hit["alive"] = False
             hit["vy"] = 2.0
             hit["vx"] = 0.0
-            self.score += hit["pts"]
+            # ---- streak → SUPER CAT mode (15 hits in a row, 2x points) ----
+            self.streak += 1
+            if self.streak == 15 and not self.super_mode:
+                self.super_mode = True
+                c = self.mgr.primary()
+                c.duck_super = True
+                c.say("⚡ SUPER CAT!! ⚡", 3)
+            self.score += hit["pts"] * (2 if self.super_mode else 1)
             self.hits += 1
             if self.score > self.high:
                 self.high = self.score          # live high-score climb
@@ -1291,6 +1300,13 @@ class DuckHuntGame(QWidget):
                     sfx.hit()
             self.pops.append(dict(x=mx, y=my, t=_t.time()))
         else:
+            # a miss breaks the streak — and the power, dramatically
+            self.streak = 0
+            if self.super_mode:
+                self.super_mode = False
+                c = self.mgr.primary()
+                c.duck_super = False
+                c.say("power's gone… 😾", 2)
             self.pops.append(dict(x=mx, y=my, t=_t.time(), miss=True))
         self.update()
 
@@ -1383,6 +1399,18 @@ class DuckHuntGame(QWidget):
         sprites.draw_pixel_text(
             p, legend, (self.sw - lw) // 2, py0 + ph_ + 10, lp,
             QColor("#9aa0ac"), shadow)
+        # ⚡ SUPER CAT banner while the 15-streak power is active (flashing)
+        if self.super_mode:
+            import time as _ts
+            pulse = 0.6 + 0.4 * abs(math.sin(_ts.time() * 6))
+            sup = "SUPER CAT  X2 POINTS"
+            sp2 = 3
+            sw3 = sprites.pixel_text_width(sup, sp2)
+            col = QColor(110, 200, 255)
+            col.setAlphaF(pulse)
+            sprites.draw_pixel_text(
+                p, sup, (self.sw - sw3) // 2, py0 + ph_ + 26, sp2,
+                col, shadow)
         # 3-2-1-GO! countdown, big and centered — in the pixel font
         import time as _t2
         elapsed = _t2.time() - self.start_t
@@ -3484,6 +3512,7 @@ class Manager(QObject):
             self._sfx.music_stop()
         c = self.primary()
         c.duck_gunner = False
+        c.duck_super = False
         try:
             c._parachute_to_ground()
         except Exception:
@@ -4257,6 +4286,7 @@ class CatWindow(QWidget):
         # dragging / wobble
         self.dragging = False
         self.duck_gunner = False        # easter-egg: holding a gun, angry
+        self.duck_super = False         # 15-streak power-up: blue aura ⚡
         self.drag_offset = QPoint()
         self.mochi = 1.0
         self._drag_target_offset = QPoint()
@@ -6646,6 +6676,26 @@ class CatWindow(QWidget):
             tw_ = int(r.width() * 0.96)
             tx = r.center().x() - tw_ // 2
             ty = r.top() + jy + (r.height() - th_)
+        # ⚡ SUPER CAT aura (duck hunt 15-streak): flickering blue glow layers
+        # behind the sprite, Saiyan-style
+        if self.duck_gunner and getattr(self, "duck_super", False):
+            flick = 0.75 + 0.25 * math.sin(time.time() * 11.0)
+            cxa, cya = tx + tw_ // 2, ty + th_ // 2
+            p.save()
+            p.setPen(Qt.NoPen)
+            for grow, alpha in ((26, 38), (16, 64), (8, 96)):
+                gpx = int(grow * flick)
+                p.setBrush(QColor(70, 170, 255, int(alpha * flick)))
+                p.drawEllipse(QPoint(cxa, cya),
+                              tw_ // 2 + gpx, th_ // 2 + gpx)
+            # rising sparks
+            for i in range(6):
+                ph = (time.time() * 1.7 + i * 0.61) % 1.0
+                sx = cxa + int(math.sin(i * 2.4 + time.time() * 3) * tw_ * 0.45)
+                sy = int(ty + th_ - ph * (th_ + 30))
+                a = int(160 * (1.0 - ph))
+                p.fillRect(sx, sy, 3, 3, QColor(150, 220, 255, a))
+            p.restore()
         p.drawImage(QRect(tx, ty, tw_, th_), img)
         p.restore()
 
