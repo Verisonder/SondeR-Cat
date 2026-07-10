@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.5.2"
-APP_BUILD = "0714l"
+APP_BUILD = "0714m"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -5630,17 +5630,6 @@ class CatWindow(QWidget):
                     pp.fillRect(px + pw // 4, py + pw // 4,
                                 max(1, pw // 3), max(1, pw // 3),
                                 QColor("#f2ffff"))
-            if guarding:
-                # BIG angry slanted brows: thick bars angling down-inward
-                brow = QColor("#261c14")
-                bw = sprites.EYE_W + 1          # one cell wider than the eye
-                for i, (ex, ey) in enumerate(eyes):
-                    inner = (i == 0)            # slant down toward the center
-                    for k in range(bw):
-                        slant = k if inner else (bw - 1 - k)
-                        bx = (ex - (0 if inner else 1) + k) * s
-                        by = int((ey - 1.4) * s) + slant * (s * 2 // 3)
-                        pp.fillRect(bx, by, s, s, brow)
             if guarding or self.duck_gunner:
                 # BIG angry slanted brows: thick bars angling down-inward
                 brow = QColor("#261c14")
@@ -5664,6 +5653,8 @@ class CatWindow(QWidget):
                 pp.fillRect(gx0 + s * 9, gy0 + s // 2, s, s, tip)  # muzzle
                 pp.fillRect(gx0 + s, gy0 + s * 2, s * 2, s * 2, gun)  # grip
             pp.end()
+
+        jy = 0
         if now < self.jump_until:
             t = (self.jump_until - now) / 1.2
             jy = -int(abs(math.sin(t * math.pi * 3)) * 18)
