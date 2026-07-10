@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.8.0"
-APP_BUILD = "0715m"
+APP_BUILD = "0715n"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -5450,17 +5450,18 @@ class CatWindow(QWidget):
 
     def _parachute_to_ground(self):
         """Deploy the parachute and drift down to the floor from wherever the
-        cat is (guard-post stand-down, lost perch, …). Only floats if there's
-        actually height to fall; otherwise just walks down."""
+        cat is (guard-post stand-down, lost perch, corner, …). If it's above
+        the floor at all, it ALWAYS floats down under the canopy rather than
+        walking."""
         try:
             g = self._ground_point()
-            if g.y() - self.y() > 3 * self.scale:      # high enough to float
+            if g.y() - self.y() > self.scale:          # any real height → float
                 self._glide_to(g, speed=160)
                 self._falling = True
                 self._parachute = True
                 self.say("\u2602\ufe0f!", 1.4)
             else:
-                self._glide_to(g, speed=400)
+                self._glide_to(g, speed=400)           # already on the floor
         except Exception:
             pass
 
