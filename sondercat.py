@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713t"
+APP_BUILD = "0713u"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2481,7 +2481,8 @@ class Manager(QObject):
         contents2 = [{"role": "user", "parts": [
             {"inline_data": {"mime_type": "image/jpeg", "data": b64}}]}]
         raw = clean(self._gemini_call(contents2, persona2,
-                                      ground_with_image=False))
+                                      ground_with_image=False,
+                                      max_tokens=1024))
         d2 = _json.loads(raw)
         if not d2.get("found"):
             return None
@@ -2569,7 +2570,8 @@ class Manager(QObject):
                     return raw
 
                 raw = clean(self._gemini_call(contents, persona,
-                                              ground_with_image=first))
+                                              ground_with_image=first,
+                                              max_tokens=2048))
                 try:
                     d = _json.loads(raw)
                 except Exception:
@@ -2597,7 +2599,8 @@ class Manager(QObject):
                                 "letters, no placeholder words, no "
                                 "comments."}]}]
                         raw = clean(self._gemini_call(
-                            retry, persona, ground_with_image=False))
+                            retry, persona, ground_with_image=False,
+                            max_tokens=2048))
                         try:
                             d = _json.loads(raw)
                         except Exception as je:
@@ -2743,7 +2746,8 @@ class Manager(QObject):
             raise RuntimeError("empty answer")
         return text
 
-    def _gemini_call(self, contents, persona, ground_with_image=False):
+    def _gemini_call(self, contents, persona, ground_with_image=False,
+                     max_tokens=400):
         import urllib.request
         import urllib.error
         key = self.cfg["global"].get("gemini_key", "").strip()
@@ -2774,7 +2778,7 @@ class Manager(QObject):
             b = {
                 "contents": contents,
                 "systemInstruction": {"parts": [{"text": persona}]},
-                "generationConfig": {"maxOutputTokens": 400,
+                "generationConfig": {"maxOutputTokens": max_tokens,
                                      "temperature": 0.8},
             }
             if grounded:
