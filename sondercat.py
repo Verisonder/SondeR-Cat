@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0716h"
+APP_BUILD = "0716i"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -4562,22 +4562,23 @@ class CatWindow(QWidget):
         snd.triggered.connect(mgr.toggle_sounds)
         beh.addAction(snd)
         # volume slider (0–100%) as an embedded widget in the menu — the bar
-        # starts right at the 🔈 icon, no big gap
-        from PySide6.QtWidgets import QWidgetAction, QSlider, QWidget, QHBoxLayout, QLabel
+        # starts right at the 🔈 icon and stretches across the full row
+        from PySide6.QtWidgets import (QWidgetAction, QSlider, QWidget,
+                                       QHBoxLayout, QLabel, QSizePolicy)
         vol_wrap = QWidget()
         vlay = QHBoxLayout(vol_wrap)
-        vlay.setContentsMargins(10, 2, 12, 4)
-        vlay.setSpacing(4)
+        vlay.setContentsMargins(10, 2, 14, 4)
+        vlay.setSpacing(6)
         vlab = QLabel("🔈")
         vsl = QSlider(Qt.Horizontal)
         vsl.setMinimum(0)
         vsl.setMaximum(100)
         vsl.setValue(int(self.gcfg.get("sound_volume", 1.0) * 100))
-        vsl.setFixedWidth(150)
+        vsl.setMinimumWidth(200)
+        vsl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         vsl.valueChanged.connect(lambda v: mgr.set_sound_volume(v / 100.0))
         vlay.addWidget(vlab)
-        vlay.addWidget(vsl)
-        vlay.addStretch(1)
+        vlay.addWidget(vsl, 1)          # stretch factor 1 → fills the row
         vol_act = QWidgetAction(menu)
         vol_act.setDefaultWidget(vol_wrap)
         beh.addAction(vol_act)
