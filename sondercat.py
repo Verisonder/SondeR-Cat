@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0716d"
+APP_BUILD = "0716e"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1591,42 +1591,54 @@ class FeedingBowls(QWidget):
     # F=water fill zone  .=transparent
     FOOD_SHAPE = [
         "........................",
-        "..........MMMM..........",
-        "........MMMMMMMM........",
-        "......MMMMmmmmMMMM......",
-        "....KKMMmmmmmmmmMMKK....",
-        "...KKMmmmmmmmmmmmmMKK...",
-        "..KKKKKKKKKKKKKKKKKKKK..",
-        "..KBHHHHHBBBBBBBBBBBBK..",
-        "..KBHHHHHBBBBBBBBBBBBK..",
-        "..KBBBBBBBBBBBBBBBBBBK..",
-        "..KBBBBBBBBBBBBBBBBBBK..",
-        "...KBBBBBBBBBBBBBBBBK...",
-        "....KKBBBBBBBBBBBBKK....",
-        "......KKKKKKKKKKKK......",
-        ".....KBBK......KBBK.....",
-        ".....KKKK......KKKK.....",
+        "........................",
+        "........................",
+        "..........KKKKKK........",
+        ".......KKKBBBBBBKKK.....",
+        ".....KKBBBBBBBBBBBBKK...",
+        "...KKKKKKKKKKKKKKKKKKK..",
+        "...KBBKKKKKKKKKKKKKKKKK.",
+        "...KBBKMMMMMMMMMMMMMBKK.",
+        "..KKBBKMMmmmmMMmMMMMBKK.",
+        "..KBBBKMMMmmmMMMmmMMBKK.",
+        "..KBBBKMMmmmMMmMMMMMBKK.",
+        "..KBBBKMMmmmmMmmmMMMBKK.",
+        "..KBBBKMMMMmmMMmmMMMBKK.",
+        "..KBBBBBBBBBBBBBBBBBBKK.",
+        "...KBBBBBBBBBBBBBBBBBK..",
+        "...KBBBBBBBBBBBBBBBBBK..",
+        "....KKBBBBBBBBBBBBBBK...",
+        "....KHHBBBBBBBBBBHHBK...",
+        "....KHHBBBBBBBBBBHHBK...",
+        ".....KKKKKKKKKKKKKKK....",
+        "........................",
     ]
     WATER_SHAPE = [
         "........................",
         "........................",
         "........................",
+        "..........KKKKKK........",
+        ".......KKKBBBBBBKKK.....",
+        ".....KKBBBBBBBBBBBBKK...",
+        "...KKKKKKKKKKKKKKKKKKK..",
+        "...KBBKKKKKKKKKKKKKKKKK.",
+        "...KBBKFFFFFFFFFFFFFBKK.",
+        "..KKBBKFFFFFFFFFFFFFBKK.",
+        "..KBBBKFFWWFFFFFFFFFBKK.",
+        "..KBBBKFFWWFFFFFFFFFBKK.",
+        "..KBBBKFFFFFFFFWWFFFBKK.",
+        "..KBBBKFFFFFFFFWWFFFBKK.",
+        "..KBBBBBBBBBBBBBBBBBBKK.",
+        "...KBBBBBBBBBBBBBBBBBK..",
+        "...KBBBBBBBBBBBBBBBBBK..",
+        "....KKBBBBBBBBBBBBBBK...",
+        "....KHHBBBBBBBBBBHHBK...",
+        "....KHHBBBBBBBBBBHHBK...",
+        ".....KKKKKKKKKKKKKKK....",
         "........................",
-        "....KKKKKKKKKKKKKKKK....",
-        "...KKBBFFFFFFFFFFFFBKK..",
-        "..KKKKKKKKKKKKKKKKKKKK..",
-        "..KBHHHHHBBBBBBBBBBBBK..",
-        "..KBHHHHHBBBBBBBBBBBBK..",
-        "..KBBBBBBBBBBBBBBBBBBK..",
-        "..KBBBBBBBBBBBBBBBBBBK..",
-        "...KBBBBBBBBBBBBBBBBK...",
-        "....KKBBBBBBBBBBBBKK....",
-        "......KKKKKKKKKKKK......",
-        ".....KBBK......KBBK.....",
-        ".....KKKK......KKKK.....",
     ]
     BW = 24
-    BH = 16
+    BH = 22
 
     def __init__(self, mgr):
         super().__init__(None, Qt.FramelessWindowHint
@@ -1718,17 +1730,19 @@ class FeedingBowls(QWidget):
         from PySide6.QtGui import QColor
         px = self.PX
         outline = QColor("#141418")
+        hi = QColor("#f2f2f2")          # H = light highlight (feet / shine)
         if is_water:
-            body, body_hi = QColor("#50b4dc"), QColor("#8cd2ee")
-            fill, shine = QColor("#4f9fd8"), QColor("#8cc6ea")
+            body = QColor("#50b4dc")
             grid = self.WATER_SHAPE
         else:
-            body, body_hi = QColor("#c85a2c"), QColor("#e08a4a")
+            body = QColor("#c85a2c")
             grid = self.FOOD_SHAPE
         mound = QColor("#96602d")       # kibble mound
         mound_d = QColor("#734820")
+        fill = QColor("#4f9fd8")        # water
+        sparkle = QColor("#bfe4f5")     # W = water shine
         # water fill zone (F) shows from the bottom up by level
-        f_rows = [y for y, row in enumerate(grid) if "F" in row]
+        f_rows = [y for y, row in enumerate(grid) if "F" in row or "W" in row]
         if f_rows:
             top_f, bot_f = min(f_rows), max(f_rows)
             span = bot_f - top_f + 1
@@ -1744,14 +1758,14 @@ class FeedingBowls(QWidget):
                 elif ch == "B":
                     p.fillRect(X, Y, px, px, body)
                 elif ch == "H":
-                    p.fillRect(X, Y, px, px, body_hi)
+                    p.fillRect(X, Y, px, px, hi)
                 elif ch == "M":
                     p.fillRect(X, Y, px, px, mound)
                 elif ch == "m":
                     p.fillRect(X, Y, px, px, mound_d)
-                elif ch == "F":
+                elif ch in ("F", "W"):
                     if level > 0 and y >= fill_start:
-                        c = shine if (x + y) % 4 == 0 else fill
+                        c = sparkle if ch == "W" else fill
                         p.fillRect(X, Y, px, px, c)
 
     def paintEvent(self, _ev):
