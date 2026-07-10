@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.5.2"
-APP_BUILD = "0714p"
+APP_BUILD = "0714q"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -5684,9 +5684,9 @@ class CatWindow(QWidget):
                                 max(1, pw // 3), max(1, pw // 3),
                                 QColor("#f2ffff"))
             if guarding or self.duck_gunner:
-                # ANGRY scowl: thick brow bars whose INNER ends dip LOW toward
-                # the nose and OUTER ends stay high — a hard \  / shape. Sits
-                # right at the top of the eyes. Mirror-correct via eye x.
+                # ANGRY scowl: thick brow bars sitting ABOVE the eyes, inner
+                # ends dipping toward the nose (a hard \  / shape) without
+                # covering the pupils. Mirror-correct via eye x.
                 brow = QColor("#1e150e")
                 bw = sprites.EYE_W + 2          # a bit wider than the eye
                 xs = [ex for (ex, ey) in eyes]
@@ -5694,12 +5694,13 @@ class CatWindow(QWidget):
                 for (ex, ey) in eyes:
                     is_left_eye = (ex == left_ex)
                     for k in range(bw):
-                        # step index measured from the OUTER edge → 0, inner → max
+                        # outer edge high, inner edge (toward nose) lower
                         step = k if is_left_eye else (bw - 1 - k)
                         bx = (ex - 1 + k) * s
-                        # inner end sits LOW (over the eye), outer end HIGH
-                        by = int((ey - 0.9) * s) + step * (s * 3 // 4)
-                        pp.fillRect(bx, by, s, int(s * 1.3), brow)
+                        # base ~2 cells above the eye so brows sit on the brow
+                        # ridge, not on the eyeball
+                        by = int((ey - 1.9) * s) + step * (s * 2 // 3)
+                        pp.fillRect(bx, by, s, int(s * 1.25), brow)
             pp.end()
 
         jy = 0
@@ -5755,9 +5756,9 @@ class CatWindow(QWidget):
             paw_local = self.cat_rect().center()
             ang = math.atan2(cur.y() - paw.y(), cur.x() - paw.x())
             p.save()
-            # pivot out to the RIGHT of the body so the gun doesn't overlap
-            # the cat; a touch below center where a paw would hold it
-            p.translate(paw_local.x() + int(s * 4.5),
+            # pivot well out to the RIGHT of the body so the gun is clearly
+            # in front of the cat, not overlapping it
+            p.translate(paw_local.x() + int(s * 6.5),
                         paw_local.y() + int(s * 1.5))
             p.rotate(math.degrees(ang))
             gun = QColor("#3a3f47")
