@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.7.0"
-APP_BUILD = "0714y"
+APP_BUILD = "0714z"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1130,16 +1130,16 @@ class DuckHuntGame(QWidget):
         # chunky 3x5 pixel glyphs (no smooth font) so it reads as pixel-art.
         # Black box + white stroke so it never blends into a dark wallpaper.
         from PySide6.QtCore import QRectF
-        title = "HIGH SCORE"
-        hi = f"{self.high:07d}"
-        sc = f"SCORE {self.score:05d}"
-        tp, np_, sp = 3, 5, 3          # smaller text (title/number/score)
+        # arcade layout: the CURRENT score big on top, HIGH SCORE small below
+        score_s = f"{self.score:06d}"
+        hi_s = f"HIGH {self.high:06d}"
+        tp, np_, sp = 3, 6, 3          # title / big-score / high-score cell px
+        title = "SCORE"
         tw = sprites.pixel_text_width(title, tp)
-        nw = sprites.pixel_text_width(hi, np_)
-        sw = sprites.pixel_text_width(sc, sp)
-        # panel keeps its full arcade size regardless of the text size
+        nw = sprites.pixel_text_width(score_s, np_)
+        hw = sprites.pixel_text_width(hi_s, sp)
         pw_, ph_ = 320, 118
-        pw_ = max(pw_, max(tw, nw, sw) + 44)
+        pw_ = max(pw_, max(tw, nw, hw) + 44)
         px0 = (self.sw - pw_) // 2     # CENTER horizontally
         py0 = 22
         panel = QRectF(px0, py0, pw_, ph_)
@@ -1150,25 +1150,22 @@ class DuckHuntGame(QWidget):
         p.setPen(QPen(QColor(70, 80, 100), 1))      # inner accent line
         p.drawRoundedRect(QRectF(px0 + 6, py0 + 6, pw_ - 12, ph_ - 12), 8, 8)
         shadow = QColor(0, 0, 0, 170)
-        # muted arcade palette, vertically spread across the full panel
         sprites.draw_pixel_text(
-            p, title, px0 + (pw_ - tw) // 2, py0 + 20, tp,
-            QColor("#6bb8c7"), shadow)          # soft cyan
+            p, title, px0 + (pw_ - tw) // 2, py0 + 18, tp,
+            QColor("#6bb8c7"), shadow)          # soft cyan title
         sprites.draw_pixel_text(
-            p, hi, px0 + (pw_ - nw) // 2, py0 + 46, np_,
-            QColor("#e6e6e0"), shadow)          # off-white
+            p, score_s, px0 + (pw_ - nw) // 2, py0 + 40, np_,
+            QColor("#e6e6e0"), shadow)          # big current score (off-white)
         sprites.draw_pixel_text(
-            p, sc, px0 + (pw_ - sw) // 2, py0 + 86, sp,
-            QColor("#d9a94a"), shadow)          # muted amber
-        # hint + tier legend, centered under the panel
-        fh = QFont("Segoe UI", 11)
-        p.setFont(fh)
-        legend = "brown 1 · blue 2 · red 3   ·   click ducks · Esc to quit"
-        lr = QRectF(0, py0 + ph_ + 6, self.sw, 22)
-        p.setPen(QColor(0, 0, 0, 200))
-        p.drawText(lr.translated(1, 1), Qt.AlignHCenter, legend)
-        p.setPen(QColor(225, 225, 225))
-        p.drawText(lr, Qt.AlignHCenter, legend)
+            p, hi_s, px0 + (pw_ - hw) // 2, py0 + 90, sp,
+            QColor("#d9a94a"), shadow)          # small high score (amber)
+        # tier legend, also pixelated, centered under the panel
+        legend = "BROWN 1  BLUE 2  RED 3   CLICK DUCKS  ESC TO QUIT"
+        lp = 2
+        lw = sprites.pixel_text_width(legend, lp)
+        sprites.draw_pixel_text(
+            p, legend, (self.sw - lw) // 2, py0 + ph_ + 10, lp,
+            QColor("#9aa0ac"), shadow)
         # 3-2-1-GO! countdown, big and centered
         import time as _t2
         elapsed = _t2.time() - self.start_t
