@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "9.10.2"
-APP_BUILD = "0716n"
+APP_VERSION = "9.10.3"
+APP_BUILD = "0716o"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -781,12 +781,24 @@ class SoundFX:
     SR = 22050
 
     def __init__(self, volume=1.0):
+        import threading
         self._ok = False
         self._is_win = (platform.system() == "Windows")
         self._fx = {}                # non-Windows QSoundEffect cache
         self._open_aliases = set()   # MCI aliases opened
         self._music_on = False
         self._volume = max(0.0, min(1.0, volume))
+        # Windows device-type fallback: mpegvideo (legacy DirectShow MCI) is
+        # gone/broken on many Windows 11 machines, so we fall back to
+        # waveaudio (pure waveOut). _pref_dev caches whichever type opened so
+        # we don't re-probe on every play. waveaudio has no native looping,
+        # so looping aliases are re-triggered by a small watcher thread.
+        self._dev = {}               # alias -> device type that opened it
+        self._pref_dev = None        # first device type known to work here
+        self._loop_aliases = set()   # aliases that should keep looping
+        self._mci_lock = threading.Lock()
+        self._loop_lock = threading.Lock()
+        self._loop_thread = None
         try:
             self._paths = {}
             self._build()
@@ -908,23 +920,82 @@ class SoundFX:
     def _mci(self, cmd):
         import ctypes
         buf = ctypes.create_unicode_buffer(255)
-        ctypes.windll.winmm.mciSendStringW(cmd, buf, 254, 0)
+        with self._mci_lock:
+            ctypes.windll.winmm.mciSendStringW(cmd, buf, 254, 0)
         return buf.value
+
+    def _mci_rc(self, cmd):
+        """Like _mci but returns (return_code, value) atomically. rc==0 means
+        the command succeeded — used to tell whether an 'open' actually took."""
+        import ctypes
+        buf = ctypes.create_unicode_buffer(255)
+        with self._mci_lock:
+            rc = ctypes.windll.winmm.mciSendStringW(cmd, buf, 254, 0)
+        return rc, buf.value
 
     def _mci_reopen(self, key):
         """Close then reopen the alias so MCI binds to whatever output
         device is CURRENT (default) right now — this is how switching
-        between speakers and earphones mid-session is picked up."""
+        between speakers and earphones mid-session is picked up.
+
+        Tries mpegvideo first (Win10 path, native looping), then waveaudio
+        (Windows 11 fallback), then a typeless open as a last resort. The
+        first type that works is cached in _pref_dev so later plays don't
+        re-probe. Returns the alias, or None if nothing could open."""
         alias = f"sonder_{key}"
         if alias in self._open_aliases:
             self._mci(f"close {alias}")
             self._open_aliases.discard(alias)
-        self._mci(f'open "{self._paths[key]}" type mpegvideo alias {alias}')
+        path = self._paths[key]
+        order = ["mpegvideo", "waveaudio"]
+        if self._pref_dev in order:
+            order = [self._pref_dev] + [d for d in order
+                                        if d != self._pref_dev]
+        dev = None
+        for cand in order:
+            rc, _ = self._mci_rc(
+                f'open "{path}" type {cand} alias {alias}')
+            if rc == 0:
+                dev = cand
+                break
+        if dev is None:                       # last resort: let MCI choose
+            rc, _ = self._mci_rc(f'open "{path}" alias {alias}')
+            if rc == 0:
+                dev = "auto"
+        if dev is None:
+            return None
+        if dev != "auto":
+            self._pref_dev = dev
+        self._dev[alias] = dev
         self._open_aliases.add(alias)
-        # apply the current volume (MCI scale is 0..1000)
+        # apply the current volume (MCI scale is 0..1000). waveaudio may not
+        # honor this — harmless, it just ignores an unsupported command.
         vol = int(max(0.0, min(1.0, self._volume)) * 1000)
         self._mci(f"setaudio {alias} volume to {vol}")
         return alias
+
+    def _ensure_loop_watcher(self):
+        """Start the loop watcher thread once; it re-triggers waveaudio
+        aliases that have finished (waveaudio can't 'play ... repeat')."""
+        import threading
+        if self._loop_thread is not None and self._loop_thread.is_alive():
+            return
+        self._loop_thread = threading.Thread(
+            target=self._loop_watch, daemon=True)
+        self._loop_thread.start()
+
+    def _loop_watch(self):
+        while True:
+            time.sleep(0.15)
+            with self._loop_lock:
+                aliases = list(self._loop_aliases)
+            for alias in aliases:
+                try:
+                    mode = self._mci(f"status {alias} mode")
+                    if mode and mode.strip().lower() != "playing":
+                        self._mci(f"play {alias} from 0")
+                except Exception:
+                    pass
 
     def _play(self, key, loop=False):
         if not self._ok:
@@ -933,7 +1004,19 @@ class SoundFX:
             if self._is_win:
                 # reopen every time → always targets the live default device
                 alias = self._mci_reopen(key)
-                self._mci(f"play {alias} from 0" + (" repeat" if loop else ""))
+                if not alias:
+                    return
+                if loop and self._dev.get(alias) == "mpegvideo":
+                    # native looping on the legacy device
+                    self._mci(f"play {alias} from 0 repeat")
+                elif loop:
+                    # waveaudio/auto: no native repeat → watcher re-triggers
+                    self._mci(f"play {alias} from 0")
+                    with self._loop_lock:
+                        self._loop_aliases.add(alias)
+                    self._ensure_loop_watcher()
+                else:
+                    self._mci(f"play {alias} from 0")
             else:
                 fx = self._fx.get(key)
                 if fx is None:
@@ -954,6 +1037,8 @@ class SoundFX:
         try:
             if self._is_win:
                 alias = f"sonder_{key}"
+                with self._loop_lock:
+                    self._loop_aliases.discard(alias)
                 if alias in self._open_aliases:
                     self._mci(f"stop {alias}")
             else:
