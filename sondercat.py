@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.8.0"
-APP_BUILD = "0715e"
+APP_BUILD = "0715f"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -195,7 +195,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "vision_consent": False,
                    "guide_mode": False, "guide_consent": False,
                    "guide_quality": "fast",
-                   "duck_high_score": 0,
+                   "duck_high_score": 0, "sound_volume": 0.6,
                    "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
 
@@ -778,12 +778,13 @@ class SoundFX:
 
     SR = 22050
 
-    def __init__(self):
+    def __init__(self, volume=0.6):
         self._ok = False
         self._is_win = (platform.system() == "Windows")
         self._fx = {}                # non-Windows QSoundEffect cache
         self._open_aliases = set()   # MCI aliases opened
         self._music_on = False
+        self._volume = max(0.0, min(1.0, volume))
         try:
             self._paths = {}
             self._build()
@@ -876,12 +877,21 @@ class SoundFX:
         import ctypes
         buf = ctypes.create_unicode_buffer(255)
         ctypes.windll.winmm.mciSendStringW(cmd, buf, 254, 0)
+        return buf.value
 
-    def _mci_open(self, key):
+    def _mci_reopen(self, key):
+        """Close then reopen the alias so MCI binds to whatever output
+        device is CURRENT (default) right now — this is how switching
+        between speakers and earphones mid-session is picked up."""
         alias = f"sonder_{key}"
-        if alias not in self._open_aliases:
-            self._mci(f'open "{self._paths[key]}" type mpegvideo alias {alias}')
-            self._open_aliases.add(alias)
+        if alias in self._open_aliases:
+            self._mci(f"close {alias}")
+            self._open_aliases.discard(alias)
+        self._mci(f'open "{self._paths[key]}" type mpegvideo alias {alias}')
+        self._open_aliases.add(alias)
+        # apply the current volume (MCI scale is 0..1000)
+        vol = int(max(0.0, min(1.0, self._volume)) * 1000)
+        self._mci(f"setaudio {alias} volume to {vol}")
         return alias
 
     def _play(self, key, loop=False):
@@ -889,7 +899,8 @@ class SoundFX:
             return
         try:
             if self._is_win:
-                alias = self._mci_open(key)
+                # reopen every time → always targets the live default device
+                alias = self._mci_reopen(key)
                 self._mci(f"play {alias} from 0" + (" repeat" if loop else ""))
             else:
                 fx = self._fx.get(key)
@@ -898,8 +909,8 @@ class SoundFX:
                     from PySide6.QtMultimedia import QSoundEffect
                     fx = QSoundEffect()
                     fx.setSource(QUrl.fromLocalFile(self._paths[key]))
-                    fx.setVolume(0.55)
                     self._fx[key] = fx
+                fx.setVolume(self._volume)
                 if loop:
                     from PySide6.QtMultimedia import QSoundEffect as _QSE
                     fx.setLoopCount(_QSE.Infinite)
@@ -917,6 +928,20 @@ class SoundFX:
                 fx = self._fx.get(key)
                 if fx:
                     fx.stop()
+        except Exception:
+            pass
+
+    def set_volume(self, v):
+        """v in 0.0..1.0. Applies live to any playing MCI aliases."""
+        self._volume = max(0.0, min(1.0, v))
+        try:
+            if self._is_win:
+                mv = int(self._volume * 1000)
+                for alias in list(self._open_aliases):
+                    self._mci(f"setaudio {alias} volume to {mv}")
+            else:
+                for fx in self._fx.values():
+                    fx.setVolume(self._volume)
         except Exception:
             pass
 
@@ -2721,6 +2746,12 @@ class Manager(QObject):
         elif self._sfx is not None:
             self._sfx.music_stop()
 
+    def set_sound_volume(self, v):
+        self.cfg["global"]["sound_volume"] = round(max(0.0, min(1.0, v)), 2)
+        save_config(self.cfg)
+        if self._sfx is not None:
+            self._sfx.set_volume(v)
+
     def toggle_auto_peek(self):
         self.cfg["global"]["auto_peek"] = not self.cfg["global"]["auto_peek"]
         save_config(self.cfg)
@@ -2952,7 +2983,8 @@ class Manager(QObject):
         if self.cfg["global"].get("sounds", True):
             try:
                 if self._sfx is None:
-                    self._sfx = SoundFX()
+                    self._sfx = SoundFX(
+                        self.cfg["global"].get("sound_volume", 0.6))
                 self._sfx.music_start()
             except Exception:
                 pass
@@ -4030,6 +4062,24 @@ class CatWindow(QWidget):
         snd.setChecked(self.gcfg.get("sounds", True))
         snd.triggered.connect(mgr.toggle_sounds)
         beh.addAction(snd)
+        # volume slider (0–100%) as an embedded widget in the menu
+        from PySide6.QtWidgets import QWidgetAction, QSlider, QWidget, QHBoxLayout, QLabel
+        vol_wrap = QWidget()
+        vlay = QHBoxLayout(vol_wrap)
+        vlay.setContentsMargins(22, 2, 12, 4)
+        vlay.setSpacing(8)
+        vlab = QLabel("🔈")
+        vsl = QSlider(Qt.Horizontal)
+        vsl.setMinimum(0)
+        vsl.setMaximum(100)
+        vsl.setValue(int(self.gcfg.get("sound_volume", 0.6) * 100))
+        vsl.setFixedWidth(120)
+        vsl.valueChanged.connect(lambda v: mgr.set_sound_volume(v / 100.0))
+        vlay.addWidget(vlab)
+        vlay.addWidget(vsl)
+        vol_act = QWidgetAction(menu)
+        vol_act.setDefaultWidget(vol_wrap)
+        beh.addAction(vol_act)
         auto = QAction("Auto-hide during fullscreen video", menu)
         auto.setCheckable(True)
         auto.setChecked(self.gcfg["auto_peek"])
@@ -4953,7 +5003,8 @@ class CatWindow(QWidget):
                         if self.gcfg.get("sounds", True):
                             try:
                                 if self.mgr._sfx is None:
-                                    self.mgr._sfx = SoundFX()
+                                    self.mgr._sfx = SoundFX(
+                                        self.mgr.cfg["global"].get("sound_volume", 0.6))
                                 self.mgr._sfx.purr()
                             except Exception:
                                 pass
