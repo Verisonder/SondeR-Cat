@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.8.0"
-APP_BUILD = "0715g"
+APP_BUILD = "0715h"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -849,18 +849,23 @@ class SoundFX:
             env = 1 - i / (self.SR * 0.04)
             pew.append(int(random.uniform(-1, 1) * 0.18 * env * 32767))
         self._paths["shot"] = self._wav(pew, "sonder_shot.wav")
-        # --- purr: low rumble with a gentle ~20 Hz tremolo ---
+        # --- purr: a CONTINUOUS low rumble. The trick is the tremolo must
+        # stay shallow — if it dips near silence it reads as a stuttering
+        # machine-gun, so it only gently varies between ~0.8 and 1.0. ---
         purr = []
-        dur = 2.2
+        dur = 2.4
         n = int(self.SR * dur)
+        # slow-drifting texture: two close low tones beat against each other
         for i in range(n):
             t = i / self.SR
-            base = (math.sin(2 * math.pi * 50 * t) * 0.5
-                    + math.sin(2 * math.pi * 100 * t) * 0.22
-                    + random.uniform(-1, 1) * 0.12)        # breathy texture
-            trem = 0.6 + 0.4 * math.sin(2 * math.pi * 20 * t)
-            fade = min(1.0, i / 1500.0, (n - i) / 4000.0)  # soft in/out
-            purr.append(int(base * trem * fade * 0.45 * 32767))
+            base = (math.sin(2 * math.pi * 48 * t)
+                    + math.sin(2 * math.pi * 62 * t) * 0.6
+                    + math.sin(2 * math.pi * 96 * t) * 0.25)
+            base /= 1.85
+            # SHALLOW tremolo (0.82..1.0) — a soft breathing swell, never a gap
+            trem = 0.91 + 0.09 * math.sin(2 * math.pi * 6 * t)
+            fade = min(1.0, i / 3000.0, (n - i) / 5000.0)  # long soft in/out
+            purr.append(int(base * trem * fade * 0.4 * 32767))
         self._paths["purr"] = self._wav(purr, "sonder_purr.wav")
         # --- bloop: duck hit — quick falling thunk ---
         bl = []
@@ -5003,7 +5008,7 @@ class CatWindow(QWidget):
                         # purr ♥ once at a time (its own cooldown ≈ the purr
                         # length so it doesn't retrigger every tick and garble)
                         if self.gcfg.get("sounds", True) \
-                                and now - self._last_purr > 2.3:
+                                and now - self._last_purr > 2.5:
                             self._last_purr = now
                             try:
                                 if self.mgr._sfx is None:
