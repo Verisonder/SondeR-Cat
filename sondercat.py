@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0716b"
+APP_BUILD = "0716c"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -197,7 +197,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "guide_quality": "fast",
                    "duck_high_score": 0, "sound_volume": 1.0,
                    "feeding": False, "food_level": 1.0, "water_level": 1.0,
-                   "feed_last": 0, "bowl_pos": None,
+                   "feed_last": 0, "bowl_pos": None, "bowl_hide_apps": False,
                    "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
 
@@ -1586,22 +1586,34 @@ class FeedingBowls(QWidget):
     to them and asks nicely. Hidden during fullscreen apps."""
 
     PX = 4                      # pixel cell size
-    GAP = 7                     # cells between bowls
-    # bowl shape grid (20 wide x 9 tall). R=rim hi, i=rim mid, I=inner back,
-    # #=contents fill, r=base shadow, .=empty
+    GAP = 5                     # cells between bowls
+    # bowl shape grid (22 wide x 20 tall), reference-style rounded dish.
+    # K=dark outline  B=body color  H=body highlight  M=food mound  m=mound dk
+    # F=contents-fill zone (kibble/water shows here by level)  .=transparent
     SHAPE = [
-        ".RRRRRRRRRRRRRRRRRR.",
-        "RiIIIIIIIIIIIIIIIIiR",
-        "RI################IR",
-        "RI################IR",
-        ".RI##############IR.",
-        "..RI############IR..",
-        "...RII########IIR...",
-        "....RRRRRRRRRRRR....",
-        ".....rrrrrrrrrr.....",
+        "........KKKKKKKK......",
+        ".....KKKMMMMMMMMKKK...",
+        "...KKMMMMMMMMMMMMMMKK.",
+        "..KMMMmMMMMMMMMMMmMMMK",
+        "..KBMMMMMMMMMMMMMMMBK.",
+        ".KBBKKKKKKKKKKKKKKBBK.",
+        ".KBHFFFFFFFFFFFFFFHBK.",
+        ".KBFFFFFFFFFFFFFFFFBK.",
+        ".KBFFFFFFFFFFFFFFFFBK.",
+        ".KBBFKKFFFFFFFFKKFBBK.",
+        ".KBFFFFFFFFFFFFFFFFBK.",
+        ".KBBFKKKKKKKKKKKKFBBK.",
+        "..KBBFFFFFFFFFFFFBBK..",
+        "..KKBBFFFFFFFFFFBBKK..",
+        "...KKBBFFFFFFFFBBKK...",
+        ".....KKBBBBBBBBKK.....",
+        ".......KKKKKKKKKK.....",
+        "........KK....KK......",
+        "........KK....KK......",
+        "........KK....KK......",
     ]
-    BW = 20
-    BH = 9
+    BW = 22
+    BH = 20
 
     def __init__(self, mgr):
         super().__init__(None, Qt.FramelessWindowHint
@@ -1665,41 +1677,67 @@ class FeedingBowls(QWidget):
         self._drag_off = None
         self.update()
 
+    def contextMenuEvent(self, ev):
+        from PySide6.QtWidgets import QMenu
+        g = self.mgr.cfg["global"]
+        m = QMenu()
+        fill = m.addAction("Fill both bowls 🥣")
+        m.addSeparator()
+        hide = m.addAction("Hide when an app is open")
+        hide.setCheckable(True)
+        hide.setChecked(g.get("bowl_hide_apps", False))
+        m.addSeparator()
+        off = m.addAction("Turn off feeding")
+        chosen = m.exec(ev.globalPos())
+        if chosen is fill:
+            g["food_level"] = 1.0
+            g["water_level"] = 1.0
+            save_config(self.mgr.cfg)
+            self.mgr._bowl_refilled("food")
+            self.update()
+        elif chosen is hide:
+            g["bowl_hide_apps"] = not g.get("bowl_hide_apps", False)
+            save_config(self.mgr.cfg)
+        elif chosen is off:
+            self.mgr.toggle_feeding()
+
     def _draw_bowl(self, p, ox, level, is_water):
         from PySide6.QtGui import QColor
         px = self.PX
-        rim_hi = QColor("#b3b8c6")
-        rim_mid = QColor("#8f95a4")
-        rim_in = QColor("#5f6473")
-        base = QColor("#3f4350")
+        outline = QColor("#141418")
         if is_water:
+            body, body_hi = QColor("#50b4dc"), QColor("#8cd2ee")
             fill, shine = QColor("#4f9fd8"), QColor("#8cc6ea")
+            mound, mound_d = QColor("#3f9ac8"), QColor("#2f7fa8")   # water top
         else:
+            body, body_hi = QColor("#e12d28"), QColor("#f26b60")
             fill, shine = QColor("#b07a3e"), QColor("#c99a5c")
-        # find the vertical span of the contents rows (# in the grid)
-        content_rows = [y for y, row in enumerate(self.SHAPE) if "#" in row]
-        top_c, bot_c = min(content_rows), max(content_rows)
-        span = bot_c - top_c + 1
-        # how many of those rows are filled, from the bottom up
-        filled_rows = int(round(level * span))
-        fill_start = bot_c - filled_rows + 1
+            mound, mound_d = QColor("#8a5620"), QColor("#6d4418")   # kibble top
+        # contents fill zone (F cells) fill bottom-up by level
+        f_rows = [y for y, row in enumerate(self.SHAPE) if "F" in row]
+        top_f, bot_f = min(f_rows), max(f_rows)
+        span = bot_f - top_f + 1
+        filled = int(round(level * span))
+        fill_start = bot_f - filled + 1
         for y, row in enumerate(self.SHAPE):
             for x, ch in enumerate(row):
                 X, Y = ox + x * px, y * px
-                if ch == "R":
-                    p.fillRect(X, Y, px, px, rim_hi)
-                elif ch == "i":
-                    p.fillRect(X, Y, px, px, rim_mid)
-                elif ch == "I":
-                    p.fillRect(X, Y, px, px, rim_in)
-                elif ch == "r":
-                    p.fillRect(X, Y, px, px, base)
-                elif ch == "#":
+                if ch == "K":
+                    p.fillRect(X, Y, px, px, outline)
+                elif ch == "B":
+                    p.fillRect(X, Y, px, px, body)
+                elif ch == "H":
+                    p.fillRect(X, Y, px, px, body_hi)
+                elif ch == "M":
+                    p.fillRect(X, Y, px, px, mound)
+                elif ch == "m":
+                    p.fillRect(X, Y, px, px, mound_d)
+                elif ch == "F":
                     if level > 0 and y >= fill_start:
                         c = shine if (x + y) % 4 == 0 else fill
                         p.fillRect(X, Y, px, px, c)
                     else:
-                        p.fillRect(X, Y, px, px, rim_in)   # empty interior
+                        p.fillRect(X, Y, px, px, body)   # empty → show body
 
     def paintEvent(self, _ev):
         from PySide6.QtGui import QPainter
@@ -2248,7 +2286,7 @@ class Manager(QObject):
                 g["feed_last"] = now
                 save_config(self.cfg)
                 self._bowl.update()
-            self._bowl.setVisible(not self.fullscreen_active)
+            self._bowl.setVisible(not self._bowls_should_hide())
         elif self._bowl is not None:
             self._bowl.hide()
             self._bowl.deleteLater()
@@ -3103,6 +3141,34 @@ class Manager(QObject):
         save_config(self.cfg)
         if self._sfx is not None:
             self._sfx.set_volume(v)
+
+    def _bowls_should_hide(self):
+        """Bowls always hide on fullscreen; and, if the user turned on the
+        'hide when an app is open' option, also whenever a real app window
+        has the foreground (not the desktop and not one of our own windows)."""
+        if self.fullscreen_active:
+            return True
+        if not self.cfg["global"].get("bowl_hide_apps", False):
+            return False
+        if platform.system() != "Windows":
+            return False
+        try:
+            import ctypes
+            u = ctypes.windll.user32
+            fg = u.GetForegroundWindow()
+            if not fg:
+                return False
+            # the desktop / shell windows → treat as "no app open"
+            if fg in (u.GetShellWindow(), u.GetDesktopWindow()):
+                return False
+            # our own windows (cat, bowls, bubbles) shouldn't count
+            own = {int(w.winId()) for w in QApplication.topLevelWidgets()
+                   if w.isVisible()}
+            if fg in own:
+                return False
+            return True
+        except Exception:
+            return False
 
     def toggle_feeding(self):
         g = self.cfg["global"]
