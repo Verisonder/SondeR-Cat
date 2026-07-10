@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713u"
+APP_BUILD = "0713v"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2348,6 +2348,10 @@ class Manager(QObject):
                     "to improve their models. So please DON'T guide over "
                     "passwords, private messages, personal or confidential "
                     "information on screen.\n\n"
+                    "It also uses more of your Gemini quota than normal "
+                    "chat — each step makes a couple of requests to find "
+                    "things accurately — but for personal use you won't get "
+                    "near the free-tier limits.\n\n"
                     "This feature is in beta and may not always be accurate.\n\n"
                     "Do you understand and want to turn it on?",
                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
