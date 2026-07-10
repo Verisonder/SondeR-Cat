@@ -36,3 +36,8 @@ SondeR cat is free. If it made you smile, you can support its development:
   ❤  https://github.com/sponsors/Verisonder   (or see "Sponsor" on the repo)
 
 Thank you for keeping open source honest. 🐾
+
+--- Sound assets ---
+Cat purr recordings (sounds/purr_pet.wav, sounds/purr_sleep.wav) are
+royalty-free / no-copyright audio provided by the project owner. All other
+sounds (game music, shot, hit) are procedurally generated at runtime.

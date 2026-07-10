@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.8.0"
-APP_BUILD = "0715i"
+APP_BUILD = "0715j"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -849,35 +849,16 @@ class SoundFX:
             env = 1 - i / (self.SR * 0.04)
             pew.append(int(random.uniform(-1, 1) * 0.18 * env * 32767))
         self._paths["shot"] = self._wav(pew, "sonder_shot.wav")
-        # --- purr: a CONTINUOUS low rumble. Two lessons learned the hard way:
-        # (1) the tremolo must be shallow (near-silent dips = machine-gun), and
-        # (2) the tones must be HARMONICS (2x, 3x) — detuned tones a few Hz
-        # apart BEAT against each other and cancel ~14x/sec, which also reads
-        # as stutter. So: one fundamental + clean octave/harmonic partials. ---
-        purr = []
-        dur = 2.4
-        n = int(self.SR * dur)
-        f0 = 45.0                      # low fundamental
-        prev = 0.0
-        for i in range(n):
-            t = i / self.SR
-            tone = (math.sin(2 * math.pi * f0 * t)
-                    + math.sin(2 * math.pi * f0 * 2 * t) * 0.5
-                    + math.sin(2 * math.pi * f0 * 3 * t) * 0.28
-                    + math.sin(2 * math.pi * f0 * 4 * t) * 0.14)
-            tone /= 1.92
-            # strong low-pass-filtered noise bed: this is the continuous
-            # "rumble" that fills the troughs between the low tone cycles,
-            # so nothing ever reads as a gap / rapid pulse
-            white = random.uniform(-1, 1)
-            prev = prev * 0.94 + white * 0.06      # 1-pole low-pass
-            bed = prev * 4.0                       # loud enough to fill gaps
-            trem = 0.92 + 0.08 * math.sin(2 * math.pi * 5 * t)
-            fade = min(1.0, i / 3000.0, (n - i) / 5000.0)
-            # mix tone + bed, keep well under clip
-            purr.append(int((tone * 0.7 + bed * 0.6) * trem * fade
-                            * 0.5 * 32767))
-        self._paths["purr"] = self._wav(purr, "sonder_purr.wav")
+        # --- purr: REAL recorded cat purrs (royalty-free), shipped in
+        # sounds/. Two variants: one for petting, one for sleeping. ---
+        snd_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "sounds")
+        pet = os.path.join(snd_dir, "purr_pet.wav")
+        slp = os.path.join(snd_dir, "purr_sleep.wav")
+        if os.path.exists(pet):
+            self._paths["purr"] = pet
+        if os.path.exists(slp):
+            self._paths["purr_sleep"] = slp
         # --- bloop: duck hit — quick falling thunk ---
         bl = []
         n = int(self.SR * 0.16)
@@ -975,6 +956,14 @@ class SoundFX:
 
     def purr(self):
         self._play("purr")
+
+    def purr_sleep(self):
+        # the sleeping purr; falls back to the petting one if not present
+        self._play("purr_sleep" if "purr_sleep" in self._paths else "purr")
+
+    def stop_purr(self):
+        self._stop("purr")
+        self._stop("purr_sleep")
 
     def hit(self):
         self._play("hit")
@@ -1998,7 +1987,8 @@ class Manager(QObject):
                    "Verisonder/SondeR-Cat/main/")
     UPDATE_FILES = ["sondercat.py", "sprites.py", "sonder_agent.py",
                     "ANIMATIONS.md", "README.md", "requirements.txt",
-                    "meow.wav", "sondercat_gray.ico"]
+                    "meow.wav", "sondercat_gray.ico",
+                    "sounds/purr_pet.wav", "sounds/purr_sleep.wav"]
 
     def _fetch(self, name):
         import urllib.request, urllib.error
@@ -2145,7 +2135,9 @@ class Manager(QObject):
                     raise ValueError(f"bad sprites in update: {msg}")
                 app_dir = os.path.dirname(os.path.abspath(__file__))
                 for name, data in changed.items():
-                    with open(os.path.join(app_dir, name), "wb") as f:
+                    dest = os.path.join(app_dir, name)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    with open(dest, "wb") as f:
                         f.write(data)
             except Exception as e:
                 err = str(e)[:120]
@@ -3765,6 +3757,7 @@ class CatWindow(QWidget):
         self.pet_accum = 0.0
         self.last_pet_heart = 0.0
         self._last_purr = 0.0
+        self._last_sleep_purr = 0.0
         self.bubble_text = ""
         self.bubble_until = 0.0
         self.bubble_color = None
@@ -4538,6 +4531,19 @@ class CatWindow(QWidget):
                                          "y": r.top() + 10, "vy": 0.7,
                                          "life": 2.5,
                                          "seed": random.random() * 6})
+                    # a soft sleepy purr now and then (~every 25–40s)
+                    if self.gcfg.get("sounds", True) \
+                            and now - self._last_sleep_purr > \
+                            random.uniform(25, 40):
+                        self._last_sleep_purr = now
+                        try:
+                            if self.mgr._sfx is None:
+                                self.mgr._sfx = SoundFX(
+                                    self.mgr.cfg["global"].get(
+                                        "sound_volume", 0.6))
+                            self.mgr._sfx.purr_sleep()
+                        except Exception:
+                            pass
                 elif kind == "dance":
                     if now > self.next_note and len(self.notes) < 4:
                         self.next_note = now + random.uniform(0.5, 1.1)
@@ -5016,10 +5022,11 @@ class CatWindow(QWidget):
                             "x": r.left() + random.randint(20, r.width() - 20),
                             "y": r.top() + 8, "vy": 1.1, "life": 1.6,
                             "seed": random.random() * 6})
-                        # purr ♥ once at a time (its own cooldown ≈ the purr
-                        # length so it doesn't retrigger every tick and garble)
+                        # purr ♥ — real recorded purr; long cooldown so it
+                        # plays through once (files are ~12s) rather than
+                        # restarting every tick
                         if self.gcfg.get("sounds", True) \
-                                and now - self._last_purr > 2.5:
+                                and now - self._last_purr > 11.0:
                             self._last_purr = now
                             try:
                                 if self.mgr._sfx is None:
