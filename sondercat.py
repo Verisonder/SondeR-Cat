@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.4.3"
-APP_BUILD = "0714d"
+APP_BUILD = "0714e"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2824,15 +2824,17 @@ class Manager(QObject):
                                      "temperature": 0.8},
             }
             if use_think and think == "low":
-                # cap the model's internal reasoning: thinking models
-                # otherwise think as long as they like, which is slow AND
-                # burns free-tier quota (thinking counts as output tokens).
+                # cap the model's internal reasoning HARD — locating a button
+                # needs almost no thinking. Thinking counts as output tokens,
+                # so unbounded reasoning is both slow and quota-hungry. Use
+                # the smallest budget each model family accepts; if a model
+                # 400s on it, the caller retries that model without a cap.
                 if model.startswith("gemini-2.5"):
                     b["generationConfig"]["thinkingConfig"] = {
-                        "thinkingBudget": 512}
+                        "thinkingBudget": 128}
                 else:                     # 3.x and the -latest aliases
                     b["generationConfig"]["thinkingConfig"] = {
-                        "thinkingLevel": "low"}
+                        "thinkingLevel": "low", "thinkingBudget": 128}
             if grounded:
                 # live Google Search. All current models (3.x, 2.5, and the
                 # -latest aliases) use the new google_search tool; only the
