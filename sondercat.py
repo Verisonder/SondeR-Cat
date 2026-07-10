@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0716f"
+APP_BUILD = "0716g"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1718,12 +1718,13 @@ class FeedingBowls(QWidget):
         from PySide6.QtGui import QColor
         px = self.PX
         outline = QColor("#141418")
+        # metallic steel bowl body (both bowls) with a lighter sheen highlight
         if is_water:
-            body, body_hi = QColor("#50b4dc"), QColor("#8cd2ee")
+            body, body_hi = QColor("#9aa4b0"), QColor("#d5dbe2")
             fill, shine = QColor("#4f9fd8"), QColor("#8cc6ea")
             grid = self.WATER_SHAPE
         else:
-            body, body_hi = QColor("#c85a2c"), QColor("#e08a4a")
+            body, body_hi = QColor("#9aa4b0"), QColor("#d5dbe2")
             grid = self.FOOD_SHAPE
         mound = QColor("#96602d")       # kibble mound
         mound_d = QColor("#734820")
