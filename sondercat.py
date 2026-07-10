@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713q"
+APP_BUILD = "0713r"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2372,6 +2372,12 @@ class Manager(QObject):
         positions. Returns (b64, QRect) or (None, None)."""
         try:
             from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+            # hide our own glow first — it must not photobomb the screenshot
+            # (the model could mistake the blue blob for a UI element)
+            gg = getattr(self, "_guide_glow", None)
+            if gg is not None and gg.isVisible():
+                gg.hide()
+                QApplication.processEvents()
             scr = (self.primary().screen()
                    or QGuiApplication.primaryScreen())
             geom = scr.geometry()
@@ -2776,6 +2782,10 @@ class Manager(QObject):
             if self.guide_active and q in ("stop", "cancel", "done",
                                            "end", "quit", "exit"):
                 self._end_guide(walk_home=True)
+                return
+            if self.ai_busy and (self.guide_active
+                                 or self._is_guide_request(question)):
+                p.say("one sec, still working on this step… 🤔", 2)
                 return
             if self.guide_active and q in ("next", "next step", "ok",
                                            "okay", "continue", "go on",
