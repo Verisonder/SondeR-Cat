@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "9.3.0"
-APP_BUILD = "0713v"
+APP_VERSION = "9.4.0"
+APP_BUILD = "0713w"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2354,7 +2354,7 @@ class Manager(QObject):
                     "near the free-tier limits.\n\n"
                     "This feature is in beta and may not always be accurate.\n\n"
                     "Do you understand and want to turn it on?",
-                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
                 if ok != QMessageBox.Yes:
                     return
                 g["guide_consent"] = True
