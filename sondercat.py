@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713o"
+APP_BUILD = "0713p"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2488,19 +2488,38 @@ class Manager(QObject):
                 try:
                     d = _json.loads(raw)
                 except Exception:
-                    # model sometimes echoes the schema (e.g. placeholder
-                    # words inside box) — re-ask once with a firm nudge
-                    retry = contents + [
-                        {"role": "model", "parts": [{"text": raw[:500]}]},
-                        {"role": "user", "parts": [{"text":
-                            "That was INVALID JSON. Reply again with ONLY "
-                            "valid minified JSON in the exact shape "
-                            "requested. box must be four plain integers "
-                            "like [112,204,146,318] — no letters, no "
-                            "placeholder words, no comments."}]}]
-                    raw = clean(self._gemini_call(retry, persona,
-                                                  ground_with_image=True))
-                    d = _json.loads(raw)
+                    # salvage 1: quote bare words (e.g. a literal
+                    # [ymin,xmin,...] the model echoed) so it parses, then
+                    # the box logic falls back gracefully
+                    try:
+                        fixed = re.sub(
+                            r'(?<=[\[,:])\s*'
+                            r'(?!true\b|false\b|null\b)'
+                            r'([A-Za-z_][A-Za-z_0-9]*)'
+                            r'\s*(?=[,\]\}])', r'"\1"', raw)
+                        d = _json.loads(fixed)
+                    except Exception:
+                        # salvage 2: one UNGROUNDED retry — grounded replies
+                        # can carry citation markup that corrupts JSON, the
+                        # plain image-only call returns much cleaner JSON
+                        retry = contents + [
+                            {"role": "model", "parts": [{"text": raw[:500]}]},
+                            {"role": "user", "parts": [{"text":
+                                "That was INVALID JSON. Reply again with "
+                                "ONLY valid minified JSON in the exact "
+                                "shape requested. box must be four plain "
+                                "integers like [112,204,146,318] — no "
+                                "letters, no placeholder words, no "
+                                "comments."}]}]
+                        raw = clean(self._gemini_call(
+                            retry, persona, ground_with_image=False))
+                        try:
+                            d = _json.loads(raw)
+                        except Exception as je:
+                            # keep a snippet so the error actually tells us
+                            # what the model sent
+                            raise RuntimeError(
+                                f"{je} — reply began: {raw[:80]!r}") from None
 
                 def apply():
                     self.ai_busy = False
@@ -2573,12 +2592,16 @@ class Manager(QObject):
                               "(say 'next' when done)", 12)
                 ui(apply)
             except Exception as e:
-                msg = str(e)[:60]
+                msg = str(e)[:140]
 
                 def fail():
                     self.ai_busy = False
+                    # end the session so the power-eyes and glow switch off
+                    # instead of glowing forever at a dead tour
+                    self._end_guide(walk_home=False, quiet=True)
                     self.primary().say(
-                        f"my guide-brain glitched… ({msg})", 6)
+                        f"my guide-brain glitched… ({msg}) — "
+                        "ask me again to retry!", 8)
                 ui(fail)
         threading.Thread(target=work, daemon=True).start()
 
