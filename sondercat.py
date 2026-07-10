@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.5.2"
-APP_BUILD = "0714q"
+APP_BUILD = "0714r"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -5758,8 +5758,8 @@ class CatWindow(QWidget):
             p.save()
             # pivot well out to the RIGHT of the body so the gun is clearly
             # in front of the cat, not overlapping it
-            p.translate(paw_local.x() + int(s * 6.5),
-                        paw_local.y() + int(s * 1.5))
+            p.translate(paw_local.x() + int(s * 7.5),
+                        paw_local.y() + int(s * 2.5))
             p.rotate(math.degrees(ang))
             gun = QColor("#3a3f47")
             barrel = QColor("#2a2e34")
