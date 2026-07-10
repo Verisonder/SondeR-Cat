@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.8.0"
-APP_BUILD = "0715c"
+APP_BUILD = "0715d"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -195,7 +195,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "vision_consent": False,
                    "guide_mode": False, "guide_consent": False,
                    "guide_quality": "fast",
-                   "duck_high_score": 0,
+                   "duck_high_score": 0, "game_sound": True,
                    "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
 
@@ -764,6 +764,162 @@ class Meow:
             pass
 
 
+# ------------------------------------------------------------ game audio -----
+
+class GameAudio:
+    """Procedural 8-bit style sound for the minigames — a looping chiptune
+    background track and a laser 'pew' shot. Generated at runtime as WAV
+    (square/noise waves) so there's NOTHING copyrighted and no files to ship.
+    All optional; controlled by the 'game_sound' setting."""
+
+    SR = 22050
+
+    def __init__(self):
+        self._ok = False
+        self._music = None          # QMediaPlayer for the looping track
+        self._shot_fx = None        # QSoundEffect for the pew
+        self._tmp = []
+        try:
+            self._build()
+            self._ok = True
+        except Exception:
+            self._ok = False
+
+    # ---- tone synthesis ------------------------------------------------
+    def _square(self, freq, ms, vol=0.28, duty=0.5):
+        import math
+        n = int(self.SR * ms / 1000.0)
+        out = []
+        if freq <= 0:                       # rest
+            return [0] * n
+        period = self.SR / freq
+        for i in range(n):
+            phase = (i % period) / period
+            s = vol if phase < duty else -vol
+            # short attack/decay so notes don't click
+            env = min(1.0, i / 80.0, (n - i) / 80.0)
+            out.append(int(s * env * 32767))
+        return out
+
+    def _noise(self, ms, vol=0.35):
+        import random
+        n = int(self.SR * ms / 1000.0)
+        out = []
+        for i in range(n):
+            env = (n - i) / n                # decay to 0
+            out.append(int(random.uniform(-1, 1) * vol * env * 32767))
+        return out
+
+    def _write_wav(self, samples, name):
+        import wave, struct, tempfile, os
+        path = os.path.join(tempfile.gettempdir(), name)
+        w = wave.open(path, "w")
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(self.SR)
+        clip = lambda v: max(-32767, min(32767, int(v)))
+        w.writeframes(b"".join(struct.pack("<h", clip(s)) for s in samples))
+        w.close()
+        self._tmp.append(path)
+        return path
+
+    def _build(self):
+        # --- background loop: a bouncy little arcade riff (square lead) ---
+        # note freqs (Hz) roughly A minor pentatonic, cheerful 8-bit feel
+        A3, C4, D4, E4, G4, A4, C5, E5 = (220, 262, 294, 330, 392, 440, 523, 659)
+        beat = 140                          # ms per eighth note
+        riff = [A4, E4, A4, C5, A4, E4, G4, E4,
+                A4, E4, A4, C5, E5, C5, A4, E4,
+                D4, A3, D4, E4, D4, A3, C4, A3,
+                G4, D4, G4, A4, C5, A4, G4, E4]
+        bass = [A3, 0, A3, 0, G4 // 2, 0, G4 // 2, 0,
+                D4, 0, D4, 0, E4, 0, E4, 0]
+        music = []
+        for i, f in enumerate(riff):
+            lead = self._square(f, beat, vol=0.22, duty=0.5)
+            b = self._square(bass[i % len(bass)] or 0, beat, vol=0.16, duty=0.25)
+            mixed = [lead[j] + (b[j] if j < len(b) else 0)
+                     for j in range(len(lead))]
+            music.extend(mixed)
+        self._music_path = self._write_wav(music, "sonder_dh_music.wav")
+        # --- shot: a quick descending 'pew' + a noise crackle ---
+        pew = []
+        import math
+        dur = 130
+        n = int(self.SR * dur / 1000.0)
+        for i in range(n):
+            t = i / n
+            freq = 1400 - 1050 * t          # slide down
+            period = self.SR / freq
+            phase = (i % period) / period
+            s = 0.30 if phase < 0.5 else -0.30
+            env = (1 - t) ** 1.5
+            pew.append(int(s * env * 32767))
+        pew_tail = self._noise(40, vol=0.18)
+        pew.extend(pew_tail)
+        self._shot_path = self._write_wav(pew, "sonder_dh_shot.wav")
+
+    # ---- playback ------------------------------------------------------
+    def start_music(self):
+        if not self._ok:
+            return
+        try:
+            from PySide6.QtCore import QUrl
+            from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+            self._audio_out = QAudioOutput()
+            self._audio_out.setVolume(0.5)
+            self._music = QMediaPlayer()
+            self._music.setAudioOutput(self._audio_out)
+            self._music.setSource(QUrl.fromLocalFile(self._music_path))
+            # loop forever
+            try:
+                self._music.setLoops(QMediaPlayer.Infinite)
+            except Exception:
+                self._music.mediaStatusChanged.connect(self._reloop)
+            self._music.play()
+        except Exception:
+            self._music = None
+
+    def _reloop(self, status):
+        try:
+            from PySide6.QtMultimedia import QMediaPlayer
+            if status == QMediaPlayer.EndOfMedia and self._music:
+                self._music.setPosition(0)
+                self._music.play()
+        except Exception:
+            pass
+
+    def stop_music(self):
+        try:
+            if self._music:
+                self._music.stop()
+                self._music = None
+        except Exception:
+            pass
+
+    def shot(self):
+        if not self._ok:
+            return
+        try:
+            if platform.system() == "Windows":
+                import winsound
+                winsound.PlaySound(self._shot_path,
+                                   winsound.SND_FILENAME
+                                   | winsound.SND_ASYNC
+                                   | winsound.SND_NODEFAULT)
+            else:
+                from PySide6.QtCore import QUrl
+                from PySide6.QtMultimedia import QSoundEffect
+                if self._shot_fx is None:
+                    self._shot_fx = QSoundEffect()
+                    self._shot_fx.setSource(
+                        QUrl.fromLocalFile(self._shot_path))
+                    self._shot_fx.setVolume(0.6)
+                self._shot_fx.play()
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------- manager ----
 
 class _InputBridge(QObject):
@@ -1054,6 +1210,11 @@ class DuckHuntGame(QWidget):
             return                       # not started yet — no shooting
         mx, my = ev.position().x(), ev.position().y()
         self.shots += 1
+        # pew! (optional 8-bit shot sound)
+        if self.mgr.cfg["global"].get("game_sound", True):
+            ga = getattr(self.mgr, "_game_audio", None)
+            if ga is not None:
+                ga.shot()
         hit = None
         for d in reversed(self.ducks):
             if not d["alive"] or d["fall"]:
@@ -1618,6 +1779,7 @@ class Manager(QObject):
         self._music_timer.start(120)
         self._guard_beam = None
         self._duck_game = None          # easter-egg minigame window
+        self._game_audio = None         # lazily-built chiptune engine
         self._guard_timer = QTimer()
         self._guard_timer.timeout.connect(self._tick_guard)
         self._guard_timer.start(33)
@@ -2531,6 +2693,17 @@ class Manager(QObject):
         if g["sounds"]:
             self.meow.play()
 
+    def toggle_game_sound(self):
+        g = self.cfg["global"]
+        g["game_sound"] = not g.get("game_sound", True)
+        save_config(self.cfg)
+        # reflect the change live if a game is running
+        if self._game_audio is not None:
+            if g["game_sound"]:
+                self._game_audio.start_music()
+            else:
+                self._game_audio.stop_music()
+
     def toggle_auto_peek(self):
         self.cfg["global"]["auto_peek"] = not self.cfg["global"]["auto_peek"]
         save_config(self.cfg)
@@ -2758,9 +2931,19 @@ class Manager(QObject):
         c._enter_duck_corner()
         c.say("🦆 DUCK HUNT! click the ducks — Esc to quit", 5)
         self._duck_game = DuckHuntGame(self)
+        # optional 8-bit soundtrack
+        if self.cfg["global"].get("game_sound", True):
+            try:
+                if self._game_audio is None:
+                    self._game_audio = GameAudio()
+                self._game_audio.start_music()
+            except Exception:
+                pass
 
     def _end_duck_hunt(self):
         self._duck_game = None
+        if self._game_audio is not None:
+            self._game_audio.stop_music()
         c = self.primary()
         c.duck_gunner = False
         try:
@@ -3794,6 +3977,11 @@ class CatWindow(QWidget):
         dh.triggered.connect(lambda: mgr.start_minigame("duckhunt"))
         mini.addAction(dh)
         mini.addSeparator()
+        gsnd = QAction("Game sound 🔊", menu)
+        gsnd.setCheckable(True)
+        gsnd.setChecked(self.gcfg.get("game_sound", True))
+        gsnd.triggered.connect(mgr.toggle_game_sound)
+        mini.addAction(gsnd)
         soon = QAction("more coming soon…", menu)
         soon.setEnabled(False)
         mini.addAction(soon)
