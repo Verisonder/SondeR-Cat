@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.5.2"
-APP_BUILD = "0714m"
+APP_BUILD = "0714n"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2653,9 +2653,9 @@ class Manager(QObject):
         """7 clicks on the 'Installed: vX' menu item → secret Duck Hunt."""
         import time as _t
         now = _t.time()
-        # each click CLOSES the menu, so the user has to reopen it every
-        # time — allow a generous gap between clicks or 7 is impossible
-        if now - self._ver_click_t > 8.0:
+        # the menu now stays open (event filter), so clicks come fast — a
+        # short window keeps it a deliberate 7-tap, not an accidental one
+        if now - self._ver_click_t > 3.0:
             self._ver_clicks = 0        # streak went cold → reset
         self._ver_click_t = now
         self._ver_clicks += 1
@@ -3593,6 +3593,20 @@ class CatWindow(QWidget):
     def nameof(self):
         return self.gcfg.get("name", "")
 
+    def eventFilter(self, obj, ev):
+        # Intercept clicks on the "Installed: vX" line so the Updates submenu
+        # stays open — lets the version be tapped 7 times to unlock Duck Hunt.
+        try:
+            from PySide6.QtCore import QEvent
+            if ev.type() == QEvent.MouseButtonRelease:
+                act = getattr(self, "_ver_action", None)
+                if act is not None and obj.actionAt(ev.pos()) is act:
+                    self.mgr._on_version_click()
+                    return True            # swallow → menu does NOT close
+        except Exception:
+            pass
+        return super().eventFilter(obj, ev)
+
     # -------------------------------------------------------------- menu ----
     def build_menu(self):
         menu = QMenu(self)
@@ -3944,8 +3958,13 @@ class CatWindow(QWidget):
         chan = " · Store" if IS_STORE_BUILD else ""
         uinf = QAction(
             f"Installed: v{APP_VERSION} · build {APP_BUILD}{chan}", menu)
-        uinf.triggered.connect(mgr._on_version_click)   # 7 clicks = 🦆
         upds.addAction(uinf)
+        # keep the Updates submenu OPEN when the version line is clicked, so
+        # it can be tapped 7 times in a row to unlock Duck Hunt (a normal
+        # action closes the whole menu). The event filter both counts the
+        # clicks and swallows the event so the menu stays put.
+        self._ver_action = uinf
+        upds.installEventFilter(self)
 
         quit_act = QAction("Quit", menu)
         quit_act.triggered.connect(QApplication.instance().quit)
