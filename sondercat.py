@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.8.0"
-APP_BUILD = "0715f"
+APP_BUILD = "0715g"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -849,18 +849,18 @@ class SoundFX:
             env = 1 - i / (self.SR * 0.04)
             pew.append(int(random.uniform(-1, 1) * 0.18 * env * 32767))
         self._paths["shot"] = self._wav(pew, "sonder_shot.wav")
-        # --- purr: low rumble with a ~23 Hz tremolo, gentle fade ---
+        # --- purr: low rumble with a gentle ~20 Hz tremolo ---
         purr = []
-        dur = 1.6
+        dur = 2.2
         n = int(self.SR * dur)
         for i in range(n):
             t = i / self.SR
-            base = (math.sin(2 * math.pi * 52 * t) * 0.5
-                    + math.sin(2 * math.pi * 104 * t) * 0.25
-                    + random.uniform(-1, 1) * 0.15)        # breathy texture
-            trem = 0.55 + 0.45 * math.sin(2 * math.pi * 23 * t)
-            fade = min(1.0, i / 800.0, (n - i) / 2400.0)
-            purr.append(int(base * trem * fade * 0.5 * 32767))
+            base = (math.sin(2 * math.pi * 50 * t) * 0.5
+                    + math.sin(2 * math.pi * 100 * t) * 0.22
+                    + random.uniform(-1, 1) * 0.12)        # breathy texture
+            trem = 0.6 + 0.4 * math.sin(2 * math.pi * 20 * t)
+            fade = min(1.0, i / 1500.0, (n - i) / 4000.0)  # soft in/out
+            purr.append(int(base * trem * fade * 0.45 * 32767))
         self._paths["purr"] = self._wav(purr, "sonder_purr.wav")
         # --- bloop: duck hit — quick falling thunk ---
         bl = []
@@ -3748,6 +3748,7 @@ class CatWindow(QWidget):
         self.next_note = 0.0
         self.pet_accum = 0.0
         self.last_pet_heart = 0.0
+        self._last_purr = 0.0
         self.bubble_text = ""
         self.bubble_until = 0.0
         self.bubble_color = None
@@ -4999,8 +5000,11 @@ class CatWindow(QWidget):
                             "x": r.left() + random.randint(20, r.width() - 20),
                             "y": r.top() + 8, "vy": 1.1, "life": 1.6,
                             "seed": random.random() * 6})
-                        # purr ♥ (respects the Sounds toggle)
-                        if self.gcfg.get("sounds", True):
+                        # purr ♥ once at a time (its own cooldown ≈ the purr
+                        # length so it doesn't retrigger every tick and garble)
+                        if self.gcfg.get("sounds", True) \
+                                and now - self._last_purr > 2.3:
+                            self._last_purr = now
                             try:
                                 if self.mgr._sfx is None:
                                     self.mgr._sfx = SoundFX(
