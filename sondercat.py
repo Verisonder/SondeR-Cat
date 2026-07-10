@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.8.0"
-APP_BUILD = "0715l"
+APP_BUILD = "0715m"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2434,6 +2434,15 @@ class Manager(QObject):
             self.music_on = False
             self.music_mode = "off"
             return
+        # ignore the audio meter while WE are the ones making noise (purr,
+        # game sounds) — otherwise the cat thinks music is on and reacts
+        our_sound = (getattr(self.primary(), "_purring", False)
+                     or self._duck_game is not None)
+        if our_sound:
+            self.music_on = False
+            self.music_mode = "off"
+            self._music_hist.clear()
+            return
         self._music_hist.append(self._audio.peak())
         h = list(self._music_hist)
         if len(h) < 12:
@@ -3793,6 +3802,7 @@ class CatWindow(QWidget):
         self.next_corner_at = time.time() + random.uniform(60, 180)
         self._corner_until = 0.0         # sitting in the corner until this time
         self._corner_going = False       # currently walking to the corner
+        self._corner_naps = False        # will doze off after standing
         self._perch_miss = 0
         self._perch_hist = deque(maxlen=40)
         self._shake_quiet_until = 0.0
@@ -4404,7 +4414,7 @@ class CatWindow(QWidget):
     # ------------------------------------------------------------ main tick -
     def tick(self):
         now = time.time()
-        # stop the pet-purr ~10s after the last pet (or immediately if the
+        # stop the pet-purr ~5s after the last pet (or immediately if the
         # index-0 cat and sounds got turned off)
         if self._purring and (now > self._petting_until
                               or not self.gcfg.get("sounds", True)):
@@ -4469,11 +4479,14 @@ class CatWindow(QWidget):
                 self.manual_peek = True
 
         if dist_moved > 2 or inputs.typing(1.2):
-            self.sleep_at = now + self.gcfg["sleep_seconds"]
-            if self.state == SLEEP and not self.gcfg.get("force_sleep") \
-                    and not self.perch_asleep:
-                self.state = IDLE
-                self.say("mrrp?", 1.5)
+            # a corner nap is a DEEP sleep — only a touch (click/pet) wakes it,
+            # not the cursor drifting past. Otherwise normal wake-on-activity.
+            if not getattr(self, "_corner_naps", False):
+                self.sleep_at = now + self.gcfg["sleep_seconds"]
+                if self.state == SLEEP and not self.gcfg.get("force_sleep") \
+                        and not self.perch_asleep:
+                    self.state = IDLE
+                    self.say("mrrp?", 1.5)
         self.prev_cursor = cur
 
         # --- particles ---
@@ -4798,10 +4811,19 @@ class CatWindow(QWidget):
                 self.sleep_at = now + self.gcfg["sleep_seconds"]
                 if self.glide_target is None:
                     self._corner_going = False
+                    # stand a little while, THEN doze off in the corner
                     self._corner_until = now + random.uniform(15, 45)
+                    self._corner_naps = True
             elif now < self._corner_until:
-                # standing in the corner: just stay put, don't re-trigger
+                # standing in the corner: stay put, don't re-trigger
                 self.sleep_at = now + self.gcfg["sleep_seconds"]
+            elif getattr(self, "_corner_naps", False) \
+                    and self.state != SLEEP \
+                    and self.perch_hwnd is None:
+                # done standing → curl up and sleep right here in the corner
+                # (stays asleep until you touch/pet it to wake it)
+                self.state = SLEEP
+                self.groom_until = 0.0
             elif (self.gcfg.get("corner_stand", False)
                     and not guarding
                     and not mgr.guide_active
@@ -4948,6 +4970,15 @@ class CatWindow(QWidget):
 
     def mousePressEvent(self, ev):
         if ev.button() == Qt.LeftButton:
+            # a touch wakes a corner nap (it sleeps until you touch it)
+            if getattr(self, "_corner_naps", False):
+                self._corner_naps = False
+                self._corner_until = 0.0
+                self.next_corner_at = time.time() + random.uniform(120, 300)
+                if self.state == SLEEP:
+                    self.state = IDLE
+                    self.sleep_at = time.time() + self.gcfg["sleep_seconds"]
+                    self.say(random.choice(["mrrp?", "hm? 🐱", "*yawn*"]), 1.5)
             if self.peeking:
                 if self.gcfg.get("hide_mode", False):
                     return              # firm hide: only the menu wakes it
@@ -5034,8 +5065,8 @@ class CatWindow(QWidget):
                             "y": r.top() + 8, "vy": 1.1, "life": 1.6,
                             "seed": random.random() * 6})
                         # purr ♥ — start the real purr (looping) while you're
-                        # petting; the tick stops it ~10s after you stop.
-                        self._petting_until = now + 10.0
+                        # petting; the tick stops it ~5s after you stop.
+                        self._petting_until = now + 5.0
                         if self.gcfg.get("sounds", True) and not self._purring:
                             self._purring = True
                             try:
@@ -5256,6 +5287,7 @@ class CatWindow(QWidget):
         self.groom_until = 0.0
         self._corner_going = False
         self._corner_until = 0.0
+        self._corner_naps = False
         self._sync_float()
         scr = self.screen().availableGeometry()
         gy = scr.bottom() - self._feet_offset()
@@ -5315,6 +5347,7 @@ class CatWindow(QWidget):
         self.groom_until = 0.0
         self._corner_until = 0.0          # abandon any corner-standing
         self._corner_going = False
+        self._corner_naps = False
         self._glide_to(self._guard_post_point(), speed=600)
 
     def _perch_covered(self, l, t, r, b):
@@ -5893,7 +5926,9 @@ class CatWindow(QWidget):
         # audio = worn quietly on whatever the cat is doing
         wearing = (self.gcfg.get("dance_music", True)
                    and self.mgr.music_mode in ("listen", "dance")
-                   and not self.mgr.cfg["global"].get("guard_mode", False))
+                   and not self.mgr.cfg["global"].get("guard_mode", False)
+                   and not getattr(self, "_purring", False)
+                   and self.mgr._duck_game is None)
         if wearing:
             hp = QPainter(img)
             dkc = QColor("#2a2a33")
