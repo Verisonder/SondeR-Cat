@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.5.0"
-APP_BUILD = "0714g"
+APP_BUILD = "0714h"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2185,12 +2185,15 @@ class Manager(QObject):
         "very":      (40, 100),
     }
 
-    # guide-mode speed/accuracy profiles: (thinking budget, run zoom pass?).
-    # Fast = snappy & less precise; Accurate = slower & tighter.
+    # guide-mode speed/accuracy profiles:
+    # (thinking budget, run zoom pass?, web-search grounding?, shot width).
+    # Grounding is the slowest + most rate-limited part on free keys, so
+    # only Accurate pays for it; smaller screenshots cost fewer input
+    # tokens per request.
     GUIDE_QUALITY = {
-        "fast":     (0,   False),
-        "balanced": (128, True),
-        "accurate": (512, True),
+        "fast":     (0,   False, False, 1280),
+        "balanced": (128, True,  False, 1280),
+        "accurate": (512, True,  True,  1600),
     }
 
     def guide_profile(self):
@@ -2424,7 +2427,7 @@ class Manager(QObject):
             self._end_guide(walk_home=True, quiet=True)
             self.say_primary("guide mode off.", 3)
 
-    def _grab_screen_for_guide(self):
+    def _grab_screen_for_guide(self, maxw=1280):
         """Screenshot as base64 JPEG + the LOGICAL screen geometry, so
         Gemini's normalized coordinates can be mapped back to real window
         positions. Returns (b64, QRect) or (None, None)."""
@@ -2457,7 +2460,8 @@ class Manager(QObject):
                        or QGuiApplication.primaryScreen())
             geom = scr.geometry()
             pm = scr.grabWindow(0)
-            maxw = 1600                    # more detail → better coord accuracy
+            # width comes from the speed profile: bigger = sharper for the
+            # model but more input tokens per request
             if pm.width() > maxw:
                 pm = pm.scaledToWidth(maxw, Qt.SmoothTransformation)
             # keep the exact image we send, for the zoom-refine pass
@@ -2562,14 +2566,14 @@ class Manager(QObject):
         if self.ai_busy:
             p.say("one sec… 🤔", 2)
             return
-        shot, geom = self._grab_screen_for_guide()
+        think_budget, do_zoom, do_ground, shot_w = self.guide_profile()
+        shot, geom = self._grab_screen_for_guide(maxw=shot_w)
         if not shot:
             p.say("I couldn't grab the screen 😿", 4)
             return
         self.ai_busy = True
         self.guide_active = True
         self._guide_task = task
-        think_budget, do_zoom = self.guide_profile()   # speed/accuracy dial
         p.say("let me look… 👀" if first else "checking what's next… 👀", 8)
         step_no = len(self._guide_done) + 1
         done_txt = ("Steps ALREADY completed by the user: "
@@ -2629,7 +2633,8 @@ class Manager(QObject):
                     return raw
 
                 raw = clean(self._gemini_call(contents, persona,
-                                              ground_with_image=first,
+                                              ground_with_image=(first
+                                                                 and do_ground),
                                               max_tokens=1024,
                                               think=think_budget))
                 try:
@@ -2934,9 +2939,9 @@ class Manager(QObject):
                     self._gemini_model = None
             if not transient:
                 break                     # a real error (not transient): stop
-            # rate limits need a REAL pause, not a hammer; other transients
-            # just need a beat
-            _time.sleep((4.0 if saw_429 else 1.2) * (attempt + 1))
+            if saw_429 and attempt >= 1:
+                break                     # rate-limited: don't grind 3 passes
+            _time.sleep(3.0 if saw_429 else 1.2 * (attempt + 1))
         raise RuntimeError(last)
 
     _SCREEN_HINTS = re.compile(
@@ -3609,7 +3614,8 @@ class CatWindow(QWidget):
         cur_gq = self.gcfg.get("guide_quality", "balanced")
         for key, label in (("fast", "Fast — snappy, less precise"),
                            ("balanced", "Balanced"),
-                           ("accurate", "Accurate — slower, tighter")):
+                           ("accurate",
+                            "Accurate — slower, tighter, checks the web")):
             a = QAction(label, menu)
             a.setCheckable(True)
             a.setChecked(cur_gq == key)
