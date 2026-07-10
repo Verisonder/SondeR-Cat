@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713m"
+APP_BUILD = "0713n"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2376,13 +2376,13 @@ class Manager(QObject):
                    or QGuiApplication.primaryScreen())
             geom = scr.geometry()
             pm = scr.grabWindow(0)
-            maxw = 1280
+            maxw = 1600                    # more detail → better coord accuracy
             if pm.width() > maxw:
                 pm = pm.scaledToWidth(maxw, Qt.SmoothTransformation)
             ba = QByteArray()
             buf = QBuffer(ba)
             buf.open(QIODevice.WriteOnly)
-            pm.save(buf, "JPEG", 72)
+            pm.save(buf, "JPEG", 88)       # higher quality → sharper text/icons
             buf.close()
             import base64
             return base64.b64encode(bytes(ba)).decode(), geom
@@ -2437,13 +2437,16 @@ class Manager(QObject):
             "Figure out the ACTUAL correct way to do it using what you know "
             "and Google Search when useful — do NOT guess from the "
             "screenshot alone. Then find the SINGLE next UI element the "
-            "user must interact with, and locate it in the screenshot. "
-            "Respond with ONLY minified JSON, no markdown, no code fences, "
-            "exactly this shape: "
-            '{"found":true,"x":500,"y":500,"label":"element name",'
+            "user must interact with, and locate it PRECISELY in the "
+            "screenshot. Respond with ONLY minified JSON, no markdown, no "
+            "code fences, exactly this shape: "
+            '{"found":true,"box":[100,200,140,320],"label":"element name",'
             '"say":"short friendly instruction","last":false,"done":false}'
-            " . x and y are the CENTER of that element, normalized to "
-            "0-1000 of the image width and height. Keep 'say' under 22 "
+            " . box is the TIGHT bounding box of just that ONE element (not "
+            "its whole row, toolbar or panel), as [ymin,xmin,ymax,xmax] each "
+            "normalized 0-1000 of the image height (y) and width (x). Hug "
+            "the element's real edges — a small button gives a small box. "
+            "Keep 'say' under 22 "
             "words and make it match how the app actually works. Set "
             "\"last\":true when THIS element is the FINAL step that "
             "completes the whole task (a simple one-click task is last:true "
@@ -2493,8 +2496,16 @@ class Manager(QObject):
                         self.primary().say(
                             say or "hmm, I can't spot it from here… 🤔", 8)
                         return
-                    nx = max(0, min(1000, int(d.get("x", 500))))
-                    ny = max(0, min(1000, int(d.get("y", 500))))
+                    box = d.get("box")
+                    if (isinstance(box, (list, tuple)) and len(box) == 4):
+                        ymin, xmin, ymax, xmax = box
+                        nx = (float(xmin) + float(xmax)) / 2.0
+                        ny = (float(ymin) + float(ymax)) / 2.0
+                    else:                          # fallback: a center point
+                        nx = float(d.get("x", 500))
+                        ny = float(d.get("y", 500))
+                    nx = max(0, min(1000, int(round(nx))))
+                    ny = max(0, min(1000, int(round(ny))))
                     label = str(d.get("label") or "here").strip()
                     tx = geom.left() + nx * geom.width() // 1000
                     ty = geom.top() + ny * geom.height() // 1000
