@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.9.2"
-APP_BUILD = "0715v"
+APP_BUILD = "0715w"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1401,6 +1401,160 @@ class DuckHuntGame(QWidget):
                 QColor(220, 220, 225, 220), QColor(0, 0, 0, 140))
 
 
+class RockPaperScissorsGame(QWidget):
+    """A little rock-paper-scissors match against the cat. Centered pixel-art
+    panel: click your move, the cat reveals its own, first-to-nothing endless
+    score. Esc quits."""
+
+    MOVES = ["rock", "paper", "scissors"]
+    BEATS = {"rock": "scissors", "paper": "rock", "scissors": "paper"}
+
+    def __init__(self, mgr):
+        super().__init__(None, Qt.FramelessWindowHint
+                         | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.mgr = mgr
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFocusPolicy(Qt.StrongFocus)
+        scr = QGuiApplication.primaryScreen().geometry()
+        self.setGeometry(scr)
+        self.sw, self.sh = scr.width(), scr.height()
+        self.you = 0
+        self.cat = 0
+        self.your_move = None
+        self.cat_move = None
+        self.result = None          # "win" / "lose" / "tie"
+        self.reveal_at = 0.0        # cat "thinking" until this time
+        self.buttons = []           # (rect, move) hit targets
+        self._tick = QTimer(self)
+        self._tick.timeout.connect(self._step)
+        self._tick.start(33)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.setFocus()
+
+    def _step(self):
+        import time as _t
+        # reveal the cat's move after a short "thinking" beat
+        if self.reveal_at and _t.time() >= self.reveal_at:
+            self.reveal_at = 0.0
+            import random
+            self.cat_move = random.choice(self.MOVES)
+            if self.your_move == self.cat_move:
+                self.result = "tie"
+            elif self.BEATS[self.your_move] == self.cat_move:
+                self.result = "win"
+                self.you += 1
+            else:
+                self.result = "lose"
+                self.cat += 1
+        self.update()
+
+    def mousePressEvent(self, ev):
+        import time as _t
+        if self.reveal_at:          # still thinking, ignore clicks
+            return
+        pt = ev.position().toPoint()
+        for rect, move in self.buttons:
+            if rect.contains(pt):
+                self.your_move = move
+                self.cat_move = None
+                self.result = None
+                self.reveal_at = _t.time() + 0.7     # cat "thinks"
+                return
+
+    def keyPressEvent(self, ev):
+        if ev.key() == Qt.Key_Escape:
+            self.stop()
+
+    def stop(self):
+        self._tick.stop()
+        self.hide()
+        self.mgr._end_rps()
+
+    def paintEvent(self, _ev):
+        from PySide6.QtGui import QPainter, QColor, QPen, QFont
+        from PySide6.QtCore import QRectF, QRect
+        import time as _t
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, False)
+        p.fillRect(self.rect(), QColor(10, 12, 20, 60))
+        # ---- panel ----
+        pw_, ph_ = 460, 340
+        px0 = (self.sw - pw_) // 2
+        py0 = (self.sh - ph_) // 2
+        p.setBrush(QColor(6, 8, 12, 240))
+        p.setPen(QPen(QColor(210, 210, 215), 3))
+        p.drawRoundedRect(QRectF(px0, py0, pw_, ph_), 14, 14)
+        shadow = QColor(0, 0, 0, 170)
+        # title
+        title = "ROCK PAPER SCISSORS"
+        tw = sprites.pixel_text_width(title, 3)
+        sprites.draw_pixel_text(p, title, px0 + (pw_ - tw) // 2, py0 + 22, 3,
+                                QColor("#6bb8c7"), shadow)
+        # score line  YOU n  CAT n
+        score = f"YOU {self.you}   CAT {self.cat}"
+        scw = sprites.pixel_text_width(score, 3)
+        sprites.draw_pixel_text(p, score, px0 + (pw_ - scw) // 2, py0 + 52, 3,
+                                QColor("#d9a94a"), shadow)
+        # ---- the three choice buttons ----
+        self.buttons = []
+        icon_px = 5                     # 12*5 = 60px icons
+        isz = 12 * icon_px
+        gap = 30
+        total = 3 * isz + 2 * gap
+        bx = px0 + (pw_ - total) // 2
+        by = py0 + 96
+        mouse = self.mapFromGlobal(QCursor.pos())
+        for move in self.MOVES:
+            rect = QRect(bx, by, isz, isz)
+            self.buttons.append((rect, move))
+            hover = rect.contains(mouse) and not self.reveal_at
+            # button frame
+            p.setBrush(QColor(24, 28, 38, 235) if not hover
+                       else QColor(40, 48, 64, 240))
+            p.setPen(QPen(QColor(120, 130, 150) if not hover
+                          else QColor("#6bb8c7"), 2))
+            p.drawRoundedRect(QRectF(bx - 8, by - 8, isz + 16, isz + 24), 8, 8)
+            sprites.draw_rps_icon(p, move, bx, by, icon_px)
+            # label under each
+            lbl = move.upper()
+            lw = sprites.pixel_text_width(lbl, 2)
+            sprites.draw_pixel_text(p, lbl, bx + (isz - lw) // 2, by + isz + 4,
+                                    2, QColor("#c0c4cc"))
+            bx += isz + gap
+        # ---- result area ----
+        ry = by + isz + 40
+        if self.reveal_at:
+            msg = "CAT IS THINKING"
+            col = QColor("#9aa0ac")
+        elif self.result:
+            you_i = self.your_move.upper()
+            cat_i = (self.cat_move or "").upper()
+            sub = f"YOU {you_i}  VS  CAT {cat_i}"
+            sw2 = sprites.pixel_text_width(sub, 2)
+            sprites.draw_pixel_text(p, sub, px0 + (pw_ - sw2) // 2, ry - 22, 2,
+                                    QColor("#c0c4cc"), shadow)
+            if self.result == "win":
+                msg, col = "YOU WIN!", QColor("#7ad17a")
+            elif self.result == "lose":
+                msg, col = "CAT WINS", QColor("#e06b6b")
+            else:
+                msg, col = "TIE!", QColor("#d9d97a")
+        else:
+            msg = "PICK ONE"
+            col = QColor("#c0c4cc")
+        mw = sprites.pixel_text_width(msg, 4)
+        sprites.draw_pixel_text(p, msg, px0 + (pw_ - mw) // 2, ry, 4,
+                                col, shadow)
+        # footer hint
+        fh = QFont("Segoe UI", 11)
+        p.setFont(fh)
+        p.setPen(QColor(180, 185, 195))
+        p.drawText(QRect(px0, py0 + ph_ - 26, pw_, 20),
+                   Qt.AlignHCenter, "click your move  ·  Esc to quit")
+
+
 class GuardBeam(QWidget):
     """Full-screen click-through overlay: a red search beam that sweeps
     around while guard mode is on. Purely visual; never blocks input."""
@@ -1833,6 +1987,7 @@ class Manager(QObject):
         self._music_timer.start(120)
         self._guard_beam = None
         self._duck_game = None          # easter-egg minigame window
+        self._rps_game = None           # rock-paper-scissors window
         self._sfx = None                # lazily-built sound engine
         self._guard_timer = QTimer()
         self._guard_timer.timeout.connect(self._tick_guard)
@@ -2981,6 +3136,20 @@ class Manager(QObject):
         """Launch a minigame from the Minigames menu."""
         if which == "duckhunt":
             self._start_duck_hunt()
+        elif which == "rps":
+            self._start_rps()
+
+    def _start_rps(self):
+        if getattr(self, "_rps_game", None) is not None:
+            return
+        c = self.primary()
+        self._end_guide(walk_home=False, quiet=True)
+        c.say(random.choice(["rock, paper, scissors? 🐾", "let's play! ✊✋✌️",
+                             "I never lose 😼"]), 4)
+        self._rps_game = RockPaperScissorsGame(self)
+
+    def _end_rps(self):
+        self._rps_game = None
 
     def _start_duck_hunt(self):
         if self._duck_game is not None:
@@ -4049,6 +4218,9 @@ class CatWindow(QWidget):
         dh = QAction("Duck Hunt 🦆", menu)
         dh.triggered.connect(lambda: mgr.start_minigame("duckhunt"))
         mini.addAction(dh)
+        rps = QAction("Rock Paper Scissors ✊", menu)
+        rps.triggered.connect(lambda: mgr.start_minigame("rps"))
+        mini.addAction(rps)
         mini.addSeparator()
         soon = QAction("more coming soon…", menu)
         soon.setEnabled(False)
