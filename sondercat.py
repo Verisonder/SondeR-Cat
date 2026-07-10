@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.7.0"
-APP_BUILD = "0714x"
+APP_BUILD = "0714y"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -948,6 +948,12 @@ class DuckHuntGame(QWidget):
         self.shots = 0
         self.hits = 0
         self.high = int(mgr.cfg["global"].get("duck_high_score", 0))
+        # HUD panel bounds (fixed size, centered at top) — ducks steer clear
+        # of this rectangle so they never fly behind the score and become
+        # un-clickable. A bit of margin included.
+        _pw, _ph = 320, 118
+        _px0 = (self.sw - _pw) // 2
+        self.panel_rect = (_px0 - 30, 22, _px0 + _pw + 30, 22 + _ph + 46)
         self.spawn_at = 0.0
         self.frame = 0
         self.running = True
@@ -983,7 +989,9 @@ class DuckHuntGame(QWidget):
         diff = min(2.2, 1.0 + played * 0.006)
         spd *= diff
         from_left = random.random() < 0.5
-        y = random.randint(int(self.sh * 0.08), int(self.sh * 0.62))
+        # keep ducks BELOW the score panel so they're always clickable
+        top_limit = max(int(self.sh * 0.08), self.panel_rect[3] + 10)
+        y = random.randint(top_limit, int(self.sh * 0.62))
         vx = spd * (1 if from_left else -1) * random.uniform(0.85, 1.25)
         vy = random.uniform(-1.4, -0.4)
         x = -40 if from_left else self.sw + 40
@@ -1022,8 +1030,15 @@ class DuckHuntGame(QWidget):
                 d["y"] += d["vy"]
                 d["vy"] += 0.02         # gentle bob/gravity
                 d["vy"] = min(d["vy"], 1.2)   # never nose-dive
-                if d["y"] < self.sh * 0.05:
-                    d["vy"] = abs(d["vy"])
+                # if a duck is horizontally under the score panel, keep it
+                # BELOW the panel so it can't hide behind it
+                px1, _, px2, py2 = self.panel_rect
+                dw = sprites.DUCK_W * 4
+                over_panel = (d["x"] + dw > px1 and d["x"] < px2)
+                ceil = (py2 + 6) if over_panel else self.sh * 0.05
+                if d["y"] < ceil:
+                    d["y"] = ceil
+                    d["vy"] = abs(d["vy"])   # bounce back down
                 elif d["y"] > self.sh * 0.70:
                     d["vy"] = -abs(d["vy"])   # bounce back up into the sky
         # cull off-screen
