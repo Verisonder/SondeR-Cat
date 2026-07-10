@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.4.1"
-APP_BUILD = "0713y"
+APP_BUILD = "0713z"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2348,8 +2348,18 @@ class Manager(QObject):
                 "I can peek at your screen when you ask about it now 👀", 4)
         else:
             g["screen_vision"] = False
-            save_config(self.cfg)
-            self.say_primary("screen peeking off", 4)
+            # guide mode can't work without screen vision — turning vision
+            # off while guide is on would leave it in a broken state, so
+            # switch guide off (and end any active tour) too.
+            if g.get("guide_mode", False):
+                g["guide_mode"] = False
+                self._end_guide(walk_home=True, quiet=True)
+                save_config(self.cfg)
+                self.say_primary(
+                    "screen peeking off — guide mode turned off too 👀", 5)
+            else:
+                save_config(self.cfg)
+                self.say_primary("screen peeking off", 4)
 
     # ------------------------------------------------ guide mode 🧭 --------
     def toggle_guide_mode(self):
