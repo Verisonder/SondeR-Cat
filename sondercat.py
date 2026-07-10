@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.1"
-APP_BUILD = "0716q"
+APP_BUILD = "0716r"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -6798,25 +6798,79 @@ class CatWindow(QWidget):
             tw_ = int(r.width() * 0.96)
             tx = r.center().x() - tw_ // 2
             ty = r.top() + jy + (r.height() - th_)
-        # ⚡ SUPER CAT aura (duck hunt 15-streak): flickering blue glow layers
-        # behind the sprite, Saiyan-style
+        # ⚡ SUPER CAT aura (duck-hunt 15-streak): a Super-Saiyan-Blue-style
+        # "gas fire" — upward-licking electric-blue flame tongues with a
+        # white-hot core, a faint gold outer rim, white embers rising inside,
+        # and the odd electric crackle. Rooted at the lower body and rising
+        # into the window's top margin; every point is clamped inside the
+        # window so the aura never gets cut off by the frame.
         if self.duck_gunner and getattr(self, "duck_super", False):
-            flick = 0.75 + 0.25 * math.sin(time.time() * 11.0)
-            cxa, cya = tx + tw_ // 2, ty + th_ // 2
+            nowt = time.time()
+            W, Hh = self.width(), self.height()
+            cxa = tx + tw_ // 2
+            baseline = ty + int(th_ * 0.70)           # flames root here
+            tip_top = max(2, ty - int(th_ * 0.28))    # ...and reach up to here
+            flame_h = max(8, baseline - tip_top)
+            midy = (baseline + tip_top) // 2
+            clampx = lambda x: max(2, min(W - 2, x))
             p.save()
             p.setPen(Qt.NoPen)
-            for grow, alpha in ((26, 38), (16, 64), (8, 96)):
-                gpx = int(grow * flick)
-                p.setBrush(QColor(70, 170, 255, int(alpha * flick)))
-                p.drawEllipse(QPoint(cxa, cya),
-                              tw_ // 2 + gpx, th_ // 2 + gpx)
-            # rising sparks
-            for i in range(6):
-                ph = (time.time() * 1.7 + i * 0.61) % 1.0
-                sx = cxa + int(math.sin(i * 2.4 + time.time() * 3) * tw_ * 0.45)
-                sy = int(ty + th_ - ph * (th_ + 30))
-                a = int(160 * (1.0 - ph))
-                p.fillRect(sx, sy, 3, 3, QColor(150, 220, 255, a))
+            # 1) breath: faint gold outer rim + blue haze hugging the body,
+            #    radii capped so the glow always fits fully inside the window
+            for grow, col in ((0.56, QColor(255, 208, 110, 16)),
+                              (0.40, QColor(60, 150, 255, 32)),
+                              (0.22, QColor(95, 185, 255, 50))):
+                rx = min(int(tw_ * (0.5 + grow)), (W - 4) // 2)
+                ry = max(6, min(flame_h // 2 + int(th_ * 0.06),
+                                midy - 2, Hh - 2 - midy))
+                p.setBrush(col)
+                p.drawEllipse(QPoint(cxa, midy), rx, ry)
+            # 2) upward flame tongues (white-hot base → electric-blue tips)
+            tongues = 7
+            for i in range(tongues):
+                f = i / (tongues - 1)
+                bx = tx + int(tw_ * (0.12 + 0.76 * f))
+                wob = math.sin(nowt * 7.0 + i * 1.7)
+                h = flame_h * (0.55 + 0.45 *
+                               (0.5 + 0.5 * math.sin(nowt * 5.0 + i)))
+                h = max(6, h)
+                steps = 7
+                for sidx in range(steps):
+                    t = sidx / (steps - 1)                 # base 0 → tip 1
+                    y = int(baseline - t * h)
+                    sway = (wob * 0.5 +
+                            math.sin(nowt * 9 + i + t * 3) * 0.5) \
+                        * tw_ * 0.10 * t                   # tips wander most
+                    x = clampx(int(bx + sway))
+                    rad = max(1, int(tw_ * 0.11 * (1.0 - t) ** 0.7))
+                    if t < 0.30:
+                        col = QColor(205, 235, 255, 150)   # white-hot core
+                    elif t < 0.65:
+                        col = QColor(80, 180, 255, int(130 * (1 - t)))
+                    else:
+                        col = QColor(40, 130, 245, int(110 * (1 - t)))
+                    p.setBrush(col)
+                    p.drawEllipse(QPoint(x, y), rad, int(rad * 1.6))
+            # 3) white embers sparkling upward within the flames
+            for i in range(8):
+                ph = (nowt * 1.5 + i * 0.37) % 1.0
+                ex = clampx(cxa + int(math.sin(i * 2.1 + nowt * 3)
+                                      * tw_ * 0.40))
+                ey = max(2, int(baseline - ph * (flame_h + int(th_ * 0.10))))
+                a = int(210 * (1.0 - ph))
+                sz = 3 if i % 3 == 0 else 2
+                p.fillRect(ex, ey, sz, sz, QColor(225, 240, 255, a))
+            # 4) occasional electric crackle (short jagged bolt in the flame)
+            if int(nowt * 8) % 6 == 0:
+                p.setPen(QPen(QColor(190, 230, 255, 210), 2))
+                zx = clampx(cxa + int(math.sin(nowt * 13) * tw_ * 0.28))
+                zy = tip_top + int(flame_h * 0.15)
+                for k in range(3):
+                    nx = clampx(zx + (9 if k % 2 else -9))
+                    ny = min(Hh - 2, zy + int(flame_h * 0.20))
+                    p.drawLine(zx, zy, nx, ny)
+                    zx, zy = nx, ny
+                p.setPen(Qt.NoPen)
             p.restore()
         p.drawImage(QRect(tx, ty, tw_, th_), img)
         p.restore()
