@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0715z"
+APP_BUILD = "0716a"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -196,6 +196,8 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "guide_mode": False, "guide_consent": False,
                    "guide_quality": "fast",
                    "duck_high_score": 0, "sound_volume": 1.0,
+                   "feeding": False, "food_level": 1.0, "water_level": 1.0,
+                   "feed_last": 0, "bowl_pos": None,
                    "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
 
@@ -1577,6 +1579,126 @@ class RockPaperScissorsGame(QWidget):
                    Qt.AlignHCenter, "click your move  ·  Esc to quit")
 
 
+class FeedingBowls(QWidget):
+    """Two little pixel bowls (food + water) that live on the desktop.
+    Drag to place them anywhere; click a bowl to refill it. Levels drain
+    over ~24h of real time. When one is empty the cat comes to sit next
+    to them and asks nicely. Hidden during fullscreen apps."""
+
+    PX = 4                      # pixel cell size
+    BW, BH = 16, 7              # one bowl grid
+    GAP = 6                     # cells between bowls
+
+    def __init__(self, mgr):
+        super().__init__(None, Qt.FramelessWindowHint
+                         | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.mgr = mgr
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        w = (self.BW * 2 + self.GAP) * self.PX
+        h = (self.BH + 2) * self.PX
+        self.setFixedSize(w, h)
+        pos = mgr.cfg["global"].get("bowl_pos")
+        scr = QGuiApplication.primaryScreen().availableGeometry()
+        if pos and isinstance(pos, (list, tuple)) and len(pos) == 2:
+            x = max(scr.left(), min(int(pos[0]), scr.right() - w))
+            y = max(scr.top(), min(int(pos[1]), scr.bottom() - h))
+        else:
+            x = scr.right() - w - 60
+            y = scr.bottom() - h - 8
+        self.move(x, y)
+        self._drag_off = None
+        self._press_pos = None
+        self.show()
+
+    # rects of the two bowls in widget coords
+    def _bowl_rects(self):
+        w1 = self.BW * self.PX
+        food = QRect(0, 2 * self.PX, w1, self.BH * self.PX)
+        water = QRect(w1 + self.GAP * self.PX, 2 * self.PX,
+                      w1, self.BH * self.PX)
+        return food, water
+
+    def mousePressEvent(self, ev):
+        if ev.button() == Qt.LeftButton:
+            self._press_pos = ev.globalPosition().toPoint()
+            self._drag_off = self._press_pos - self.pos()
+
+    def mouseMoveEvent(self, ev):
+        if self._drag_off is not None:
+            self.move(ev.globalPosition().toPoint() - self._drag_off)
+
+    def mouseReleaseEvent(self, ev):
+        if self._press_pos is None:
+            return
+        moved = (ev.globalPosition().toPoint() - self._press_pos
+                 ).manhattanLength()
+        if moved < 6:
+            # a click (not a drag) → refill whichever bowl was clicked
+            food, water = self._bowl_rects()
+            pt = ev.position().toPoint()
+            g = self.mgr.cfg["global"]
+            if food.contains(pt):
+                g["food_level"] = 1.0
+                self.mgr._bowl_refilled("food")
+            elif water.contains(pt):
+                g["water_level"] = 1.0
+                self.mgr._bowl_refilled("water")
+            save_config(self.mgr.cfg)
+        else:
+            # finished a drag → remember the spot
+            self.mgr.cfg["global"]["bowl_pos"] = [self.x(), self.y()]
+            save_config(self.mgr.cfg)
+        self._press_pos = None
+        self._drag_off = None
+        self.update()
+
+    def paintEvent(self, _ev):
+        from PySide6.QtGui import QPainter, QColor
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, False)
+        g = self.mgr.cfg["global"]
+        food_lv = float(g.get("food_level", 1.0))
+        water_lv = float(g.get("water_level", 1.0))
+        px = self.PX
+        rim = QColor("#8a8f9c")          # bowl rim (grey)
+        rim_d = QColor("#5c6170")        # rim shadow
+        kib = QColor("#a9743c")          # kibble
+        kib_d = QColor("#7d5228")
+        wat = QColor("#4f9fd8")          # water
+        wat_l = QColor("#8cc6ea")        # water shine
+        food_r, water_r = self._bowl_rects()
+
+        def bowl(rect, level, is_water):
+            x0, y0 = rect.x() // px, rect.y() // px
+            bw, bh = self.BW, self.BH
+            for cy in range(bh):
+                for cx in range(bw):
+                    edge = (cy >= bh - 2) or (cx < 1 + (bh - cy) // 3) \
+                           or (cx >= bw - 1 - (bh - cy) // 3)
+                    inner = not edge and cy >= 2
+                    X, Y = (x0 + cx) * px, (y0 + cy) * px
+                    if cy == bh - 1 and 1 <= cx <= bw - 2:
+                        p.fillRect(X, Y, px, px, rim_d)      # base
+                    elif edge and cy >= 1:
+                        p.fillRect(X, Y, px, px, rim)
+                    elif inner and level > 0:
+                        depth = (bh - 2) - cy
+                        filled = level * (bh - 3)
+                        if depth <= filled:
+                            if is_water:
+                                c = wat_l if (cx + cy) % 5 == 0 else wat
+                            else:
+                                c = kib_d if (cx * 7 + cy * 3) % 4 == 0 else kib
+                            p.fillRect(X, Y, px, px, c)
+            if level <= 0:
+                for cx in range(2, bw - 2, 2):
+                    p.fillRect((x0 + cx) * px, (y0 + 2) * px, px, px // 2,
+                               QColor(255, 255, 255, 60))
+
+        bowl(food_r, food_lv, False)
+        bowl(water_r, water_lv, True)
+
+
 class GuardBeam(QWidget):
     """Full-screen click-through overlay: a red search beam that sweeps
     around while guard mode is on. Purely visual; never blocks input."""
@@ -2010,6 +2132,7 @@ class Manager(QObject):
         self._guard_beam = None
         self._duck_game = None          # easter-egg minigame window
         self._rps_game = None           # rock-paper-scissors window
+        self._bowl = None               # feeding bowls window
         self._sfx = None                # lazily-built sound engine
         self._guard_timer = QTimer()
         self._guard_timer.timeout.connect(self._tick_guard)
@@ -2095,6 +2218,28 @@ class Manager(QObject):
 
         # scroll accumulation decay
         self.inputs.scroll_accum = max(0.0, self.inputs.scroll_accum - 3.0)
+
+        # ---- feeding bowls: drain over ~24h, hide during fullscreen ----
+        g = self.cfg["global"]
+        if g.get("feeding", False):
+            if self._bowl is None:
+                self._bowl = FeedingBowls(self)
+            last = float(g.get("feed_last", 0)) or now
+            dt_h = max(0.0, (now - last) / 3600.0)
+            if dt_h > 0.002:                    # update every ~7s of realtime
+                drain = dt_h / 24.0             # full → empty in ~24h
+                g["food_level"] = max(0.0, float(g.get("food_level", 1.0))
+                                      - drain)
+                g["water_level"] = max(0.0, float(g.get("water_level", 1.0))
+                                       - drain * 1.15)   # water goes a bit faster
+                g["feed_last"] = now
+                save_config(self.cfg)
+                self._bowl.update()
+            self._bowl.setVisible(not self.fullscreen_active)
+        elif self._bowl is not None:
+            self._bowl.hide()
+            self._bowl.deleteLater()
+            self._bowl = None
 
         # pomodoro
         if self.pomo_end is not None:
@@ -2945,6 +3090,41 @@ class Manager(QObject):
         save_config(self.cfg)
         if self._sfx is not None:
             self._sfx.set_volume(v)
+
+    def toggle_feeding(self):
+        g = self.cfg["global"]
+        g["feeding"] = not g.get("feeding", False)
+        if g["feeding"]:
+            # fresh bowls when the feature is switched on
+            g["food_level"] = 1.0
+            g["water_level"] = 1.0
+            g["feed_last"] = time.time()
+            self.primary().say("bowls! 😻 click them to refill", 4)
+        save_config(self.cfg)
+        # the manager tick creates/destroys the window
+
+    def _bowl_refilled(self, which):
+        """The user clicked a bowl to refill it — the cat reacts."""
+        c = self.primary()
+        c._next_beg = time.time() + random.uniform(60, 120)
+        if self._bowl is None:
+            return
+        # if the cat is close to the bowls, it eats/drinks happily
+        try:
+            near = (c.frameGeometry().center() -
+                    self._bowl.frameGeometry().center()).manhattanLength() < 420
+        except Exception:
+            near = False
+        if near:
+            c.say(random.choice(["nom nom nom 😋", "*crunch crunch*",
+                                 "*lap lap lap* 💧", "finally!! 😻",
+                                 "mmm… 🐟"]) if which == "food" else
+                  random.choice(["*lap lap lap* 💧", "fresh! 😻",
+                                 "*happy slurping*"]), 3)
+        else:
+            c.say(random.choice(["ooh, refill! 🥣", "I'll be right there 🐾",
+                                 "😻"]), 2.5)
+        self._bowl.update()
 
     def toggle_auto_peek(self):
         self.cfg["global"]["auto_peek"] = not self.cfg["global"]["auto_peek"]
@@ -4286,21 +4466,23 @@ class CatWindow(QWidget):
         snd.setChecked(self.gcfg.get("sounds", True))
         snd.triggered.connect(mgr.toggle_sounds)
         beh.addAction(snd)
-        # volume slider (0–100%) as an embedded widget in the menu
+        # volume slider (0–100%) as an embedded widget in the menu — the bar
+        # starts right at the 🔈 icon, no big gap
         from PySide6.QtWidgets import QWidgetAction, QSlider, QWidget, QHBoxLayout, QLabel
         vol_wrap = QWidget()
         vlay = QHBoxLayout(vol_wrap)
-        vlay.setContentsMargins(22, 2, 12, 4)
-        vlay.setSpacing(8)
+        vlay.setContentsMargins(10, 2, 12, 4)
+        vlay.setSpacing(4)
         vlab = QLabel("🔈")
         vsl = QSlider(Qt.Horizontal)
         vsl.setMinimum(0)
         vsl.setMaximum(100)
         vsl.setValue(int(self.gcfg.get("sound_volume", 1.0) * 100))
-        vsl.setFixedWidth(120)
+        vsl.setFixedWidth(150)
         vsl.valueChanged.connect(lambda v: mgr.set_sound_volume(v / 100.0))
         vlay.addWidget(vlab)
         vlay.addWidget(vsl)
+        vlay.addStretch(1)
         vol_act = QWidgetAction(menu)
         vol_act.setDefaultWidget(vol_wrap)
         beh.addAction(vol_act)
@@ -4350,6 +4532,11 @@ class CatWindow(QWidget):
             na.triggered.connect(
                 lambda _=False, ch=chance: mgr.set_perch_nap(ch))
             napm.addAction(na)
+        feed = QAction("Feeding bowls 🍽️", menu)
+        feed.setCheckable(True)
+        feed.setChecked(self.gcfg.get("feeding", False))
+        feed.triggered.connect(mgr.toggle_feeding)
+        beh.addAction(feed)
         cfm = beh.addMenu("Stand in a corner 🧍")
         cur_cf = self.gcfg.get("corner_freq", "sometimes")
         corner_on = self.gcfg.get("corner_stand", False)
@@ -5018,6 +5205,37 @@ class CatWindow(QWidget):
                 lo, hi = mgr.perch_interval()
                 self.next_perch_try = now + random.uniform(lo, hi)
                 self.try_perch()
+
+            # ---- feeding: an empty bowl pulls the cat over to beg 🥣 ----
+            gg = mgr.cfg["global"]
+            if (gg.get("feeding", False) and mgr._bowl is not None
+                    and (gg.get("food_level", 1.0) <= 0
+                         or gg.get("water_level", 1.0) <= 0)
+                    and now > getattr(self, "_next_beg", 0)
+                    and not guarding and not mgr.guide_active
+                    and self.perch_hwnd is None and self.glide_target is None
+                    and not self.peeking and not self.dragging
+                    and not mgr.fullscreen_active):
+                self._next_beg = now + random.uniform(150, 300)   # every few min
+                b = mgr._bowl.frameGeometry()
+                # sit just left of the bowls, bottoms aligned
+                tx = b.left() - self.width() + int(0.2 * self.width())
+                ty = b.bottom() - self.height() + TOP_MARGIN
+                scr2 = QGuiApplication.primaryScreen().availableGeometry()
+                tx = max(scr2.left(), min(tx, scr2.right() - self.width()))
+                ty = max(scr2.top(), min(ty, scr2.bottom() - self.height()))
+                self._glide_to(QPoint(tx, ty), speed=300)
+                hungry = gg.get("food_level", 1.0) <= 0
+                thirsty = gg.get("water_level", 1.0) <= 0
+                if hungry and thirsty:
+                    msg = ["bowls are empty… 🥺", "meow?? 🍽💧", "*stares at bowls*"]
+                elif hungry:
+                    msg = ["food please? 🥺🍖", "*taps the empty bowl*",
+                           "meow… I'm hungry 🍽"]
+                else:
+                    msg = ["water please? 💧🥺", "*nudges the water bowl*",
+                           "thirsty… 💧"]
+                self.say(random.choice(msg), 4)
 
             # go stand in a corner now and then (opt-in, Behavior menu)
             if self._corner_going:
