@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.8.0"
-APP_BUILD = "0715n"
+APP_BUILD = "0715o"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -3765,6 +3765,8 @@ class CatWindow(QWidget):
         self.next_note = 0.0
         self.pet_accum = 0.0
         self.last_pet_heart = 0.0
+        self._pet_started = 0.0          # when the current petting began
+        self._pet_last_move = 0.0        # last head-wiggle (session gap check)
         self._petting_until = 0.0       # purr keeps going until this time
         self._purring = False           # is the pet-purr currently playing
         self._last_sleep_purr = 0.0
@@ -5048,6 +5050,11 @@ class CatWindow(QWidget):
                 self.pet_accum += 1
                 now = time.time()
                 guarding = self.mgr.cfg["global"].get("guard_mode", False)
+                # track a continuous petting session: if it's been a moment
+                # since the last head-wiggle, this is a fresh session
+                if now - getattr(self, "_pet_last_move", 0) > 0.6:
+                    self._pet_started = now
+                self._pet_last_move = now
                 if self.pet_accum > 14 and now - self.last_pet_heart > 0.45:
                     self.last_pet_heart = now
                     self.pet_accum = 0
@@ -5064,10 +5071,13 @@ class CatWindow(QWidget):
                             "x": r.left() + random.randint(20, r.width() - 20),
                             "y": r.top() + 8, "vy": 1.1, "life": 1.6,
                             "seed": random.random() * 6})
-                        # purr ♥ — start the real purr (looping) while you're
-                        # petting; the tick stops it ~5s after you stop.
-                        self._petting_until = now + 5.0
-                        if self.gcfg.get("sounds", True) and not self._purring:
+                        # purr ♥ — only after ~3s of continuous petting, then
+                        # loop; the tick stops it ~5s after you stop.
+                        petted_for = now - getattr(self, "_pet_started", now)
+                        if petted_for > 3.0:
+                            self._petting_until = now + 5.0
+                        if self.gcfg.get("sounds", True) \
+                                and not self._purring and petted_for > 3.0:
                             self._purring = True
                             try:
                                 if self.mgr._sfx is None:
