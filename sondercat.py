@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.8.0"
-APP_BUILD = "0715h"
+APP_BUILD = "0715i"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -849,23 +849,34 @@ class SoundFX:
             env = 1 - i / (self.SR * 0.04)
             pew.append(int(random.uniform(-1, 1) * 0.18 * env * 32767))
         self._paths["shot"] = self._wav(pew, "sonder_shot.wav")
-        # --- purr: a CONTINUOUS low rumble. The trick is the tremolo must
-        # stay shallow — if it dips near silence it reads as a stuttering
-        # machine-gun, so it only gently varies between ~0.8 and 1.0. ---
+        # --- purr: a CONTINUOUS low rumble. Two lessons learned the hard way:
+        # (1) the tremolo must be shallow (near-silent dips = machine-gun), and
+        # (2) the tones must be HARMONICS (2x, 3x) — detuned tones a few Hz
+        # apart BEAT against each other and cancel ~14x/sec, which also reads
+        # as stutter. So: one fundamental + clean octave/harmonic partials. ---
         purr = []
         dur = 2.4
         n = int(self.SR * dur)
-        # slow-drifting texture: two close low tones beat against each other
+        f0 = 45.0                      # low fundamental
+        prev = 0.0
         for i in range(n):
             t = i / self.SR
-            base = (math.sin(2 * math.pi * 48 * t)
-                    + math.sin(2 * math.pi * 62 * t) * 0.6
-                    + math.sin(2 * math.pi * 96 * t) * 0.25)
-            base /= 1.85
-            # SHALLOW tremolo (0.82..1.0) — a soft breathing swell, never a gap
-            trem = 0.91 + 0.09 * math.sin(2 * math.pi * 6 * t)
-            fade = min(1.0, i / 3000.0, (n - i) / 5000.0)  # long soft in/out
-            purr.append(int(base * trem * fade * 0.4 * 32767))
+            tone = (math.sin(2 * math.pi * f0 * t)
+                    + math.sin(2 * math.pi * f0 * 2 * t) * 0.5
+                    + math.sin(2 * math.pi * f0 * 3 * t) * 0.28
+                    + math.sin(2 * math.pi * f0 * 4 * t) * 0.14)
+            tone /= 1.92
+            # strong low-pass-filtered noise bed: this is the continuous
+            # "rumble" that fills the troughs between the low tone cycles,
+            # so nothing ever reads as a gap / rapid pulse
+            white = random.uniform(-1, 1)
+            prev = prev * 0.94 + white * 0.06      # 1-pole low-pass
+            bed = prev * 4.0                       # loud enough to fill gaps
+            trem = 0.92 + 0.08 * math.sin(2 * math.pi * 5 * t)
+            fade = min(1.0, i / 3000.0, (n - i) / 5000.0)
+            # mix tone + bed, keep well under clip
+            purr.append(int((tone * 0.7 + bed * 0.6) * trem * fade
+                            * 0.5 * 32767))
         self._paths["purr"] = self._wav(purr, "sonder_purr.wav")
         # --- bloop: duck hit — quick falling thunk ---
         bl = []
