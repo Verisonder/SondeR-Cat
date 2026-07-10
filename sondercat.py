@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.9.1"
-APP_BUILD = "0715t"
+APP_BUILD = "0715u"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2434,15 +2434,15 @@ class Manager(QObject):
             self.music_on = False
             self.music_mode = "off"
             return
-        # ignore the audio meter while WE are the ones making noise (purr,
-        # game sounds) — otherwise the cat thinks music is on and reacts
+        # while WE are making noise (purr, game sounds) the mic-style meter
+        # can't tell our sound from real music, so FREEZE the current music
+        # state rather than touching it — don't turn headphones on because of
+        # our own purr, and don't turn them off if real music was already
+        # playing (that caused a flicker when petting during music).
         our_sound = (getattr(self.primary(), "_purring", False)
                      or self._duck_game is not None)
         if our_sound:
-            self.music_on = False
-            self.music_mode = "off"
-            self._music_hist.clear()
-            return
+            return          # leave music_on / music_mode exactly as they are
         self._music_hist.append(self._audio.peak())
         h = list(self._music_hist)
         if len(h) < 12:
@@ -5950,7 +5950,6 @@ class CatWindow(QWidget):
         wearing = (self.gcfg.get("dance_music", True)
                    and self.mgr.music_mode in ("listen", "dance")
                    and not self.mgr.cfg["global"].get("guard_mode", False)
-                   and not getattr(self, "_purring", False)
                    and self.mgr._duck_game is None)
         if wearing:
             hp = QPainter(img)
