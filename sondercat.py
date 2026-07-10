@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.7.0"
-APP_BUILD = "0714t"
+APP_BUILD = "0714u"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -195,6 +195,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "vision_consent": False,
                    "guide_mode": False, "guide_consent": False,
                    "guide_quality": "fast",
+                   "duck_high_score": 0,
                    "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
 
@@ -946,6 +947,7 @@ class DuckHuntGame(QWidget):
         self.score = 0
         self.shots = 0
         self.hits = 0
+        self.high = int(mgr.cfg["global"].get("duck_high_score", 0))
         self.spawn_at = 0.0
         self.frame = 0
         self.running = True
@@ -969,11 +971,11 @@ class DuckHuntGame(QWidget):
         # blue slightly faster, red fastest.
         roll = random.random()
         if roll < 0.70:
-            color, pts, spd = "brown", 1, 4.0
+            color, pts, spd = "brown", 1, 5.5
         elif roll < 0.90:
-            color, pts, spd = "blue", 2, 5.2
+            color, pts, spd = "blue", 2, 8.0
         else:
-            color, pts, spd = "red", 3, 6.6
+            color, pts, spd = "red", 3, 11.5
         # difficulty ramp (like Chrome dino): everything speeds up the longer
         # you play — +6% per 10s, capped at 2.2x
         import time as _t
@@ -1053,6 +1055,8 @@ class DuckHuntGame(QWidget):
             hit["vx"] = 0.0
             self.score += hit["pts"]
             self.hits += 1
+            if self.score > self.high:
+                self.high = self.score          # live high-score climb
             self.pops.append(dict(x=mx, y=my, t=_t.time()))
         else:
             self.pops.append(dict(x=mx, y=my, t=_t.time(), miss=True))
@@ -1065,12 +1069,16 @@ class DuckHuntGame(QWidget):
     def stop(self):
         self.running = False
         self._tick.stop()
+        # save the high score across sessions
+        if self.high > int(self.mgr.cfg["global"].get("duck_high_score", 0)):
+            self.mgr.cfg["global"]["duck_high_score"] = int(self.high)
+            save_config(self.mgr.cfg)
         self.hide()
         self.mgr._end_duck_hunt()
 
     # ---- painting ------------------------------------------------------
     def paintEvent(self, _ev):
-        from PySide6.QtGui import QPainter, QColor, QFont
+        from PySide6.QtGui import QPainter, QColor, QFont, QPen
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, False)
         # faint dim so ducks read against any desktop
@@ -1103,24 +1111,43 @@ class DuckHuntGame(QWidget):
             p.setPen(Qt.NoPen)
             p.setBrush(col)
             p.drawEllipse(QPointF(pop["x"], pop["y"]), r, r)
-        # HUD — rounded dark panel behind the text so the score is readable
-        # over any desktop
+        # HUD — retro arcade score panel: black box, white stroke (so it
+        # never blends into a dark wallpaper), cyan "HIGH SCORE" title with
+        # the numbers below, plus the live score.
         from PySide6.QtCore import QRectF
-        panel = QRectF(18, 18, 470, 74)
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor(18, 20, 28, 205))
-        p.drawRoundedRect(panel, 14, 14)
-        f = QFont("Segoe UI", 20, QFont.Bold)
-        p.setFont(f)
-        p.setPen(QColor(255, 255, 255))
-        acc = (100 * self.hits // self.shots) if self.shots else 0
-        p.drawText(34, 50, f"🦆  Score: {self.score}    "
-                           f"Hits: {self.hits}/{self.shots} ({acc}%)")
-        f2 = QFont("Segoe UI", 12)
-        p.setFont(f2)
-        p.setPen(QColor(210, 210, 210))
-        p.drawText(34, 78, "brown 1  ·  blue 2  ·  red 3      "
-                           "click the ducks · Esc to quit")
+        pw_, ph_ = 300, 96
+        panel = QRectF(24, 22, pw_, ph_)
+        p.setBrush(QColor(6, 8, 12, 235))
+        p.setPen(QPen(QColor(255, 255, 255), 3))    # white stroke border
+        p.drawRoundedRect(panel, 10, 10)
+        # a thin inner accent line, arcade-cabinet style
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(QColor(80, 90, 110), 1))
+        p.drawRoundedRect(QRectF(30, 28, pw_ - 12, ph_ - 12), 7, 7)
+
+        def arcade_text(txt, cx, cy, size, col, weight=QFont.Bold):
+            fA = QFont("Consolas", size, weight)
+            fA.setLetterSpacing(QFont.PercentageSpacing, 118)
+            p.setFont(fA)
+            # blocky drop-shadow for a pixel-CRT feel
+            p.setPen(QColor(0, 0, 0, 220))
+            p.drawText(QRectF(cx + 2, cy + 2, pw_, size + 10),
+                       Qt.AlignHCenter, txt)
+            p.setPen(col)
+            p.drawText(QRectF(cx, cy, pw_, size + 10),
+                       Qt.AlignHCenter, txt)
+
+        arcade_text("HIGH SCORE", 24, 30, 15, QColor("#57e8ff"))
+        arcade_text(f"{self.high:07d}", 24, 50, 26, QColor("#ffffff"))
+        arcade_text(f"SCORE {self.score:05d}", 24, 84, 13,
+                    QColor("#ffd23e"))
+        # small hint + tier legend below the panel
+        fh = QFont("Segoe UI", 11)
+        p.setFont(fh)
+        p.setPen(QColor(0, 0, 0, 200))
+        p.drawText(27, 145, "brown 1 · blue 2 · red 3   ·   click ducks · Esc to quit")
+        p.setPen(QColor(225, 225, 225))
+        p.drawText(26, 144, "brown 1 · blue 2 · red 3   ·   click ducks · Esc to quit")
         # 3-2-1-GO! countdown, big and centered
         import time as _t2
         elapsed = _t2.time() - self.start_t
