@@ -12,7 +12,7 @@ For **Windows** and **Linux**. Free, open source, no telemetry, no accounts.
 **Reacts to you**
 - 👀 **Eye follow** — pupils track your cursor anywhere on screen; it blinks now and then too
 - 🔴 **Laser hunt** — wiggle the cursor side-to-side like a laser dot and the cat gallops after it (adjustable sensitivity); wiggle up-down at the bottom edge to send it to hide
-- 🐾 **Purring pets** — rub its head with the mouse → hearts + "purrr…"
+- 🐾 **Purring pets** — rub its head with the mouse for a few seconds → hearts, a "purrr…", and a real purr sound (and it purrs softly in its sleep too). Toggle sound + set the volume in the Behavior menu
 - 🍡 **Mochi drag** — grab it and it hangs from your cursor by its paws, stretching like mochi as you swing it; shake for wobble
 - 😾 **Startle** — buzz the cursor past it and it jumps
 - ⌨️ **Keyboard kneading** — types along with you on tiny 3D keycaps, stops the moment you do
