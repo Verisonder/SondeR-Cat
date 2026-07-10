@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.4.0"
-APP_BUILD = "0713w"
+APP_BUILD = "0713x"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -192,6 +192,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "auto_update": True,
                    "dance_music": True, "dance_on_sound": False,
                    "gemini_key": "", "screen_vision": False,
+                   "vision_consent": False,
                    "guide_mode": False, "guide_consent": False,
                    "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
@@ -2320,12 +2321,35 @@ class Manager(QObject):
 
     def toggle_screen_vision(self):
         g = self.cfg["global"]
-        g["screen_vision"] = not g.get("screen_vision", False)
-        save_config(self.cfg)
-        self.say_primary(
-            "I can peek at your screen when you ask about it now 👀"
-            if g["screen_vision"]
-            else "screen peeking off", 4)
+        if not g.get("screen_vision", False):
+            # one-time privacy acknowledgement — this feature sends a
+            # screenshot to Google, and the free Gemini tier may train on it.
+            if not g.get("vision_consent", False):
+                ok = QMessageBox.question(
+                    None, f"{APP_NAME} — Let me check your screen",
+                    "With this on, when you ask the cat about something on "
+                    "your screen (\"what's this error?\", \"what does this "
+                    "mean?\"), it takes a picture of your screen and sends "
+                    "it to Google's Gemini to answer.\n\n"
+                    "On the free Gemini tier, Google may use what you send "
+                    "to improve their models. So please DON'T ask about "
+                    "passwords, private messages, or confidential "
+                    "information on screen.\n\n"
+                    "The cat only looks when you actually ask about the "
+                    "screen — never on its own.\n\n"
+                    "Do you understand and want to turn it on?",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+                if ok != QMessageBox.Yes:
+                    return
+                g["vision_consent"] = True
+            g["screen_vision"] = True
+            save_config(self.cfg)
+            self.say_primary(
+                "I can peek at your screen when you ask about it now 👀", 4)
+        else:
+            g["screen_vision"] = False
+            save_config(self.cfg)
+            self.say_primary("screen peeking off", 4)
 
     # ------------------------------------------------ guide mode 🧭 --------
     def toggle_guide_mode(self):
