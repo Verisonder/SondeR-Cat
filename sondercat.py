@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0716a"
+APP_BUILD = "0716b"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1586,8 +1586,22 @@ class FeedingBowls(QWidget):
     to them and asks nicely. Hidden during fullscreen apps."""
 
     PX = 4                      # pixel cell size
-    BW, BH = 16, 7              # one bowl grid
-    GAP = 6                     # cells between bowls
+    GAP = 7                     # cells between bowls
+    # bowl shape grid (20 wide x 9 tall). R=rim hi, i=rim mid, I=inner back,
+    # #=contents fill, r=base shadow, .=empty
+    SHAPE = [
+        ".RRRRRRRRRRRRRRRRRR.",
+        "RiIIIIIIIIIIIIIIIIiR",
+        "RI################IR",
+        "RI################IR",
+        ".RI##############IR.",
+        "..RI############IR..",
+        "...RII########IIR...",
+        "....RRRRRRRRRRRR....",
+        ".....rrrrrrrrrr.....",
+    ]
+    BW = 20
+    BH = 9
 
     def __init__(self, mgr):
         super().__init__(None, Qt.FramelessWindowHint
@@ -1595,7 +1609,7 @@ class FeedingBowls(QWidget):
         self.mgr = mgr
         self.setAttribute(Qt.WA_TranslucentBackground)
         w = (self.BW * 2 + self.GAP) * self.PX
-        h = (self.BH + 2) * self.PX
+        h = self.BH * self.PX
         self.setFixedSize(w, h)
         pos = mgr.cfg["global"].get("bowl_pos")
         scr = QGuiApplication.primaryScreen().availableGeometry()
@@ -1603,19 +1617,20 @@ class FeedingBowls(QWidget):
             x = max(scr.left(), min(int(pos[0]), scr.right() - w))
             y = max(scr.top(), min(int(pos[1]), scr.bottom() - h))
         else:
-            x = scr.right() - w - 60
-            y = scr.bottom() - h - 8
+            # sit on the "floor" (just above the taskbar), a bit in from
+            # the right edge — availableGeometry already excludes the taskbar
+            x = scr.right() - w - 80
+            y = scr.bottom() - h - 6
         self.move(x, y)
         self._drag_off = None
         self._press_pos = None
         self.show()
 
-    # rects of the two bowls in widget coords
+    # rects of the two bowls in widget coords (for click hit-testing)
     def _bowl_rects(self):
         w1 = self.BW * self.PX
-        food = QRect(0, 2 * self.PX, w1, self.BH * self.PX)
-        water = QRect(w1 + self.GAP * self.PX, 2 * self.PX,
-                      w1, self.BH * self.PX)
+        food = QRect(0, 0, w1, self.BH * self.PX)
+        water = QRect(w1 + self.GAP * self.PX, 0, w1, self.BH * self.PX)
         return food, water
 
     def mousePressEvent(self, ev):
@@ -1633,7 +1648,6 @@ class FeedingBowls(QWidget):
         moved = (ev.globalPosition().toPoint() - self._press_pos
                  ).manhattanLength()
         if moved < 6:
-            # a click (not a drag) → refill whichever bowl was clicked
             food, water = self._bowl_rects()
             pt = ev.position().toPoint()
             g = self.mgr.cfg["global"]
@@ -1645,58 +1659,57 @@ class FeedingBowls(QWidget):
                 self.mgr._bowl_refilled("water")
             save_config(self.mgr.cfg)
         else:
-            # finished a drag → remember the spot
             self.mgr.cfg["global"]["bowl_pos"] = [self.x(), self.y()]
             save_config(self.mgr.cfg)
         self._press_pos = None
         self._drag_off = None
         self.update()
 
+    def _draw_bowl(self, p, ox, level, is_water):
+        from PySide6.QtGui import QColor
+        px = self.PX
+        rim_hi = QColor("#b3b8c6")
+        rim_mid = QColor("#8f95a4")
+        rim_in = QColor("#5f6473")
+        base = QColor("#3f4350")
+        if is_water:
+            fill, shine = QColor("#4f9fd8"), QColor("#8cc6ea")
+        else:
+            fill, shine = QColor("#b07a3e"), QColor("#c99a5c")
+        # find the vertical span of the contents rows (# in the grid)
+        content_rows = [y for y, row in enumerate(self.SHAPE) if "#" in row]
+        top_c, bot_c = min(content_rows), max(content_rows)
+        span = bot_c - top_c + 1
+        # how many of those rows are filled, from the bottom up
+        filled_rows = int(round(level * span))
+        fill_start = bot_c - filled_rows + 1
+        for y, row in enumerate(self.SHAPE):
+            for x, ch in enumerate(row):
+                X, Y = ox + x * px, y * px
+                if ch == "R":
+                    p.fillRect(X, Y, px, px, rim_hi)
+                elif ch == "i":
+                    p.fillRect(X, Y, px, px, rim_mid)
+                elif ch == "I":
+                    p.fillRect(X, Y, px, px, rim_in)
+                elif ch == "r":
+                    p.fillRect(X, Y, px, px, base)
+                elif ch == "#":
+                    if level > 0 and y >= fill_start:
+                        c = shine if (x + y) % 4 == 0 else fill
+                        p.fillRect(X, Y, px, px, c)
+                    else:
+                        p.fillRect(X, Y, px, px, rim_in)   # empty interior
+
     def paintEvent(self, _ev):
-        from PySide6.QtGui import QPainter, QColor
+        from PySide6.QtGui import QPainter
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, False)
         g = self.mgr.cfg["global"]
         food_lv = float(g.get("food_level", 1.0))
         water_lv = float(g.get("water_level", 1.0))
-        px = self.PX
-        rim = QColor("#8a8f9c")          # bowl rim (grey)
-        rim_d = QColor("#5c6170")        # rim shadow
-        kib = QColor("#a9743c")          # kibble
-        kib_d = QColor("#7d5228")
-        wat = QColor("#4f9fd8")          # water
-        wat_l = QColor("#8cc6ea")        # water shine
-        food_r, water_r = self._bowl_rects()
-
-        def bowl(rect, level, is_water):
-            x0, y0 = rect.x() // px, rect.y() // px
-            bw, bh = self.BW, self.BH
-            for cy in range(bh):
-                for cx in range(bw):
-                    edge = (cy >= bh - 2) or (cx < 1 + (bh - cy) // 3) \
-                           or (cx >= bw - 1 - (bh - cy) // 3)
-                    inner = not edge and cy >= 2
-                    X, Y = (x0 + cx) * px, (y0 + cy) * px
-                    if cy == bh - 1 and 1 <= cx <= bw - 2:
-                        p.fillRect(X, Y, px, px, rim_d)      # base
-                    elif edge and cy >= 1:
-                        p.fillRect(X, Y, px, px, rim)
-                    elif inner and level > 0:
-                        depth = (bh - 2) - cy
-                        filled = level * (bh - 3)
-                        if depth <= filled:
-                            if is_water:
-                                c = wat_l if (cx + cy) % 5 == 0 else wat
-                            else:
-                                c = kib_d if (cx * 7 + cy * 3) % 4 == 0 else kib
-                            p.fillRect(X, Y, px, px, c)
-            if level <= 0:
-                for cx in range(2, bw - 2, 2):
-                    p.fillRect((x0 + cx) * px, (y0 + 2) * px, px, px // 2,
-                               QColor(255, 255, 255, 60))
-
-        bowl(food_r, food_lv, False)
-        bowl(water_r, water_lv, True)
+        self._draw_bowl(p, 0, food_lv, False)
+        self._draw_bowl(p, (self.BW + self.GAP) * self.PX, water_lv, True)
 
 
 class GuardBeam(QWidget):
