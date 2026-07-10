@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713n"
+APP_BUILD = "0713o"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2443,8 +2443,10 @@ class Manager(QObject):
             '{"found":true,"box":[100,200,140,320],"label":"element name",'
             '"say":"short friendly instruction","last":false,"done":false}'
             " . box is the TIGHT bounding box of just that ONE element (not "
-            "its whole row, toolbar or panel), as [ymin,xmin,ymax,xmax] each "
-            "normalized 0-1000 of the image height (y) and width (x). Hug "
+            "its whole row, toolbar or panel), in the order top, left, "
+            "bottom, right, each normalized 0-1000 of the image height (y) "
+            "and width (x). box MUST contain four plain INTEGERS like "
+            "[112,204,146,318] — NEVER letters or placeholder words. Hug "
             "the element's real edges — a small button gives a small box. "
             "Keep 'say' under 22 "
             "words and make it match how the app actually works. Set "
@@ -2466,20 +2468,39 @@ class Manager(QObject):
 
         def work():
             try:
-                raw = self._gemini_call(contents, persona,
-                                        ground_with_image=True).strip()
-                if raw.startswith("```"):
-                    raw = raw.strip("`")
-                    if raw.lower().startswith("json"):
-                        raw = raw[4:]
-                raw = raw.strip()
-                if not raw.startswith("{"):
-                    # grounding can prepend/append citation text — pull out
-                    # the JSON object itself
-                    i, j = raw.find("{"), raw.rfind("}")
-                    if i != -1 and j != -1 and j > i:
-                        raw = raw[i:j + 1]
-                d = _json.loads(raw)
+                def clean(raw):
+                    raw = raw.strip()
+                    if raw.startswith("```"):
+                        raw = raw.strip("`")
+                        if raw.lower().startswith("json"):
+                            raw = raw[4:]
+                    raw = raw.strip()
+                    if not raw.startswith("{"):
+                        # grounding can prepend/append citation text — pull
+                        # out the JSON object itself
+                        i, j = raw.find("{"), raw.rfind("}")
+                        if i != -1 and j != -1 and j > i:
+                            raw = raw[i:j + 1]
+                    return raw
+
+                raw = clean(self._gemini_call(contents, persona,
+                                              ground_with_image=True))
+                try:
+                    d = _json.loads(raw)
+                except Exception:
+                    # model sometimes echoes the schema (e.g. placeholder
+                    # words inside box) — re-ask once with a firm nudge
+                    retry = contents + [
+                        {"role": "model", "parts": [{"text": raw[:500]}]},
+                        {"role": "user", "parts": [{"text":
+                            "That was INVALID JSON. Reply again with ONLY "
+                            "valid minified JSON in the exact shape "
+                            "requested. box must be four plain integers "
+                            "like [112,204,146,318] — no letters, no "
+                            "placeholder words, no comments."}]}]
+                    raw = clean(self._gemini_call(retry, persona,
+                                                  ground_with_image=True))
+                    d = _json.loads(raw)
 
                 def apply():
                     self.ai_busy = False
@@ -2497,13 +2518,16 @@ class Manager(QObject):
                             say or "hmm, I can't spot it from here… 🤔", 8)
                         return
                     box = d.get("box")
-                    if (isinstance(box, (list, tuple)) and len(box) == 4):
-                        ymin, xmin, ymax, xmax = box
-                        nx = (float(xmin) + float(xmax)) / 2.0
-                        ny = (float(ymin) + float(ymax)) / 2.0
-                    else:                          # fallback: a center point
-                        nx = float(d.get("x", 500))
-                        ny = float(d.get("y", 500))
+                    try:
+                        ymin, xmin, ymax, xmax = [float(v) for v in box]
+                        nx = (xmin + xmax) / 2.0
+                        ny = (ymin + ymax) / 2.0
+                    except Exception:              # fallback: a center point
+                        try:
+                            nx = float(d.get("x", 500))
+                            ny = float(d.get("y", 500))
+                        except Exception:
+                            nx = ny = 500.0
                     nx = max(0, min(1000, int(round(nx))))
                     ny = max(0, min(1000, int(round(ny))))
                     label = str(d.get("label") or "here").strip()
