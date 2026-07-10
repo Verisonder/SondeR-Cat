@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "9.9.1"
-APP_BUILD = "0715u"
+APP_VERSION = "9.9.2"
+APP_BUILD = "0715v"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
