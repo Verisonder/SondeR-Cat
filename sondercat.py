@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.9.2"
-APP_BUILD = "0715w"
+APP_BUILD = "0715x"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1497,15 +1497,16 @@ class RockPaperScissorsGame(QWidget):
         scw = sprites.pixel_text_width(score, 3)
         sprites.draw_pixel_text(p, score, px0 + (pw_ - scw) // 2, py0 + 52, 3,
                                 QColor("#d9a94a"), shadow)
-        # ---- the three choice buttons ----
+        # ---- the three choice buttons (big emoji — instantly readable) ----
         self.buttons = []
-        icon_px = 5                     # 12*5 = 60px icons
-        isz = 12 * icon_px
+        isz = 64                        # button square
         gap = 30
         total = 3 * isz + 2 * gap
         bx = px0 + (pw_ - total) // 2
         by = py0 + 96
         mouse = self.mapFromGlobal(QCursor.pos())
+        EMOJI = {"rock": "🪨", "paper": "📄", "scissors": "✂️"}
+        emoji_font = QFont("Segoe UI Emoji", 34)
         for move in self.MOVES:
             rect = QRect(bx, by, isz, isz)
             self.buttons.append((rect, move))
@@ -1516,25 +1517,27 @@ class RockPaperScissorsGame(QWidget):
             p.setPen(QPen(QColor(120, 130, 150) if not hover
                           else QColor("#6bb8c7"), 2))
             p.drawRoundedRect(QRectF(bx - 8, by - 8, isz + 16, isz + 24), 8, 8)
-            sprites.draw_rps_icon(p, move, bx, by, icon_px)
+            p.setFont(emoji_font)
+            p.setPen(QColor(255, 255, 255))
+            p.drawText(rect, Qt.AlignCenter, EMOJI[move])
             # label under each
             lbl = move.upper()
             lw = sprites.pixel_text_width(lbl, 2)
             sprites.draw_pixel_text(p, lbl, bx + (isz - lw) // 2, by + isz + 4,
                                     2, QColor("#c0c4cc"))
             bx += isz + gap
-        # ---- result area ----
-        ry = by + isz + 40
+        # ---- result area (below the button labels) ----
+        ry = by + isz + 62
         if self.reveal_at:
             msg = "CAT IS THINKING"
             col = QColor("#9aa0ac")
         elif self.result:
-            you_i = self.your_move.upper()
-            cat_i = (self.cat_move or "").upper()
-            sub = f"YOU {you_i}  VS  CAT {cat_i}"
-            sw2 = sprites.pixel_text_width(sub, 2)
-            sprites.draw_pixel_text(p, sub, px0 + (pw_ - sw2) // 2, ry - 22, 2,
-                                    QColor("#c0c4cc"), shadow)
+            # matchup with emoji: 🪨 vs ✂️
+            duel = (f"{EMOJI[self.your_move]}  vs  "
+                    f"{EMOJI[self.cat_move]}")
+            p.setFont(QFont("Segoe UI Emoji", 20))
+            p.setPen(QColor("#c0c4cc"))
+            p.drawText(QRect(px0, ry - 34, pw_, 30), Qt.AlignHCenter, duel)
             if self.result == "win":
                 msg, col = "YOU WIN!", QColor("#7ad17a")
             elif self.result == "lose":
@@ -3142,6 +3145,9 @@ class Manager(QObject):
     def _start_rps(self):
         if getattr(self, "_rps_game", None) is not None:
             return
+        # one game at a time — close duck hunt if it's running
+        if self._duck_game is not None:
+            self._duck_game.stop()
         c = self.primary()
         self._end_guide(walk_home=False, quiet=True)
         c.say(random.choice(["rock, paper, scissors? 🐾", "let's play! ✊✋✌️",
@@ -3154,6 +3160,9 @@ class Manager(QObject):
     def _start_duck_hunt(self):
         if self._duck_game is not None:
             return
+        # one game at a time — close RPS if it's open
+        if getattr(self, "_rps_game", None) is not None:
+            self._rps_game.stop()
         c = self.primary()
         # end anything that owns the cat, then strike the gunner pose in the
         # bottom-left corner
@@ -5250,10 +5259,10 @@ class CatWindow(QWidget):
                                 "don't touch me! 😾", "HANDS OFF.",
                                 "I'm on duty!", "grrr… 😾", "hsss!"]), 1.4)
                     else:
-                        # only start reacting after ~3s of continuous petting
+                        # only start reacting after ~1s of continuous petting
                         # — hearts, purr and "purrr…" all wait for the same cue
                         petted_for = now - getattr(self, "_pet_started", now)
-                        if petted_for > 3.0:
+                        if petted_for > 1.0:
                             r = self.cat_rect()
                             self.hearts.append({
                                 "x": r.left() + random.randint(20, r.width() - 20),
