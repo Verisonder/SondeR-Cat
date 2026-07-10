@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0716g"
+APP_BUILD = "0716h"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1585,7 +1585,7 @@ class FeedingBowls(QWidget):
     over ~24h of real time. When one is empty the cat comes to sit next
     to them and asks nicely. Hidden during fullscreen apps."""
 
-    PX = 4                      # pixel cell size
+    PX = 3                      # pixel cell size (smaller bowls)
     GAP = 4                     # cells between bowls
     # Two 24x16 grids. K=outline B=body H=highlight M=mound m=mound-dark
     # F=water fill zone  .=transparent
