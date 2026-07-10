@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.7.0"
-APP_BUILD = "0715a"
+APP_BUILD = "0715b"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1618,8 +1618,6 @@ class Manager(QObject):
         self._music_timer.start(120)
         self._guard_beam = None
         self._duck_game = None          # easter-egg minigame window
-        self._ver_clicks = 0            # 7 clicks on the version → duck hunt
-        self._ver_click_t = 0.0
         self._guard_timer = QTimer()
         self._guard_timer.timeout.connect(self._tick_guard)
         self._guard_timer.start(33)
@@ -2741,24 +2739,10 @@ class Manager(QObject):
         except Exception:
             return None, None
 
-    def _on_version_click(self):
-        """7 clicks on the 'Installed: vX' menu item → secret Duck Hunt."""
-        import time as _t
-        now = _t.time()
-        # the menu now stays open (event filter), so clicks come fast — a
-        # short window keeps it a deliberate 7-tap, not an accidental one
-        if now - self._ver_click_t > 3.0:
-            self._ver_clicks = 0        # streak went cold → reset
-        self._ver_click_t = now
-        self._ver_clicks += 1
-        left = 7 - self._ver_clicks
-        if self._ver_clicks >= 7:
-            self._ver_clicks = 0
+    def start_minigame(self, which="duckhunt"):
+        """Launch a minigame from the Minigames menu."""
+        if which == "duckhunt":
             self._start_duck_hunt()
-            return True                 # launched → caller lets the menu close
-        elif left <= 3:
-            self.say_primary(f"…{left}", 1)
-        return False
 
     def _start_duck_hunt(self):
         if self._duck_game is not None:
@@ -3687,23 +3671,6 @@ class CatWindow(QWidget):
     def nameof(self):
         return self.gcfg.get("name", "")
 
-    def eventFilter(self, obj, ev):
-        # Intercept clicks on the "Installed: vX" line so the Updates submenu
-        # stays open — lets the version be tapped 7 times to unlock Duck Hunt.
-        # On the 7th (trigger) click we DON'T swallow it, so the menu closes.
-        try:
-            from PySide6.QtCore import QEvent
-            if ev.type() == QEvent.MouseButtonRelease:
-                act = getattr(self, "_ver_action", None)
-                if act is not None and obj.actionAt(ev.pos()) is act:
-                    launched = self.mgr._on_version_click()
-                    if launched:
-                        return False       # 7th click → let the menu close
-                    return True            # otherwise keep the menu open
-        except Exception:
-            pass
-        return super().eventFilter(obj, ev)
-
     # -------------------------------------------------------------- menu ----
     def build_menu(self):
         menu = QMenu(self)
@@ -3821,6 +3788,15 @@ class CatWindow(QWidget):
         scus = QAction("Custom interval ⏱…", menu)
         scus.triggered.connect(mgr.custom_stretch)
         stretch.addAction(scus)
+
+        mini = menu.addMenu("Minigames 🎮")
+        dh = QAction("Duck Hunt 🦆", menu)
+        dh.triggered.connect(lambda: mgr.start_minigame("duckhunt"))
+        mini.addAction(dh)
+        mini.addSeparator()
+        soon = QAction("more coming soon…", menu)
+        soon.setEnabled(False)
+        mini.addAction(soon)
 
         beh = menu.addMenu("Behavior")
         # --- checkable toggles first ---
@@ -4055,13 +4031,8 @@ class CatWindow(QWidget):
         chan = " · Store" if IS_STORE_BUILD else ""
         uinf = QAction(
             f"Installed: v{APP_VERSION} · build {APP_BUILD}{chan}", menu)
+        uinf.setEnabled(False)
         upds.addAction(uinf)
-        # keep the Updates submenu OPEN when the version line is clicked, so
-        # it can be tapped 7 times in a row to unlock Duck Hunt (a normal
-        # action closes the whole menu). The event filter both counts the
-        # clicks and swallows the event so the menu stays put.
-        self._ver_action = uinf
-        upds.installEventFilter(self)
 
         quit_act = QAction("Quit", menu)
         quit_act.triggered.connect(QApplication.instance().quit)
