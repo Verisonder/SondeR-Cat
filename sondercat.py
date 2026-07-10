@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.4.2"
-APP_BUILD = "0714b"
+APP_BUILD = "0714c"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2520,7 +2520,7 @@ class Manager(QObject):
             {"inline_data": {"mime_type": "image/jpeg", "data": b64}}]}]
         raw = clean(self._gemini_call(contents2, persona2,
                                       ground_with_image=False,
-                                      max_tokens=1024, think="low"))
+                                      max_tokens=768, think="low"))
         d2 = _json.loads(raw)
         if not d2.get("found"):
             return None
@@ -2609,7 +2609,7 @@ class Manager(QObject):
 
                 raw = clean(self._gemini_call(contents, persona,
                                               ground_with_image=first,
-                                              max_tokens=2048, think="low"))
+                                              max_tokens=1024, think="low"))
                 try:
                     d = _json.loads(raw)
                 except Exception:
@@ -2638,7 +2638,7 @@ class Manager(QObject):
                                 "comments."}]}]
                         raw = clean(self._gemini_call(
                             retry, persona, ground_with_image=False,
-                            max_tokens=2048, think="low"))
+                            max_tokens=1024, think="low"))
                         try:
                             d = _json.loads(raw)
                         except Exception as je:
