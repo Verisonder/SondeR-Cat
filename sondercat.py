@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0715y"
+APP_BUILD = "0715z"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1425,6 +1425,7 @@ class RockPaperScissorsGame(QWidget):
         self.result = None          # "win" / "lose" / "tie"
         self.reveal_at = 0.0        # cat "thinking" until this time
         self.buttons = []           # (rect, move) hit targets
+        self._last_cat = None       # cat's previous throw (anti-repeat)
         self._tick = QTimer(self)
         self._tick.timeout.connect(self._step)
         self._tick.start(33)
@@ -1438,8 +1439,7 @@ class RockPaperScissorsGame(QWidget):
         # reveal the cat's move after a short "thinking" beat
         if self.reveal_at and _t.time() >= self.reveal_at:
             self.reveal_at = 0.0
-            import random
-            self.cat_move = random.choice(self.MOVES)
+            self.cat_move = self._pick_cat_move()
             if self.your_move == self.cat_move:
                 self.result = "tie"
             elif self.BEATS[self.your_move] == self.cat_move:
@@ -1448,7 +1448,26 @@ class RockPaperScissorsGame(QWidget):
             else:
                 self.result = "lose"
                 self.cat += 1
+            self._last_cat = self.cat_move
         self.update()
+
+    def _pick_cat_move(self):
+        """Weighted pick — the "less random to feel more random" trick (the
+        same idea Apple used for iPod shuffle). True 1/3 randomness clusters,
+        so streaks of ties FEEL unfair even though they're fair. We damp the
+        two things that read as "not random": a tie (cat matching your move)
+        and the cat repeating its own last throw."""
+        import random
+        w = {m: 1.0 for m in self.MOVES}
+        # make ties much less likely than pure chance
+        if self.your_move in w:
+            w[self.your_move] *= 0.35
+        # avoid throwing the same thing twice in a row
+        last = getattr(self, "_last_cat", None)
+        if last in w:
+            w[last] *= 0.6
+        moves = list(w)
+        return random.choices(moves, weights=[w[m] for m in moves])[0]
 
     def mousePressEvent(self, ev):
         import time as _t
