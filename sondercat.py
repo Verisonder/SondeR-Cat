@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.1"
-APP_BUILD = "0716p"
+APP_BUILD = "0716q"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -183,7 +183,7 @@ CAT_DEFAULTS = {"palette": "orange tabby", "pattern": "tabby",
                 "custom_body": None, "scale": 6, "pos": None}
 GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "auto_peek": True, "chase_enabled": True,
-                   "name": "", "pinned": "", "reminders": [], "sounds": True, "laser_only": True, "wiggle_hide": True,
+                   "name": "", "pinned": "", "reminders": [], "laser_only": True, "wiggle_hide": True,
                    "wiggle_sens": "medium",
                    "force_sleep": False, "watch_sprites": False,
                    "window_perch": True, "perch_freq": "instant",
@@ -767,6 +767,12 @@ class Meow:
 
 
 # ------------------------------------------------------------- sound fx -----
+
+def _sounds_enabled(g):
+    """Sound is on whenever the volume slider is above zero. There is no
+    separate on/off toggle anymore -- the slider sitting at 0 IS 'off'."""
+    return g.get("sound_volume", 1.0) > 0
+
 
 class SoundFX:
     """Procedural 8-bit sound effects + music for the cat and minigames.
@@ -1382,7 +1388,7 @@ class DuckHuntGame(QWidget):
         mx, my = ev.position().x(), ev.position().y()
         self.shots += 1
         # pew! (respects the general Sounds toggle)
-        if self.mgr.cfg["global"].get("sounds", True):
+        if _sounds_enabled(self.mgr.cfg["global"]):
             sfx = getattr(self.mgr, "_sfx", None)
             if sfx is not None:
                 sfx.shot()
@@ -1412,7 +1418,7 @@ class DuckHuntGame(QWidget):
             if self.score > self.high:
                 self.high = self.score          # live high-score climb
             # satisfying bloop on a hit (Sounds toggle respected)
-            if self.mgr.cfg["global"].get("sounds", True):
+            if _sounds_enabled(self.mgr.cfg["global"]):
                 sfx = getattr(self.mgr, "_sfx", None)
                 if sfx is not None:
                     sfx.hit()
@@ -2828,7 +2834,7 @@ class Manager(QObject):
                 c.tick()
 
     def celebrate(self, text):
-        if self.cfg["global"].get("sounds", True):
+        if _sounds_enabled(self.cfg["global"]):
             self.meow.play()
         now = time.time()
         self.celebrate_until = now + 1.2
@@ -3287,22 +3293,22 @@ class Manager(QObject):
                 c.state = IDLE
             self.say_primary("mrrp! I'm awake 🐾", 3)
 
-    def toggle_sounds(self):
+    def set_sound_volume(self, v):
         g = self.cfg["global"]
-        g["sounds"] = not g.get("sounds", True)
+        was_on = g.get("sound_volume", 1.0) > 0
+        g["sound_volume"] = round(max(0.0, min(1.0, v)), 2)
+        now_on = g["sound_volume"] > 0
         save_config(self.cfg)
-        if g["sounds"]:
+        if self._sfx is not None:
+            self._sfx.set_volume(g["sound_volume"])
+        # the slider IS the on/off control now: dragging to 0 stops the game
+        # soundtrack, bringing it back up restarts it if a game is running
+        if now_on and not was_on:
             self.meow.play()
             if self._duck_game is not None and self._sfx is not None:
                 self._sfx.music_start()
-        elif self._sfx is not None:
+        elif was_on and not now_on and self._sfx is not None:
             self._sfx.music_stop()
-
-    def set_sound_volume(self, v):
-        self.cfg["global"]["sound_volume"] = round(max(0.0, min(1.0, v)), 2)
-        save_config(self.cfg)
-        if self._sfx is not None:
-            self._sfx.set_volume(v)
 
     def _bowls_should_hide(self):
         """Bowls always hide on fullscreen; and, if the user turned on the
@@ -3615,7 +3621,7 @@ class Manager(QObject):
         c.say("🦆 DUCK HUNT! click the ducks — Esc to quit", 5)
         self._duck_game = DuckHuntGame(self)
         # optional 8-bit soundtrack (general Sounds toggle)
-        if self.cfg["global"].get("sounds", True):
+        if _sounds_enabled(self.cfg["global"]):
             try:
                 if self._sfx is None:
                     self._sfx = SoundFX(
@@ -4704,11 +4710,6 @@ class CatWindow(QWidget):
         dps.setChecked(self.gcfg.get("dance_on_sound", False))
         dps.triggered.connect(mgr.toggle_dance_on_sound)
         beh.addAction(dps)
-        snd = QAction("Sounds 🔊", menu)
-        snd.setCheckable(True)
-        snd.setChecked(self.gcfg.get("sounds", True))
-        snd.triggered.connect(mgr.toggle_sounds)
-        beh.addAction(snd)
         # volume slider (0–100%) as an embedded widget in the menu — the bar
         # starts right at the 🔈 icon and stretches across the full row
         from PySide6.QtWidgets import (QWidgetAction, QSlider, QWidget,
@@ -5051,7 +5052,7 @@ class CatWindow(QWidget):
         # stop the pet-purr ~5s after the last pet (or immediately if the
         # index-0 cat and sounds got turned off)
         if self._purring and (now > self._petting_until
-                              or not self.gcfg.get("sounds", True)):
+                              or not _sounds_enabled(self.gcfg)):
             self._purring = False
             try:
                 if self.mgr._sfx is not None:
@@ -5061,7 +5062,7 @@ class CatWindow(QWidget):
         # stop the SLEEP purr the instant the cat wakes (leaves SLEEP) or if
         # sounds get turned off
         if getattr(self, "_sleep_purring", False) \
-                and (self.state != SLEEP or not self.gcfg.get("sounds", True)):
+                and (self.state != SLEEP or not _sounds_enabled(self.gcfg)):
             self._sleep_purring = False
             try:
                 if self.mgr._sfx is not None:
@@ -5200,7 +5201,7 @@ class CatWindow(QWidget):
                                          "life": 2.5,
                                          "seed": random.random() * 6})
                     # a soft sleepy purr now and then (~every 25–40s)
-                    if self.gcfg.get("sounds", True) \
+                    if _sounds_enabled(self.gcfg) \
                             and now - self._last_sleep_purr > \
                             random.uniform(25, 40):
                         self._last_sleep_purr = now
@@ -5753,7 +5754,7 @@ class CatWindow(QWidget):
                                 "y": heart_y, "vy": 1.1, "life": 1.6,
                                 "seed": random.random() * 6})
                             self._petting_until = now + 5.0
-                            if self.gcfg.get("sounds", True) \
+                            if _sounds_enabled(self.gcfg) \
                                     and not self._purring:
                                 self._purring = True
                                 try:
