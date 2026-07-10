@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.5.2"
-APP_BUILD = "0714k"
+APP_BUILD = "0714l"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -949,6 +949,7 @@ class DuckHuntGame(QWidget):
         self.spawn_at = 0.0
         self.frame = 0
         self.running = True
+        self._img_cache = {}     # (wing_down,color,flip) -> QImage (12 max)
         self._tick = QTimer(self)
         self._tick.timeout.connect(self._step)
         self._tick.start(33)     # ~30 fps
@@ -998,8 +999,11 @@ class DuckHuntGame(QWidget):
                 d["x"] += d["vx"]
                 d["y"] += d["vy"]
                 d["vy"] += 0.02         # gentle bob/gravity
+                d["vy"] = min(d["vy"], 1.2)   # never nose-dive
                 if d["y"] < self.sh * 0.05:
                     d["vy"] = abs(d["vy"])
+                elif d["y"] > self.sh * 0.70:
+                    d["vy"] = -abs(d["vy"])   # bounce back up into the sky
         # cull off-screen
         self.ducks = [d for d in self.ducks
                       if -80 < d["x"] < self.sw + 80 and d["y"] < self.sh + 90]
@@ -1009,7 +1013,6 @@ class DuckHuntGame(QWidget):
     # ---- input ---------------------------------------------------------
     def mousePressEvent(self, ev):
         import time as _t
-        from PySide6.QtGui import QImage
         mx, my = ev.position().x(), ev.position().y()
         self.shots += 1
         hit = None
@@ -1053,7 +1056,11 @@ class DuckHuntGame(QWidget):
         for d in self.ducks:
             wing_down = (int(d["flap"]) % 2 == 1)
             flip = d["vx"] < 0
-            img = sprites.render_duck(wing_down, d["color"], 4, flip)
+            key = (wing_down, d["color"], flip)
+            img = self._img_cache.get(key)
+            if img is None:
+                img = sprites.render_duck(wing_down, d["color"], 4, flip)
+                self._img_cache[key] = img
             if d["fall"]:
                 # tip over when shot
                 p.save()
@@ -2646,8 +2653,10 @@ class Manager(QObject):
         """7 clicks on the 'Installed: vX' menu item → secret Duck Hunt."""
         import time as _t
         now = _t.time()
-        if now - self._ver_click_t > 2.0:
-            self._ver_clicks = 0        # too slow → reset the streak
+        # each click CLOSES the menu, so the user has to reopen it every
+        # time — allow a generous gap between clicks or 7 is impossible
+        if now - self._ver_click_t > 8.0:
+            self._ver_clicks = 0        # streak went cold → reset
         self._ver_click_t = now
         self._ver_clicks += 1
         left = 7 - self._ver_clicks
@@ -2666,6 +2675,7 @@ class Manager(QObject):
         self._end_guide(walk_home=False, quiet=True)
         if self.cfg["global"].get("guard_mode"):
             self.cfg["global"]["guard_mode"] = False
+            save_config(self.cfg)
         c.duck_gunner = True
         c._enter_duck_corner()
         c.say("🦆 DUCK HUNT! click the ducks — Esc to quit", 5)
