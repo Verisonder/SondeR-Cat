@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.4.3"
-APP_BUILD = "0714e"
+APP_BUILD = "0714f"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -194,6 +194,7 @@ GLOBAL_DEFAULTS = {"stretch_minutes": 50, "sleep_seconds": 180,
                    "gemini_key": "", "screen_vision": False,
                    "vision_consent": False,
                    "guide_mode": False, "guide_consent": False,
+                   "guide_quality": "balanced",
                    "guard_mode": False, "guard_timer_min": 0,
                    "hide_mode": False}
 
@@ -2184,6 +2185,25 @@ class Manager(QObject):
         "very":      (40, 100),
     }
 
+    # guide-mode speed/accuracy profiles: (thinking budget, run zoom pass?).
+    # Fast = snappy & less precise; Accurate = slower & tighter.
+    GUIDE_QUALITY = {
+        "fast":     (0,   False),
+        "balanced": (128, True),
+        "accurate": (512, True),
+    }
+
+    def guide_profile(self):
+        key = self.cfg["global"].get("guide_quality", "balanced")
+        return self.GUIDE_QUALITY.get(key, self.GUIDE_QUALITY["balanced"])
+
+    def set_guide_quality(self, key):
+        self.cfg["global"]["guide_quality"] = key
+        save_config(self.cfg)
+        nice = {"fast": "Fast", "balanced": "Balanced",
+                "accurate": "Accurate"}.get(key, key)
+        self.say_primary(f"guide speed set to {nice} 🧭", 3)
+
     def corner_interval(self):
         key = self.cfg["global"].get("corner_freq", "sometimes")
         return self.CORNER_FREQS.get(key, self.CORNER_FREQS["sometimes"])
@@ -2477,7 +2497,7 @@ class Manager(QObject):
             except Exception:
                 pass
 
-    def _guide_zoom_refine(self, label, box, _json, clean):
+    def _guide_zoom_refine(self, label, box, _json, clean, think_budget=128):
         """Second-pass localization: crop the region around the first box,
         zoom in, and re-ask (ungrounded, image-only) for a tight box in the
         crop. Returns refined (nx, ny) normalized to the FULL image, or
@@ -2520,7 +2540,7 @@ class Manager(QObject):
             {"inline_data": {"mime_type": "image/jpeg", "data": b64}}]}]
         raw = clean(self._gemini_call(contents2, persona2,
                                       ground_with_image=False,
-                                      max_tokens=768, think="low"))
+                                      max_tokens=768, think=think_budget))
         d2 = _json.loads(raw)
         if not d2.get("found"):
             return None
@@ -2549,6 +2569,7 @@ class Manager(QObject):
         self.ai_busy = True
         self.guide_active = True
         self._guide_task = task
+        think_budget, do_zoom = self.guide_profile()   # speed/accuracy dial
         p.say("let me look… 👀" if first else "checking what's next… 👀", 8)
         step_no = len(self._guide_done) + 1
         done_txt = ("Steps ALREADY completed by the user: "
@@ -2609,7 +2630,8 @@ class Manager(QObject):
 
                 raw = clean(self._gemini_call(contents, persona,
                                               ground_with_image=first,
-                                              max_tokens=1024, think="low"))
+                                              max_tokens=1024,
+                                              think=think_budget))
                 try:
                     d = _json.loads(raw)
                 except Exception:
@@ -2638,7 +2660,7 @@ class Manager(QObject):
                                 "comments."}]}]
                         raw = clean(self._gemini_call(
                             retry, persona, ground_with_image=False,
-                            max_tokens=1024, think="low"))
+                            max_tokens=1024, think=think_budget))
                         try:
                             d = _json.loads(raw)
                         except Exception as je:
@@ -2661,9 +2683,9 @@ class Manager(QObject):
                         if area > 0.40:
                             # boxed a whole panel, not the element — hedge
                             hedge = True
-                        elif area < 0.0015:
-                            # already a tiny, tight box — precise enough;
-                            # skip the zoom call (saves a request + time)
+                        elif area < 0.0015 or not do_zoom:
+                            # already a tiny, tight box (precise enough), or
+                            # the speed profile skips zoom → keep first pass
                             pass
                         else:
                             # ZOOM PASS: crop around the box, re-ask on the
@@ -2672,7 +2694,8 @@ class Manager(QObject):
                             try:
                                 zoomed = self._guide_zoom_refine(
                                     str(d.get("label") or "the element"),
-                                    (bt, bl, bb, br), _json, clean)
+                                    (bt, bl, bb, br), _json, clean,
+                                    think_budget)
                                 if zoomed is not None:
                                     nx, ny = zoomed
                             except Exception:
@@ -2823,18 +2846,23 @@ class Manager(QObject):
                 "generationConfig": {"maxOutputTokens": max_tokens,
                                      "temperature": 0.8},
             }
-            if use_think and think == "low":
-                # cap the model's internal reasoning HARD — locating a button
-                # needs almost no thinking. Thinking counts as output tokens,
-                # so unbounded reasoning is both slow and quota-hungry. Use
-                # the smallest budget each model family accepts; if a model
-                # 400s on it, the caller retries that model without a cap.
+            if use_think and think is not None:
+                # cap the model's internal reasoning to `think` tokens (0
+                # disables thinking entirely for max speed). Thinking counts
+                # as output tokens, so unbounded reasoning is slow + quota-
+                # hungry. If a model 400s on the cap the caller retries it
+                # uncapped.
                 if model.startswith("gemini-2.5"):
                     b["generationConfig"]["thinkingConfig"] = {
-                        "thinkingBudget": 128}
+                        "thinkingBudget": think}
                 else:                     # 3.x and the -latest aliases
-                    b["generationConfig"]["thinkingConfig"] = {
-                        "thinkingLevel": "low", "thinkingBudget": 128}
+                    tc = {"thinkingBudget": think}
+                    if think == 0:
+                        tc["thinkingLevel"] = "none"
+                    else:
+                        tc["thinkingLevel"] = "low" if think <= 256 \
+                            else "medium"
+                    b["generationConfig"]["thinkingConfig"] = tc
             if grounded:
                 # live Google Search. All current models (3.x, 2.5, and the
                 # -latest aliases) use the new google_search tool; only the
@@ -2859,19 +2887,16 @@ class Manager(QObject):
                        f"models/{m}:generateContent?key={key}")
                 # grounded first (web + knowledge), then a raw fallback;
                 # the thinking cap is dropped ONLY if a model 400s on it
+                capping = think is not None      # 0 is a valid cap (disable)
                 gseq = (True, False) if want_ground else (False,)
                 variants = []
                 for gr in gseq:
-                    if think:
+                    if capping:
                         variants.append((gr, True))
                     variants.append((gr, False))
-                if think:
-                    # don't run the no-think fallbacks unless the capped try
-                    # actually 400s — mark them skippable
-                    pass
-                skip_no_think = bool(think)
+                skip_no_think = capping
                 for grounded, use_think in variants:
-                    if skip_no_think and think and not use_think:
+                    if skip_no_think and capping and not use_think:
                         continue          # only reached via a 400 below
                     body = make_body(m, grounded, use_think)
                     req = urllib.request.Request(
@@ -3580,6 +3605,17 @@ class CatWindow(QWidget):
         gm.setChecked(self.gcfg.get("guide_mode", False))
         gm.triggered.connect(mgr.toggle_guide_mode)
         agent.addAction(gm)
+        gqm = agent.addMenu("Guide speed ⚡")
+        cur_gq = self.gcfg.get("guide_quality", "balanced")
+        for key, label in (("fast", "Fast — snappy, less precise"),
+                           ("balanced", "Balanced"),
+                           ("accurate", "Accurate — slower, tighter")):
+            a = QAction(label, menu)
+            a.setCheckable(True)
+            a.setChecked(cur_gq == key)
+            a.triggered.connect(
+                lambda _=False, k=key: mgr.set_guide_quality(k))
+            gqm.addAction(a)
         nmai = QAction("Name this cat ✏️", menu)
         nmai.triggered.connect(self.rename_cat)
         agent.addAction(nmai)
