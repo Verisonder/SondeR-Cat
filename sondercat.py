@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713r"
+APP_BUILD = "0713s"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2378,13 +2378,33 @@ class Manager(QObject):
             if gg is not None and gg.isVisible():
                 gg.hide()
                 QApplication.processEvents()
-            scr = (self.primary().screen()
-                   or QGuiApplication.primaryScreen())
+            # capture the screen the ACTIVE window is on (multi-monitor):
+            # the thing being asked about is almost always in the foreground
+            scr = None
+            if platform.system() == "Windows":
+                try:
+                    import ctypes
+                    from ctypes import wintypes
+                    u = ctypes.windll.user32
+                    hwnd = u.GetForegroundWindow()
+                    rct = wintypes.RECT()
+                    if hwnd and u.GetWindowRect(hwnd, ctypes.byref(rct)):
+                        mid = QPoint((rct.left + rct.right) // 2,
+                                     (rct.top + rct.bottom) // 2)
+                        scr = QGuiApplication.screenAt(mid)
+                except Exception:
+                    scr = None
+            if scr is None:
+                scr = (self.primary().screen()
+                       or QGuiApplication.primaryScreen())
             geom = scr.geometry()
             pm = scr.grabWindow(0)
             maxw = 1600                    # more detail → better coord accuracy
             if pm.width() > maxw:
                 pm = pm.scaledToWidth(maxw, Qt.SmoothTransformation)
+            # keep the exact image we send, for the zoom-refine pass
+            # (QImage is safe to crop/save from the worker thread)
+            self._guide_img = pm.toImage()
             ba = QByteArray()
             buf = QBuffer(ba)
             buf.open(QIODevice.WriteOnly)
@@ -2415,6 +2435,62 @@ class Manager(QObject):
                     c._glide_to(c._ground_point(), speed=400)
             except Exception:
                 pass
+
+    def _guide_zoom_refine(self, label, box, _json, clean):
+        """Second-pass localization: crop the region around the first box,
+        zoom in, and re-ask (ungrounded, image-only) for a tight box in the
+        crop. Returns refined (nx, ny) normalized to the FULL image, or
+        None to keep the first-pass center. Runs on the worker thread —
+        QImage ops are thread-safe."""
+        img = getattr(self, "_guide_img", None)
+        if img is None or img.isNull():
+            return None
+        from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+        W, H = img.width(), img.height()
+        bt, bl, bb, br = box
+        # box → pixels, expand to ~3x with a floor so tiny boxes get context
+        x0, x1 = bl / 1000.0 * W, br / 1000.0 * W
+        y0, y1 = bt / 1000.0 * H, bb / 1000.0 * H
+        bw, bh = max(20.0, x1 - x0), max(16.0, y1 - y0)
+        cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+        rw = min(W, max(bw * 3.0, 260.0))
+        rh = min(H, max(bh * 3.0, 200.0))
+        rx = max(0, min(int(cx - rw / 2), W - int(rw)))
+        ry = max(0, min(int(cy - rh / 2), H - int(rh)))
+        rw, rh = int(rw), int(rh)
+        crop = img.copy(rx, ry, rw, rh)
+        if crop.width() < 640:                    # zoom small crops up
+            crop = crop.scaledToWidth(640, Qt.SmoothTransformation)
+        ba = QByteArray()
+        buf = QBuffer(ba)
+        buf.open(QIODevice.WriteOnly)
+        crop.save(buf, "JPEG", 90)
+        buf.close()
+        import base64
+        b64 = base64.b64encode(bytes(ba)).decode()
+        persona2 = (
+            "This is a zoomed-in crop of a screenshot. Locate the element "
+            f"described as: {label!r}. Respond with ONLY minified JSON: "
+            '{"found":true,"box":[112,204,146,318]} where box is the TIGHT '
+            "bounding box [top,left,bottom,right], each an INTEGER "
+            "normalized 0-1000 of THIS image's height/width. If it isn't "
+            'in this crop, reply {"found":false}.')
+        contents2 = [{"role": "user", "parts": [
+            {"inline_data": {"mime_type": "image/jpeg", "data": b64}}]}]
+        raw = clean(self._gemini_call(contents2, persona2,
+                                      ground_with_image=False))
+        d2 = _json.loads(raw)
+        if not d2.get("found"):
+            return None
+        zt, zl, zb, zr = [float(v) for v in d2.get("box")]
+        czx = (zl + zr) / 2.0 / 1000.0            # crop-relative 0..1
+        czy = (zt + zb) / 2.0 / 1000.0
+        fx = (rx + czx * rw) / W * 1000.0         # back to full-image 0-1000
+        fy = (ry + czy * rh) / H * 1000.0
+        # distrust a refinement that jumped outside the crop region
+        if not (0 <= fx <= 1000 and 0 <= fy <= 1000):
+            return None
+        return fx, fy
 
     def _guide_step_run(self, task, first):
         """One step of the guided tour: screenshot → Gemini locates the next
@@ -2490,7 +2566,7 @@ class Manager(QObject):
                     return raw
 
                 raw = clean(self._gemini_call(contents, persona,
-                                              ground_with_image=True))
+                                              ground_with_image=first))
                 try:
                     d = _json.loads(raw)
                 except Exception:
@@ -2527,6 +2603,42 @@ class Manager(QObject):
                             raise RuntimeError(
                                 f"{je} — reply began: {raw[:80]!r}") from None
 
+                # coordinate extraction + accuracy passes happen HERE in the
+                # worker (network calls must stay off the UI thread)
+                nx = ny = None
+                hedge = False
+                if d.get("found") and not d.get("done"):
+                    box = d.get("box")
+                    try:
+                        bt, bl, bb, br = [float(v) for v in box]
+                        nx = (bl + br) / 2.0
+                        ny = (bt + bb) / 2.0
+                        area = max(0.0, (bb - bt)) * max(0.0, (br - bl)) / 1e6
+                        if area > 0.40:
+                            # boxed a whole panel, not the element — hedge
+                            hedge = True
+                        else:
+                            # ZOOM PASS: crop around the box, re-ask on the
+                            # zoomed crop for a precise fix. Any failure →
+                            # keep the first-pass center.
+                            try:
+                                zoomed = self._guide_zoom_refine(
+                                    str(d.get("label") or "the element"),
+                                    (bt, bl, bb, br), _json, clean)
+                                if zoomed is not None:
+                                    nx, ny = zoomed
+                            except Exception:
+                                pass
+                    except Exception:              # fallback: a center point
+                        try:
+                            nx = float(d.get("x", 500))
+                            ny = float(d.get("y", 500))
+                        except Exception:
+                            nx, ny = 500.0, 500.0
+                            hedge = True
+                    nx = max(0, min(1000, int(round(nx))))
+                    ny = max(0, min(1000, int(round(ny))))
+
                 def apply():
                     self.ai_busy = False
                     say = str(d.get("say") or "").strip()
@@ -2542,20 +2654,10 @@ class Manager(QObject):
                         self.primary().say(
                             say or "hmm, I can't spot it from here… 🤔", 8)
                         return
-                    box = d.get("box")
-                    try:
-                        ymin, xmin, ymax, xmax = [float(v) for v in box]
-                        nx = (xmin + xmax) / 2.0
-                        ny = (ymin + ymax) / 2.0
-                    except Exception:              # fallback: a center point
-                        try:
-                            nx = float(d.get("x", 500))
-                            ny = float(d.get("y", 500))
-                        except Exception:
-                            nx = ny = 500.0
-                    nx = max(0, min(1000, int(round(nx))))
-                    ny = max(0, min(1000, int(round(ny))))
                     label = str(d.get("label") or "here").strip()
+                    if hedge:
+                        say = ("somewhere around here — " + say) if say \
+                            else "somewhere around here!"
                     tx = geom.left() + nx * geom.width() // 1000
                     ty = geom.top() + ny * geom.height() // 1000
                     c = self.primary()
@@ -2605,9 +2707,14 @@ class Manager(QObject):
                     # end the session so the power-eyes and glow switch off
                     # instead of glowing forever at a dead tour
                     self._end_guide(walk_home=False, quiet=True)
-                    self.primary().say(
-                        f"my guide-brain glitched… ({msg}) — "
-                        "ask me again to retry!", 8)
+                    if "429" in msg:
+                        self.primary().say(
+                            "Google says I'm thinking too fast 😅 — wait "
+                            "a few seconds and ask me again!", 8)
+                    else:
+                        self.primary().say(
+                            f"my guide-brain glitched… ({msg}) — "
+                            "ask me again to retry!", 8)
                 ui(fail)
         threading.Thread(target=work, daemon=True).start()
 
