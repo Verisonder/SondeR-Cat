@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.7.0"
-APP_BUILD = "0714s"
+APP_BUILD = "0714t"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -964,14 +964,22 @@ class DuckHuntGame(QWidget):
     # ---- duck lifecycle ------------------------------------------------
     def _spawn(self):
         import random
-        # colour rarity: brown common, blue rarer, red rarest (worth more)
+        # spawn rates: brown 70% (common), blue 20%, red 10% (rare).
+        # points: brown 1, blue 2, red 3. base speeds: brown normal,
+        # blue slightly faster, red fastest.
         roll = random.random()
-        if roll > 0.93:
-            color, pts, spd = "red", 500, 6.2
-        elif roll > 0.75:
-            color, pts, spd = "blue", 250, 5.0
+        if roll < 0.70:
+            color, pts, spd = "brown", 1, 4.0
+        elif roll < 0.90:
+            color, pts, spd = "blue", 2, 5.2
         else:
-            color, pts, spd = "brown", 100, 4.0
+            color, pts, spd = "red", 3, 6.6
+        # difficulty ramp (like Chrome dino): everything speeds up the longer
+        # you play — +6% per 10s, capped at 2.2x
+        import time as _t
+        played = max(0.0, _t.time() - self.start_t - self.countdown)
+        diff = min(2.2, 1.0 + played * 0.006)
+        spd *= diff
         from_left = random.random() < 0.5
         y = random.randint(int(self.sh * 0.08), int(self.sh * 0.62))
         vx = spd * (1 if from_left else -1) * random.uniform(0.85, 1.25)
@@ -993,9 +1001,14 @@ class DuckHuntGame(QWidget):
             return
         # keep 2–4 ducks alive
         alive = [d for d in self.ducks if d["alive"] and not d["fall"]]
-        if len(alive) < 3 and now >= self.spawn_at:
+        # difficulty ramp: more ducks on screen + quicker spawns over time
+        played = max(0.0, now - self.start_t - self.countdown)
+        max_ducks = 3 + int(played // 20)          # +1 every 20s
+        max_ducks = min(max_ducks, 7)
+        gap = max(0.28, 0.7 - played * 0.004)      # spawns speed up
+        if len(alive) < max_ducks and now >= self.spawn_at:
             self._spawn()
-            self.spawn_at = now + 0.7
+            self.spawn_at = now + gap
         for d in self.ducks:
             d["flap"] = (d["flap"] + 0.35)
             if d["fall"]:
@@ -1090,17 +1103,24 @@ class DuckHuntGame(QWidget):
             p.setPen(Qt.NoPen)
             p.setBrush(col)
             p.drawEllipse(QPointF(pop["x"], pop["y"]), r, r)
-        # HUD
+        # HUD — rounded dark panel behind the text so the score is readable
+        # over any desktop
+        from PySide6.QtCore import QRectF
+        panel = QRectF(18, 18, 470, 74)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(18, 20, 28, 205))
+        p.drawRoundedRect(panel, 14, 14)
         f = QFont("Segoe UI", 20, QFont.Bold)
         p.setFont(f)
         p.setPen(QColor(255, 255, 255))
         acc = (100 * self.hits // self.shots) if self.shots else 0
-        p.drawText(28, 44, f"🦆  Score: {self.score}    "
+        p.drawText(34, 50, f"🦆  Score: {self.score}    "
                            f"Hits: {self.hits}/{self.shots} ({acc}%)")
         f2 = QFont("Segoe UI", 12)
         p.setFont(f2)
-        p.setPen(QColor(220, 220, 220))
-        p.drawText(28, 70, "Click the ducks!   ·   Esc to quit")
+        p.setPen(QColor(210, 210, 210))
+        p.drawText(34, 78, "brown 1  ·  blue 2  ·  red 3      "
+                           "click the ducks · Esc to quit")
         # 3-2-1-GO! countdown, big and centered
         import time as _t2
         elapsed = _t2.time() - self.start_t
