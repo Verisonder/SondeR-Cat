@@ -3769,6 +3769,7 @@ class CatWindow(QWidget):
         self._pet_last_move = 0.0        # last head-wiggle (session gap check)
         self._petting_until = 0.0       # purr keeps going until this time
         self._purring = False           # is the pet-purr currently playing
+        self._sleep_purring = False      # is the sleep-purr currently playing
         self._last_sleep_purr = 0.0
         self.bubble_text = ""
         self.bubble_until = 0.0
@@ -4426,6 +4427,16 @@ class CatWindow(QWidget):
                     self.mgr._sfx.stop_purr()
             except Exception:
                 pass
+        # stop the SLEEP purr the instant the cat wakes (leaves SLEEP) or if
+        # sounds get turned off
+        if getattr(self, "_sleep_purring", False) \
+                and (self.state != SLEEP or not self.gcfg.get("sounds", True)):
+            self._sleep_purring = False
+            try:
+                if self.mgr._sfx is not None:
+                    self.mgr._sfx.stop_purr()
+            except Exception:
+                pass
         bw = getattr(self.mgr, "_bubble_win", None)
         if bw is not None and bw.cat is self:
             bw.tick()
@@ -4568,6 +4579,7 @@ class CatWindow(QWidget):
                                     self.mgr.cfg["global"].get(
                                         "sound_volume", 1.0))
                             self.mgr._sfx.purr_sleep()
+                            self._sleep_purring = True
                         except Exception:
                             pass
                 elif kind == "dance":
