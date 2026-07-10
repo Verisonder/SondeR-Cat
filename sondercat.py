@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.5.2"
-APP_BUILD = "0714j"
+APP_BUILD = "0714k"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -925,6 +925,168 @@ class GuideGlow(QWidget):
         p.drawEllipse(QPointF(cx, cy), r * 0.5, r * 0.5)
 
 
+class DuckHuntGame(QWidget):
+    """Hidden easter-egg minigame: ducks fly across the whole screen, click
+    to shoot them. A full-screen, frameless, transparent overlay. The cat
+    itself stands in the corner with a gun (drawn by the CatWindow); this
+    window handles the ducks, score, crosshair and hits."""
+
+    def __init__(self, mgr):
+        super().__init__(None, Qt.FramelessWindowHint
+                         | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.mgr = mgr
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setCursor(Qt.CrossCursor)
+        self.setFocusPolicy(Qt.StrongFocus)
+        scr = QGuiApplication.primaryScreen().geometry()
+        self.setGeometry(scr)
+        self.sw, self.sh = scr.width(), scr.height()
+        self.ducks = []          # each: dict(x,y,vx,vy,color,pts,alive,fall,flap)
+        self.pops = []           # hit puffs: dict(x,y,t)
+        self.score = 0
+        self.shots = 0
+        self.hits = 0
+        self.spawn_at = 0.0
+        self.frame = 0
+        self.running = True
+        self._tick = QTimer(self)
+        self._tick.timeout.connect(self._step)
+        self._tick.start(33)     # ~30 fps
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.setFocus()
+
+    # ---- duck lifecycle ------------------------------------------------
+    def _spawn(self):
+        import random
+        # colour rarity: brown common, blue rarer, red rarest (worth more)
+        roll = random.random()
+        if roll > 0.93:
+            color, pts, spd = "red", 500, 6.2
+        elif roll > 0.75:
+            color, pts, spd = "blue", 250, 5.0
+        else:
+            color, pts, spd = "brown", 100, 4.0
+        from_left = random.random() < 0.5
+        y = random.randint(int(self.sh * 0.08), int(self.sh * 0.62))
+        vx = spd * (1 if from_left else -1) * random.uniform(0.85, 1.25)
+        vy = random.uniform(-1.4, -0.4)
+        x = -40 if from_left else self.sw + 40
+        self.ducks.append(dict(x=float(x), y=float(y), vx=vx, vy=vy,
+                               color=color, pts=pts, alive=True,
+                               fall=False, flap=0.0))
+
+    def _step(self):
+        import time as _t
+        if not self.running:
+            return
+        now = _t.time()
+        self.frame += 1
+        # keep 2–4 ducks alive
+        alive = [d for d in self.ducks if d["alive"] and not d["fall"]]
+        if len(alive) < 3 and now >= self.spawn_at:
+            self._spawn()
+            self.spawn_at = now + 0.7
+        for d in self.ducks:
+            d["flap"] = (d["flap"] + 0.35)
+            if d["fall"]:
+                d["vy"] += 0.9          # gravity after being shot
+                d["y"] += d["vy"]
+                d["x"] += d["vx"] * 0.3
+            else:
+                d["x"] += d["vx"]
+                d["y"] += d["vy"]
+                d["vy"] += 0.02         # gentle bob/gravity
+                if d["y"] < self.sh * 0.05:
+                    d["vy"] = abs(d["vy"])
+        # cull off-screen
+        self.ducks = [d for d in self.ducks
+                      if -80 < d["x"] < self.sw + 80 and d["y"] < self.sh + 90]
+        self.pops = [p for p in self.pops if now - p["t"] < 0.25]
+        self.update()
+
+    # ---- input ---------------------------------------------------------
+    def mousePressEvent(self, ev):
+        import time as _t
+        from PySide6.QtGui import QImage
+        mx, my = ev.position().x(), ev.position().y()
+        self.shots += 1
+        hit = None
+        for d in reversed(self.ducks):
+            if not d["alive"] or d["fall"]:
+                continue
+            w = sprites.DUCK_W * 4
+            h = sprites.DUCK_H * 4
+            if d["x"] <= mx <= d["x"] + w and d["y"] <= my <= d["y"] + h:
+                hit = d
+                break
+        if hit:
+            hit["fall"] = True
+            hit["alive"] = False
+            hit["vy"] = 2.0
+            hit["vx"] = 0.0
+            self.score += hit["pts"]
+            self.hits += 1
+            self.pops.append(dict(x=mx, y=my, t=_t.time()))
+        else:
+            self.pops.append(dict(x=mx, y=my, t=_t.time(), miss=True))
+        self.update()
+
+    def keyPressEvent(self, ev):
+        if ev.key() == Qt.Key_Escape:
+            self.stop()
+
+    def stop(self):
+        self.running = False
+        self._tick.stop()
+        self.hide()
+        self.mgr._end_duck_hunt()
+
+    # ---- painting ------------------------------------------------------
+    def paintEvent(self, _ev):
+        from PySide6.QtGui import QPainter, QColor, QFont
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, False)
+        # faint dim so ducks read against any desktop
+        p.fillRect(self.rect(), QColor(10, 12, 20, 40))
+        for d in self.ducks:
+            wing_down = (int(d["flap"]) % 2 == 1)
+            flip = d["vx"] < 0
+            img = sprites.render_duck(wing_down, d["color"], 4, flip)
+            if d["fall"]:
+                # tip over when shot
+                p.save()
+                cx = d["x"] + img.width() / 2
+                cy = d["y"] + img.height() / 2
+                p.translate(cx, cy)
+                p.rotate(180)
+                p.translate(-cx, -cy)
+                p.drawImage(int(d["x"]), int(d["y"]), img)
+                p.restore()
+            else:
+                p.drawImage(int(d["x"]), int(d["y"]), img)
+        # hit/miss puffs
+        for pop in self.pops:
+            col = QColor(255, 90, 60, 180) if pop.get("miss") \
+                else QColor(255, 220, 90, 220)
+            r = 10
+            p.setPen(Qt.NoPen)
+            p.setBrush(col)
+            p.drawEllipse(QPointF(pop["x"], pop["y"]), r, r)
+        # HUD
+        f = QFont("Segoe UI", 20, QFont.Bold)
+        p.setFont(f)
+        p.setPen(QColor(255, 255, 255))
+        acc = (100 * self.hits // self.shots) if self.shots else 0
+        p.drawText(28, 44, f"🦆  Score: {self.score}    "
+                           f"Hits: {self.hits}/{self.shots} ({acc}%)")
+        f2 = QFont("Segoe UI", 12)
+        p.setFont(f2)
+        p.setPen(QColor(220, 220, 220))
+        p.drawText(28, 70, "Click the ducks!   ·   Esc to quit")
+
+
 class GuardBeam(QWidget):
     """Full-screen click-through overlay: a red search beam that sweeps
     around while guard mode is on. Purely visual; never blocks input."""
@@ -1356,6 +1518,9 @@ class Manager(QObject):
         self._music_timer.timeout.connect(self._poll_music)
         self._music_timer.start(120)
         self._guard_beam = None
+        self._duck_game = None          # easter-egg minigame window
+        self._ver_clicks = 0            # 7 clicks on the version → duck hunt
+        self._ver_click_t = 0.0
         self._guard_timer = QTimer()
         self._guard_timer.timeout.connect(self._tick_guard)
         self._guard_timer.start(33)
@@ -2477,6 +2642,44 @@ class Manager(QObject):
         except Exception:
             return None, None
 
+    def _on_version_click(self):
+        """7 clicks on the 'Installed: vX' menu item → secret Duck Hunt."""
+        import time as _t
+        now = _t.time()
+        if now - self._ver_click_t > 2.0:
+            self._ver_clicks = 0        # too slow → reset the streak
+        self._ver_click_t = now
+        self._ver_clicks += 1
+        left = 7 - self._ver_clicks
+        if self._ver_clicks >= 7:
+            self._ver_clicks = 0
+            self._start_duck_hunt()
+        elif left <= 3:
+            self.say_primary(f"…{left}", 1)
+
+    def _start_duck_hunt(self):
+        if self._duck_game is not None:
+            return
+        c = self.primary()
+        # end anything that owns the cat, then strike the gunner pose in the
+        # bottom-left corner
+        self._end_guide(walk_home=False, quiet=True)
+        if self.cfg["global"].get("guard_mode"):
+            self.cfg["global"]["guard_mode"] = False
+        c.duck_gunner = True
+        c._enter_duck_corner()
+        c.say("🦆 DUCK HUNT! click the ducks — Esc to quit", 5)
+        self._duck_game = DuckHuntGame(self)
+
+    def _end_duck_hunt(self):
+        self._duck_game = None
+        c = self.primary()
+        c.duck_gunner = False
+        try:
+            c._parachute_to_ground()
+        except Exception:
+            pass
+
     def _end_guide(self, walk_home=True, quiet=False):
         """Close the guided-tour session (glowy eyes off, cat back home)."""
         if not self.guide_active and self._guide_task is None:
@@ -3238,6 +3441,7 @@ class CatWindow(QWidget):
 
         # dragging / wobble
         self.dragging = False
+        self.duck_gunner = False        # easter-egg: holding a gun, angry
         self.drag_offset = QPoint()
         self.mochi = 1.0
         self._drag_target_offset = QPoint()
@@ -3730,7 +3934,7 @@ class CatWindow(QWidget):
         chan = " · Store" if IS_STORE_BUILD else ""
         uinf = QAction(
             f"Installed: v{APP_VERSION} · build {APP_BUILD}{chan}", menu)
-        uinf.setEnabled(False)
+        uinf.triggered.connect(mgr._on_version_click)   # 7 clicks = 🦆
         upds.addAction(uinf)
 
         quit_act = QAction("Quit", menu)
@@ -4065,7 +4269,17 @@ class CatWindow(QWidget):
                        and self.state in (IDLE, PEEK, THINK))
 
         # --- state selection (priority order) ---
-        if mgr.guide_active:
+        if getattr(self, "duck_gunner", False):
+            # 🦆 DUCK HUNT LOCK: cat stays put in its corner, gun ready — no
+            # wandering, sleeping, grooming, perching, chasing or hiding.
+            self.groom_until = 0.0
+            self.sleep_at = now + self.gcfg["sleep_seconds"]
+            self.next_perch_try = now + 999
+            self.next_corner_at = now + 999
+            self._corner_until = 0.0
+            if self.state not in (IDLE,) and self.glide_target is None:
+                self.state = IDLE
+        elif mgr.guide_active:
             # 🧭 GUIDED TOUR LOCK: nothing interrupts the tour — no stretch,
             # overheat, scroll-play, typing, chase, hide, sleep, groom,
             # perch or corner-standing. The cat only glides to the spot it's
@@ -4639,6 +4853,21 @@ class CatWindow(QWidget):
                  min(self.x(), scr.right() - self.width() - 8))
         gy = scr.bottom() - self._feet_offset()
         return QPoint(gx, gy)
+
+    def _enter_duck_corner(self):
+        """Easter-egg: plant the cat in the bottom-LEFT corner as the gunner."""
+        if self.perch_hwnd is not None:
+            self._end_perch(go_home=False)
+        self.state = IDLE
+        self.manual_peek = False
+        self.groom_until = 0.0
+        self._corner_going = False
+        self._corner_until = 0.0
+        self._sync_float()
+        scr = self.screen().availableGeometry()
+        gy = scr.bottom() - self._feet_offset()
+        gx = scr.left() + 8
+        self._glide_to(QPoint(gx, gy), speed=600)
 
     def _corner_point(self):
         """The bottom corner the cat is currently CLOSEST to (left or right),
@@ -5402,9 +5631,29 @@ class CatWindow(QWidget):
                         bx = (ex - (0 if inner else 1) + k) * s
                         by = int((ey - 1.4) * s) + slant * (s * 2 // 3)
                         pp.fillRect(bx, by, s, s, brow)
+            if guarding or self.duck_gunner:
+                # BIG angry slanted brows: thick bars angling down-inward
+                brow = QColor("#261c14")
+                bw = sprites.EYE_W + 1          # one cell wider than the eye
+                for i, (ex, ey) in enumerate(eyes):
+                    inner = (i == 0)            # slant down toward the center
+                    for k in range(bw):
+                        slant = k if inner else (bw - 1 - k)
+                        bx = (ex - (0 if inner else 1) + k) * s
+                        by = int((ey - 1.4) * s) + slant * (s * 2 // 3)
+                        pp.fillRect(bx, by, s, s, brow)
+            if self.duck_gunner:
+                # a little blaster held out in front of the cat
+                gun = QColor("#3a3f47")
+                barrel = QColor("#2a2e34")
+                tip = QColor("#e8912e")
+                gx0 = int(sprites.GRID_W * 0.62) * s   # in front of the body
+                gy0 = int(sprites.GRID_H * 0.60) * s
+                pp.fillRect(gx0, gy0, s * 5, s * 2, gun)          # body
+                pp.fillRect(gx0 + s * 5, gy0 + s // 2, s * 4, s, barrel)  # barrel
+                pp.fillRect(gx0 + s * 9, gy0 + s // 2, s, s, tip)  # muzzle
+                pp.fillRect(gx0 + s, gy0 + s * 2, s * 2, s * 2, gun)  # grip
             pp.end()
-
-        jy = 0
         if now < self.jump_until:
             t = (self.jump_until - now) / 1.2
             jy = -int(abs(math.sin(t * math.pi * 3)) * 18)

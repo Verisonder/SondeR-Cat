@@ -780,3 +780,78 @@ def render_icon(palette, pattern="tabby", scale=12, frame="sit_a"):
     p.end()
     return img
 
+
+
+# ---------------------------------------------------------------------------
+# DUCK HUNT easter-egg sprites (self-contained; not part of the cat FRAMES).
+# Two wing positions per duck, drawn flying to the RIGHT; flipped for left.
+# Grid is 18 wide x 13 tall. Legend: . transparent, K outline, B body,
+# W belly, O beak/orange, E eye-white, P pupil.
+# ---------------------------------------------------------------------------
+DUCK_W, DUCK_H = 18, 13
+
+DUCK_WINGUP = [
+    "..................",
+    "......KK..........",
+    ".....KBBK.........",
+    "....KBBBBK...KKKK.",
+    "....KBBBBBKKKBBBEK",
+    ".....KBBBBBBBBBPKO",
+    "......KBBBBBBBBKKO",
+    "......KBWWWWWBBK..",
+    ".......KWWWWWWK...",
+    "........KKKKKK....",
+    "..................",
+    "..................",
+    "..................",
+]
+
+DUCK_WINGDOWN = [
+    "..................",
+    "..................",
+    "............KKKK..",
+    "...........KBBBEK.",
+    "....KKKKKKKKBBBPKO",
+    "....KBBBBBBBBBBKKO",
+    "....KBWWWWWWBBBK..",
+    ".....KWWWWWWWBK...",
+    "......KKKKKKKK....",
+    ".....KBBBK........",
+    "....KBBBBK........",
+    ".....KBBK.........",
+    "......K...........",
+]
+
+# colour variants → (body, belly) ; outline/beak/eye shared. Higher-point
+# ducks are rarer (see the game code).
+DUCK_PALETTES = {
+    "brown": {"K": "#2b2b2b", "B": "#8a6b45", "W": "#f4ead7",
+              "O": "#e8912e", "E": "#ffffff", "P": "#141414"},
+    "blue":  {"K": "#20263a", "B": "#4a74c8", "W": "#dfe8fb",
+              "O": "#e8912e", "E": "#ffffff", "P": "#141414"},
+    "red":   {"K": "#331a1a", "B": "#c8503a", "W": "#f8ddd2",
+              "O": "#ffcf3a", "E": "#ffffff", "P": "#141414"},
+}
+
+
+def render_duck(wing_down=False, color="brown", scale=4, flip=False):
+    """Render a duck frame to a QImage. flip=True → facing left."""
+    from PySide6.QtGui import QImage, QColor, QPainter
+    grid = DUCK_WINGDOWN if wing_down else DUCK_WINGUP
+    pal = DUCK_PALETTES.get(color, DUCK_PALETTES["brown"])
+    img = QImage(DUCK_W * scale, DUCK_H * scale, QImage.Format_ARGB32)
+    img.fill(0)
+    p = QPainter(img)
+    cache = {}
+    for gy, row in enumerate(grid):
+        for gx, ch in enumerate(row):
+            if ch == "." or gx >= DUCK_W:
+                continue
+            col = cache.get(ch)
+            if col is None:
+                col = QColor(pal.get(ch, "#ff00ff"))
+                cache[ch] = col
+            x = (DUCK_W - 1 - gx) if flip else gx
+            p.fillRect(x * scale, gy * scale, scale, scale, col)
+    p.end()
+    return img
