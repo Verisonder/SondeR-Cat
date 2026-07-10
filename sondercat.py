@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0716c"
+APP_BUILD = "0716d"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1586,34 +1586,47 @@ class FeedingBowls(QWidget):
     to them and asks nicely. Hidden during fullscreen apps."""
 
     PX = 4                      # pixel cell size
-    GAP = 5                     # cells between bowls
-    # bowl shape grid (22 wide x 20 tall), reference-style rounded dish.
-    # K=dark outline  B=body color  H=body highlight  M=food mound  m=mound dk
-    # F=contents-fill zone (kibble/water shows here by level)  .=transparent
-    SHAPE = [
-        "........KKKKKKKK......",
-        ".....KKKMMMMMMMMKKK...",
-        "...KKMMMMMMMMMMMMMMKK.",
-        "..KMMMmMMMMMMMMMMmMMMK",
-        "..KBMMMMMMMMMMMMMMMBK.",
-        ".KBBKKKKKKKKKKKKKKBBK.",
-        ".KBHFFFFFFFFFFFFFFHBK.",
-        ".KBFFFFFFFFFFFFFFFFBK.",
-        ".KBFFFFFFFFFFFFFFFFBK.",
-        ".KBBFKKFFFFFFFFKKFBBK.",
-        ".KBFFFFFFFFFFFFFFFFBK.",
-        ".KBBFKKKKKKKKKKKKFBBK.",
-        "..KBBFFFFFFFFFFFFBBK..",
-        "..KKBBFFFFFFFFFFBBKK..",
-        "...KKBBFFFFFFFFBBKK...",
-        ".....KKBBBBBBBBKK.....",
-        ".......KKKKKKKKKK.....",
-        "........KK....KK......",
-        "........KK....KK......",
-        "........KK....KK......",
+    GAP = 4                     # cells between bowls
+    # Two 24x16 grids. K=outline B=body H=highlight M=mound m=mound-dark
+    # F=water fill zone  .=transparent
+    FOOD_SHAPE = [
+        "........................",
+        "..........MMMM..........",
+        "........MMMMMMMM........",
+        "......MMMMmmmmMMMM......",
+        "....KKMMmmmmmmmmMMKK....",
+        "...KKMmmmmmmmmmmmmMKK...",
+        "..KKKKKKKKKKKKKKKKKKKK..",
+        "..KBHHHHHBBBBBBBBBBBBK..",
+        "..KBHHHHHBBBBBBBBBBBBK..",
+        "..KBBBBBBBBBBBBBBBBBBK..",
+        "..KBBBBBBBBBBBBBBBBBBK..",
+        "...KBBBBBBBBBBBBBBBBK...",
+        "....KKBBBBBBBBBBBBKK....",
+        "......KKKKKKKKKKKK......",
+        ".....KBBK......KBBK.....",
+        ".....KKKK......KKKK.....",
     ]
-    BW = 22
-    BH = 20
+    WATER_SHAPE = [
+        "........................",
+        "........................",
+        "........................",
+        "........................",
+        "....KKKKKKKKKKKKKKKK....",
+        "...KKBBFFFFFFFFFFFFBKK..",
+        "..KKKKKKKKKKKKKKKKKKKK..",
+        "..KBHHHHHBBBBBBBBBBBBK..",
+        "..KBHHHHHBBBBBBBBBBBBK..",
+        "..KBBBBBBBBBBBBBBBBBBK..",
+        "..KBBBBBBBBBBBBBBBBBBK..",
+        "...KBBBBBBBBBBBBBBBBK...",
+        "....KKBBBBBBBBBBBBKK....",
+        "......KKKKKKKKKKKK......",
+        ".....KBBK......KBBK.....",
+        ".....KKKK......KKKK.....",
+    ]
+    BW = 24
+    BH = 16
 
     def __init__(self, mgr):
         super().__init__(None, Qt.FramelessWindowHint
@@ -1708,18 +1721,22 @@ class FeedingBowls(QWidget):
         if is_water:
             body, body_hi = QColor("#50b4dc"), QColor("#8cd2ee")
             fill, shine = QColor("#4f9fd8"), QColor("#8cc6ea")
-            mound, mound_d = QColor("#3f9ac8"), QColor("#2f7fa8")   # water top
+            grid = self.WATER_SHAPE
         else:
-            body, body_hi = QColor("#e12d28"), QColor("#f26b60")
-            fill, shine = QColor("#b07a3e"), QColor("#c99a5c")
-            mound, mound_d = QColor("#8a5620"), QColor("#6d4418")   # kibble top
-        # contents fill zone (F cells) fill bottom-up by level
-        f_rows = [y for y, row in enumerate(self.SHAPE) if "F" in row]
-        top_f, bot_f = min(f_rows), max(f_rows)
-        span = bot_f - top_f + 1
-        filled = int(round(level * span))
-        fill_start = bot_f - filled + 1
-        for y, row in enumerate(self.SHAPE):
+            body, body_hi = QColor("#c85a2c"), QColor("#e08a4a")
+            grid = self.FOOD_SHAPE
+        mound = QColor("#96602d")       # kibble mound
+        mound_d = QColor("#734820")
+        # water fill zone (F) shows from the bottom up by level
+        f_rows = [y for y, row in enumerate(grid) if "F" in row]
+        if f_rows:
+            top_f, bot_f = min(f_rows), max(f_rows)
+            span = bot_f - top_f + 1
+            filled = int(round(level * span))
+            fill_start = bot_f - filled + 1
+        else:
+            fill_start = 999
+        for y, row in enumerate(grid):
             for x, ch in enumerate(row):
                 X, Y = ox + x * px, y * px
                 if ch == "K":
@@ -1736,8 +1753,6 @@ class FeedingBowls(QWidget):
                     if level > 0 and y >= fill_start:
                         c = shine if (x + y) % 4 == 0 else fill
                         p.fillRect(X, Y, px, px, c)
-                    else:
-                        p.fillRect(X, Y, px, px, body)   # empty → show body
 
     def paintEvent(self, _ev):
         from PySide6.QtGui import QPainter
