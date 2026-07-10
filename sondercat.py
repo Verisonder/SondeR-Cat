@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.3.0"
-APP_BUILD = "0713p"
+APP_BUILD = "0713q"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -5002,11 +5002,20 @@ class CatWindow(QWidget):
 
         name = self._frame_name()
         hot = (self.state == OVERHEAT)
-        # while typing, face the CENTER of the screen: cat on the right half
-        # looks left, cat on the left half looks right (art faces left by
-        # default, so flip when the cat is on the LEFT half).
+        # face the CENTER of the screen while typing AND while just standing
+        # around (idle/thinking): cat on the right half looks left, cat on
+        # the left half looks right (art faces left by default, so flip when
+        # the cat is on the LEFT half). Only while standing still — a cat
+        # mid-walk would visibly pop-flip crossing the middle — and never on
+        # guard duty (the helmet/flashlight overlays aren't mirrored).
         face_flip = False
-        if self.state in (KNEAD, OVERHEAT):
+        flip_state = (self.state in (KNEAD, OVERHEAT)
+                      or (self.state in (IDLE, THINK)
+                          and self.glide_target is None
+                          and not self.dragging
+                          and not self.mgr.cfg["global"].get(
+                              "guard_mode", False)))
+        if flip_state:
             scr = (self.screen() or QGuiApplication.primaryScreen()).geometry()
             cat_cx = self.x() + self.width() // 2
             screen_mid = (scr.left() + scr.right()) // 2
