@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.0"
-APP_BUILD = "0716j"
+APP_BUILD = "0716k"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -5445,12 +5445,12 @@ class CatWindow(QWidget):
         if tx is not None:
             scr = QGuiApplication.screenAt(QPoint(tx, 0)) \
                 or self.screen() or QGuiApplication.primaryScreen()
-            g = scr.geometry()
+            g = scr.availableGeometry()      # excludes the taskbar
             x = max(g.left(), min(tx - self.width() // 2,
                                   g.right() - self.width()))
         else:
             scr = self.screen() or QGuiApplication.primaryScreen()
-            g = scr.geometry()
+            g = scr.availableGeometry()
             x = max(g.left(), min(self.x(), g.right() - self.width()))
         self._glide_to(QPoint(x, g.bottom() - self.height() + 1))
 
