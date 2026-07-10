@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.5.2"
-APP_BUILD = "0714o"
+APP_BUILD = "0714p"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -949,6 +949,9 @@ class DuckHuntGame(QWidget):
         self.spawn_at = 0.0
         self.frame = 0
         self.running = True
+        import time as _t0
+        self.start_t = _t0.time()
+        self.countdown = 3.0            # 3-2-1-GO before ducks appear
         self._img_cache = {}     # (wing_down,color,flip) -> QImage (12 max)
         self._tick = QTimer(self)
         self._tick.timeout.connect(self._step)
@@ -984,6 +987,10 @@ class DuckHuntGame(QWidget):
             return
         now = _t.time()
         self.frame += 1
+        # 3-2-1-GO! hold everything until the countdown finishes
+        if now - self.start_t < self.countdown:
+            self.update()
+            return
         # keep 2–4 ducks alive
         alive = [d for d in self.ducks if d["alive"] and not d["fall"]]
         if len(alive) < 3 and now >= self.spawn_at:
@@ -1013,6 +1020,8 @@ class DuckHuntGame(QWidget):
     # ---- input ---------------------------------------------------------
     def mousePressEvent(self, ev):
         import time as _t
+        if _t.time() - self.start_t < self.countdown:
+            return                       # not started yet — no shooting
         mx, my = ev.position().x(), ev.position().y()
         self.shots += 1
         hit = None
@@ -1092,6 +1101,26 @@ class DuckHuntGame(QWidget):
         p.setFont(f2)
         p.setPen(QColor(220, 220, 220))
         p.drawText(28, 70, "Click the ducks!   ·   Esc to quit")
+        # 3-2-1-GO! countdown, big and centered
+        import time as _t2
+        elapsed = _t2.time() - self.start_t
+        if elapsed < self.countdown + 0.6:
+            remain = self.countdown - elapsed
+            if remain > 0:
+                txt = str(int(remain) + 1)
+            else:
+                txt = "GO!"
+            fc = QFont("Segoe UI", 120, QFont.Bold)
+            p.setFont(fc)
+            p.setPen(QColor(255, 255, 255, 235))
+            from PySide6.QtCore import QRect as _QR
+            p.drawText(_QR(0, 0, self.sw, self.sh),
+                       Qt.AlignCenter, txt)
+            f3 = QFont("Segoe UI", 22)
+            p.setFont(f3)
+            p.setPen(QColor(230, 230, 230, 220))
+            p.drawText(_QR(0, int(self.sh * 0.60), self.sw, 60),
+                       Qt.AlignHCenter, "get ready to shoot some ducks! 🦆")
 
 
 class GuardBeam(QWidget):
@@ -5655,24 +5684,22 @@ class CatWindow(QWidget):
                                 max(1, pw // 3), max(1, pw // 3),
                                 QColor("#f2ffff"))
             if guarding or self.duck_gunner:
-                # BIG angry slanted brows: thick bars angling down-INWARD
-                # (toward the nose). Which eye is "inner" flips with the face,
-                # so the brows stay angry — not sad — whichever way it looks.
-                brow = QColor("#261c14")
-                bw = sprites.EYE_W + 1          # one cell wider than the eye
-                # eyes list is ordered left→right on screen; the inner edge of
-                # the LEFT eye slants down-right, the RIGHT eye down-left.
+                # ANGRY scowl: thick brow bars whose INNER ends dip LOW toward
+                # the nose and OUTER ends stay high — a hard \  / shape. Sits
+                # right at the top of the eyes. Mirror-correct via eye x.
+                brow = QColor("#1e150e")
+                bw = sprites.EYE_W + 2          # a bit wider than the eye
                 xs = [ex for (ex, ey) in eyes]
                 left_ex = min(xs) if xs else 0
                 for (ex, ey) in eyes:
                     is_left_eye = (ex == left_ex)
                     for k in range(bw):
-                        # down-inward: left eye rises to the left, right eye
-                        # rises to the right (both peak at the outer edge)
-                        slant = (bw - 1 - k) if is_left_eye else k
-                        bx = (ex - (0 if is_left_eye else 1) + k) * s
-                        by = int((ey - 1.4) * s) + slant * (s * 2 // 3)
-                        pp.fillRect(bx, by, s, s, brow)
+                        # step index measured from the OUTER edge → 0, inner → max
+                        step = k if is_left_eye else (bw - 1 - k)
+                        bx = (ex - 1 + k) * s
+                        # inner end sits LOW (over the eye), outer end HIGH
+                        by = int((ey - 0.9) * s) + step * (s * 3 // 4)
+                        pp.fillRect(bx, by, s, int(s * 1.3), brow)
             pp.end()
 
         jy = 0
@@ -5728,15 +5755,18 @@ class CatWindow(QWidget):
             paw_local = self.cat_rect().center()
             ang = math.atan2(cur.y() - paw.y(), cur.x() - paw.x())
             p.save()
-            p.translate(paw_local.x(), paw_local.y() + s)
+            # pivot out to the RIGHT of the body so the gun doesn't overlap
+            # the cat; a touch below center where a paw would hold it
+            p.translate(paw_local.x() + int(s * 4.5),
+                        paw_local.y() + int(s * 1.5))
             p.rotate(math.degrees(ang))
             gun = QColor("#3a3f47")
             barrel = QColor("#2a2e34")
             tip = QColor("#e8912e")
             # body sits at the pivot; barrel extends along +x (toward cursor)
             p.fillRect(-s * 2, -s, s * 4, s * 2, gun)            # body
-            p.fillRect(s * 2, -(s // 2), s * 5, s, barrel)       # barrel
-            p.fillRect(s * 7, -(s // 2), s, s, tip)              # muzzle
+            p.fillRect(s * 2, -(s // 2), s * 6, s, barrel)       # barrel
+            p.fillRect(s * 8, -(s // 2), s, s, tip)              # muzzle
             p.fillRect(-s, s, s * 2, int(s * 1.8), gun)          # grip
             p.restore()
 
