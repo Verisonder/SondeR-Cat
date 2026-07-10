@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "9.10.1"
-APP_BUILD = "0716m"
+APP_VERSION = "9.10.2"
+APP_BUILD = "0716n"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -852,15 +852,25 @@ class SoundFX:
             pew.append(int(random.uniform(-1, 1) * 0.18 * env * 32767))
         self._paths["shot"] = self._wav(pew, "sonder_shot.wav")
         # --- purr: REAL recorded cat purrs (royalty-free), shipped in
-        # sounds/. Two variants: one for petting, one for sleeping. ---
+        # sounds/. Two variants: one for petting, one for sleeping.
+        # If the sounds/ folder didn't reach this install (e.g. an update
+        # that dropped the subfolder), the files are re-fetched from the
+        # repo in the BACKGROUND so purr heals itself instead of staying
+        # silently dead while the synth game sounds still work. ---
         snd_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                "sounds")
-        pet = os.path.join(snd_dir, "purr_pet.wav")
-        slp = os.path.join(snd_dir, "purr_sleep.wav")
-        if os.path.exists(pet):
-            self._paths["purr"] = pet
-        if os.path.exists(slp):
-            self._paths["purr_sleep"] = slp
+        missing = []
+        for key, fname in (("purr", "purr_pet.wav"),
+                           ("purr_sleep", "purr_sleep.wav")):
+            p = os.path.join(snd_dir, fname)
+            if os.path.exists(p) and os.path.getsize(p) > 0:
+                self._paths[key] = p
+            else:
+                missing.append((key, fname, p))
+        if missing:
+            import threading
+            threading.Thread(target=self._heal_sounds,
+                             args=(missing,), daemon=True).start()
         # --- bloop: duck hit — quick falling thunk ---
         bl = []
         n = int(self.SR * 0.16)
@@ -870,6 +880,29 @@ class SoundFX:
             s = 0.32 if (i % period) / period < 0.5 else -0.32
             bl.append(int(s * (1 - t) * 32767))
         self._paths["hit"] = self._wav(bl, "sonder_hit.wav")
+
+    def _heal_sounds(self, missing):
+        """Re-download purr WAVs that didn't ship with this install. Runs on
+        a daemon thread so a slow or absent network never blocks the UI; the
+        moment a file lands its path is registered and purr starts working
+        (the next petting/sleep purr will find it)."""
+        import urllib.request
+        base = ("https://raw.githubusercontent.com/"
+                "Verisonder/SondeR-Cat/main/sounds/")
+        for key, fname, dest in missing:
+            try:
+                req = urllib.request.Request(
+                    base + fname, headers={"User-Agent": "SondeRcat"})
+                with urllib.request.urlopen(req, timeout=25) as r:
+                    data = r.read()
+                if not data:
+                    continue
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                with open(dest, "wb") as f:
+                    f.write(data)
+                self._paths[key] = dest
+            except Exception:
+                pass
 
     # ---- Windows MCI backend (built into winmm.dll, plays concurrently) --
     def _mci(self, cmd):
