@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.9.0"
-APP_BUILD = "0715r"
+APP_BUILD = "0715s"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -5078,29 +5078,29 @@ class CatWindow(QWidget):
                                 "don't touch me! 😾", "HANDS OFF.",
                                 "I'm on duty!", "grrr… 😾", "hsss!"]), 1.4)
                     else:
-                        r = self.cat_rect()
-                        self.hearts.append({
-                            "x": r.left() + random.randint(20, r.width() - 20),
-                            "y": r.top() + 8, "vy": 1.1, "life": 1.6,
-                            "seed": random.random() * 6})
-                        # purr ♥ — only after ~3s of continuous petting, then
-                        # loop; the tick stops it ~5s after you stop.
+                        # only start reacting after ~3s of continuous petting
+                        # — hearts, purr and "purrr…" all wait for the same cue
                         petted_for = now - getattr(self, "_pet_started", now)
                         if petted_for > 3.0:
+                            r = self.cat_rect()
+                            self.hearts.append({
+                                "x": r.left() + random.randint(20, r.width() - 20),
+                                "y": r.top() + 8, "vy": 1.1, "life": 1.6,
+                                "seed": random.random() * 6})
                             self._petting_until = now + 5.0
-                        if self.gcfg.get("sounds", True) \
-                                and not self._purring and petted_for > 3.0:
-                            self._purring = True
-                            try:
-                                if self.mgr._sfx is None:
-                                    self.mgr._sfx = SoundFX(
-                                        self.mgr.cfg["global"].get("sound_volume", 1.0))
-                                self.mgr._sfx.purr(loop=True)
-                            except Exception:
-                                pass
-                        if random.random() < 0.3:
-                            self.say(random.choice(
-                                ["purrr…", "prrrp", "♥"]), 1.2)
+                            if self.gcfg.get("sounds", True) \
+                                    and not self._purring:
+                                self._purring = True
+                                try:
+                                    if self.mgr._sfx is None:
+                                        self.mgr._sfx = SoundFX(
+                                            self.mgr.cfg["global"].get("sound_volume", 1.0))
+                                    self.mgr._sfx.purr(loop=True)
+                                except Exception:
+                                    pass
+                            if random.random() < 0.3:
+                                self.say(random.choice(
+                                    ["purrr…", "prrrp", "♥"]), 1.2)
                     if self.state == SLEEP \
                             and not self.gcfg.get("force_sleep") \
                             and not self.perch_asleep:
