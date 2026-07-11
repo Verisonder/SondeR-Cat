@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.1"
-APP_BUILD = "0716r"
+APP_BUILD = "0716s"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -805,6 +805,8 @@ class SoundFX:
         self._mci_lock = threading.Lock()
         self._loop_lock = threading.Lock()
         self._loop_thread = None
+        self._cmd_q = None           # background playback queue (lazy)
+        self._worker = None          # background playback thread
         try:
             self._paths = {}
             self._build()
@@ -1006,38 +1008,59 @@ class SoundFX:
     def _play(self, key, loop=False):
         if not self._ok:
             return
+        if self._is_win:
+            # Opening/reopening an MCI device is slow; doing it inline froze
+            # the UI for a beat on every shot. Hand playback to a background
+            # worker so the paint thread never blocks. Commands run in order.
+            try:
+                self._ensure_worker()
+                self._cmd_q.put((key, loop))
+            except Exception:
+                pass
+            return
         try:
-            if self._is_win:
-                # reopen every time → always targets the live default device
+            fx = self._fx.get(key)
+            if fx is None:
+                from PySide6.QtCore import QUrl
+                from PySide6.QtMultimedia import QSoundEffect
+                fx = QSoundEffect()
+                fx.setSource(QUrl.fromLocalFile(self._paths[key]))
+                self._fx[key] = fx
+            fx.setVolume(self._volume)
+            if loop:
+                from PySide6.QtMultimedia import QSoundEffect as _QSE
+                fx.setLoopCount(_QSE.Infinite)
+            fx.play()
+        except Exception:
+            pass
+
+    def _ensure_worker(self):
+        if self._worker is not None and self._worker.is_alive():
+            return
+        import queue, threading
+        if self._cmd_q is None:
+            self._cmd_q = queue.Queue()
+        self._worker = threading.Thread(target=self._play_worker, daemon=True)
+        self._worker.start()
+
+    def _play_worker(self):
+        while True:
+            key, loop = self._cmd_q.get()
+            try:
                 alias = self._mci_reopen(key)
                 if not alias:
-                    return
+                    continue
                 if loop and self._dev.get(alias) == "mpegvideo":
-                    # native looping on the legacy device
                     self._mci(f"play {alias} from 0 repeat")
                 elif loop:
-                    # waveaudio/auto: no native repeat → watcher re-triggers
                     self._mci(f"play {alias} from 0")
                     with self._loop_lock:
                         self._loop_aliases.add(alias)
                     self._ensure_loop_watcher()
                 else:
                     self._mci(f"play {alias} from 0")
-            else:
-                fx = self._fx.get(key)
-                if fx is None:
-                    from PySide6.QtCore import QUrl
-                    from PySide6.QtMultimedia import QSoundEffect
-                    fx = QSoundEffect()
-                    fx.setSource(QUrl.fromLocalFile(self._paths[key]))
-                    self._fx[key] = fx
-                fx.setVolume(self._volume)
-                if loop:
-                    from PySide6.QtMultimedia import QSoundEffect as _QSE
-                    fx.setLoopCount(_QSE.Infinite)
-                fx.play()
-        except Exception:
-            pass
+            except Exception:
+                pass
 
     def _stop(self, key):
         try:
@@ -1412,6 +1435,7 @@ class DuckHuntGame(QWidget):
                 self.super_mode = True
                 c = self.mgr.primary()
                 c.duck_super = True
+                c._set_aura_pad(int(c.scale * 14))   # room for the big flame
                 c.say("⚡ SUPER CAT!! ⚡", 3)
             self.score += hit["pts"] * (2 if self.super_mode else 1)
             self.hits += 1
@@ -1430,6 +1454,7 @@ class DuckHuntGame(QWidget):
                 self.super_mode = False
                 c = self.mgr.primary()
                 c.duck_super = False
+                c._set_aura_pad(0)                   # back to normal window
                 c.say("power's gone… 😾", 2)
             self.pops.append(dict(x=mx, y=my, t=_t.time(), miss=True))
         self.update()
@@ -3637,6 +3662,7 @@ class Manager(QObject):
         c = self.primary()
         c.duck_gunner = False
         c.duck_super = False
+        c._set_aura_pad(0)                          # restore normal window
         try:
             c._parachute_to_ground()
         except Exception:
@@ -4411,6 +4437,8 @@ class CatWindow(QWidget):
         self.dragging = False
         self.duck_gunner = False        # easter-egg: holding a gun, angry
         self.duck_super = False         # 15-streak power-up: blue aura ⚡
+        self._aura_pad = 0              # extra transparent margin for the
+        #                                 SUPER CAT flame (0 = normal window)
         self.drag_offset = QPoint()
         self.mochi = 1.0
         self._drag_target_offset = QPoint()
@@ -4502,15 +4530,36 @@ class CatWindow(QWidget):
     def _resize_to_sprite(self):
         self._frame_cache = {}
         self.side = max(14, 3 * self.scale)
+        pad = getattr(self, "_aura_pad", 0)
         self.setFixedSize(int(sprites.GRID_W * self.scale * self.grow)
-                          + 2 * self.side,
+                          + 2 * self.side + 2 * pad,
                           int(sprites.GRID_H * self.scale * self.grow)
-                          + TOP_MARGIN)
+                          + TOP_MARGIN + pad)
 
     def cat_rect(self):
-        return QRect(self.side, TOP_MARGIN,
+        pad = getattr(self, "_aura_pad", 0)
+        return QRect(self.side + pad, TOP_MARGIN + pad,
                      int(sprites.GRID_W * self.scale * self.grow),
                      int(sprites.GRID_H * self.scale * self.grow))
+
+    def _set_aura_pad(self, px):
+        """Grow (or shrink) a transparent margin around the window so the
+        SUPER CAT flame has room to tower well above the cat without being
+        clipped. The extra space is added to the top and both sides; the
+        window is shifted up-left by the delta so the CAT itself stays put on
+        screen — only the invisible margin changes. pad=0 restores the normal
+        window exactly, so there's no effect outside SUPER CAT mode."""
+        px = max(0, int(px))
+        old = getattr(self, "_aura_pad", 0)
+        if px == old:
+            return
+        delta = px - old
+        pos = self.pos()
+        self._aura_pad = px
+        self._resize_to_sprite()
+        self.move(pos.x() - delta, pos.y() - delta)
+        self._sync_float()
+        self.update()
 
     def _set_grow(self, big):
         f = 1.8 if big else 1.0
@@ -6798,76 +6847,68 @@ class CatWindow(QWidget):
             tw_ = int(r.width() * 0.96)
             tx = r.center().x() - tw_ // 2
             ty = r.top() + jy + (r.height() - th_)
-        # ⚡ SUPER CAT aura (duck-hunt 15-streak): a Super-Saiyan-Blue-style
-        # "gas fire" — upward-licking electric-blue flame tongues with a
-        # white-hot core, a faint gold outer rim, white embers rising inside,
-        # and the odd electric crackle. Rooted at the lower body and rising
-        # into the window's top margin; every point is clamped inside the
-        # window so the aura never gets cut off by the frame.
+        # ⚡ SUPER CAT aura (duck-hunt 15-streak): a big Super-Saiyan-Blue
+        # "gas fire" — upward-licking electric-blue flame tongues, white-hot
+        # at the base fading to blue at the tips, taller in the middle so the
+        # fire peaks over the cat's head, with white embers sparkling upward
+        # and the odd electric crackle. Roots at the feet and fills the whole
+        # (enlarged) window; every point is clamped inside it, so nothing gets
+        # cut off. The window is grown while super is active (see _set_aura_pad).
         if self.duck_gunner and getattr(self, "duck_super", False):
             nowt = time.time()
             W, Hh = self.width(), self.height()
             cxa = tx + tw_ // 2
-            baseline = ty + int(th_ * 0.70)           # flames root here
-            tip_top = max(2, ty - int(th_ * 0.28))    # ...and reach up to here
+            baseline = ty + th_                        # root at the feet
+            tip_top = 2                                # rise to the window top
             flame_h = max(8, baseline - tip_top)
-            midy = (baseline + tip_top) // 2
-            clampx = lambda x: max(2, min(W - 2, x))
+            span = min(int(tw_ * 1.7), W - 8)          # width of the flame fan
+            clampx = lambda x: max(3, min(W - 3, x))
             p.save()
             p.setPen(Qt.NoPen)
-            # 1) breath: faint gold outer rim + blue haze hugging the body,
-            #    radii capped so the glow always fits fully inside the window
-            for grow, col in ((0.56, QColor(255, 208, 110, 16)),
-                              (0.40, QColor(60, 150, 255, 32)),
-                              (0.22, QColor(95, 185, 255, 50))):
-                rx = min(int(tw_ * (0.5 + grow)), (W - 4) // 2)
-                ry = max(6, min(flame_h // 2 + int(th_ * 0.06),
-                                midy - 2, Hh - 2 - midy))
-                p.setBrush(col)
-                p.drawEllipse(QPoint(cxa, midy), rx, ry)
-            # 2) upward flame tongues (white-hot base → electric-blue tips)
-            tongues = 7
+            # flame tongues
+            tongues = 11
             for i in range(tongues):
-                f = i / (tongues - 1)
-                bx = tx + int(tw_ * (0.12 + 0.76 * f))
-                wob = math.sin(nowt * 7.0 + i * 1.7)
-                h = flame_h * (0.55 + 0.45 *
-                               (0.5 + 0.5 * math.sin(nowt * 5.0 + i)))
-                h = max(6, h)
-                steps = 7
+                f = i / (tongues - 1)                  # 0..1 across the fan
+                bx = cxa + int((f - 0.5) * span)
+                peak = 0.60 + 0.40 * (1.0 - abs(f - 0.5) * 2)   # center tallest
+                wob = math.sin(nowt * 6.5 + i * 1.7)
+                h = flame_h * peak * (0.80 + 0.20 *
+                                      (0.5 + 0.5 * math.sin(nowt * 5.0 + i)))
+                h = max(10, h)
+                steps = 9
                 for sidx in range(steps):
-                    t = sidx / (steps - 1)                 # base 0 → tip 1
+                    t = sidx / (steps - 1)             # base 0 → tip 1
                     y = int(baseline - t * h)
                     sway = (wob * 0.5 +
-                            math.sin(nowt * 9 + i + t * 3) * 0.5) \
-                        * tw_ * 0.10 * t                   # tips wander most
+                            math.sin(nowt * 8 + i + t * 3.2) * 0.5) \
+                        * tw_ * 0.16 * t               # tips wander most
                     x = clampx(int(bx + sway))
-                    rad = max(1, int(tw_ * 0.11 * (1.0 - t) ** 0.7))
-                    if t < 0.30:
-                        col = QColor(205, 235, 255, 150)   # white-hot core
-                    elif t < 0.65:
-                        col = QColor(80, 180, 255, int(130 * (1 - t)))
+                    rad = max(1, int(tw_ * 0.15 * (1.0 - t) ** 0.65))
+                    if t < 0.28:
+                        col = QColor(210, 238, 255, 165)   # white-hot core
+                    elif t < 0.62:
+                        col = QColor(80, 180, 255, int(150 * (1 - t)))
                     else:
-                        col = QColor(40, 130, 245, int(110 * (1 - t)))
+                        col = QColor(45, 135, 250, int(120 * (1 - t)))
                     p.setBrush(col)
-                    p.drawEllipse(QPoint(x, y), rad, int(rad * 1.6))
-            # 3) white embers sparkling upward within the flames
-            for i in range(8):
-                ph = (nowt * 1.5 + i * 0.37) % 1.0
-                ex = clampx(cxa + int(math.sin(i * 2.1 + nowt * 3)
-                                      * tw_ * 0.40))
-                ey = max(2, int(baseline - ph * (flame_h + int(th_ * 0.10))))
-                a = int(210 * (1.0 - ph))
+                    p.drawEllipse(QPoint(x, y), rad, int(rad * 1.7))
+            # white embers sparkling upward within the flames
+            for i in range(12):
+                ph = (nowt * 1.4 + i * 0.31) % 1.0
+                ex = clampx(cxa + int(math.sin(i * 1.9 + nowt * 2.6)
+                                      * span * 0.5))
+                ey = max(2, int(baseline - ph * flame_h))
+                a = int(220 * (1.0 - ph))
                 sz = 3 if i % 3 == 0 else 2
-                p.fillRect(ex, ey, sz, sz, QColor(225, 240, 255, a))
-            # 4) occasional electric crackle (short jagged bolt in the flame)
-            if int(nowt * 8) % 6 == 0:
+                p.fillRect(ex, ey, sz, sz, QColor(228, 242, 255, a))
+            # occasional electric crackle (short jagged bolt in the flame)
+            if int(nowt * 8) % 5 == 0:
                 p.setPen(QPen(QColor(190, 230, 255, 210), 2))
-                zx = clampx(cxa + int(math.sin(nowt * 13) * tw_ * 0.28))
-                zy = tip_top + int(flame_h * 0.15)
-                for k in range(3):
-                    nx = clampx(zx + (9 if k % 2 else -9))
-                    ny = min(Hh - 2, zy + int(flame_h * 0.20))
+                zx = clampx(cxa + int(math.sin(nowt * 13) * span * 0.35))
+                zy = tip_top + int(flame_h * 0.12)
+                for k in range(4):
+                    nx = clampx(zx + (11 if k % 2 else -11))
+                    ny = min(Hh - 2, zy + int(flame_h * 0.16))
                     p.drawLine(zx, zy, nx, ny)
                     zx, zy = nx, ny
                 p.setPen(Qt.NoPen)
