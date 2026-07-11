@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "9.10.5"
-APP_BUILD = "0716v"
+APP_VERSION = "9.10.6"
+APP_BUILD = "0716w"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1086,6 +1086,8 @@ class SoundFX:
         while True:
             key, loop = self._cmd_q.get()
             try:
+                if key == "music" and not self._music_on:
+                    continue                  # music was stopped meanwhile
                 alias = self._mci_reopen(key)
                 if not alias:
                     continue
@@ -1108,7 +1110,13 @@ class SoundFX:
                 with self._loop_lock:
                     self._loop_aliases.discard(alias)
                 if alias in self._open_aliases:
+                    # stop AND close. `stop` alone does not reliably halt a
+                    # `play ... repeat` on the mpegvideo device, so the music
+                    # kept looping after Duck Hunt closed. Closing frees the
+                    # alias entirely; the next play just reopens it fresh.
                     self._mci(f"stop {alias}")
+                    self._mci(f"close {alias}")
+                    self._open_aliases.discard(alias)
             else:
                 fx = self._fx.get(key)
                 if fx:
