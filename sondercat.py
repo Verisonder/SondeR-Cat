@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "9.10.4"
-APP_BUILD = "0716u"
+APP_VERSION = "9.10.5"
+APP_BUILD = "0716v"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -869,7 +869,7 @@ class SoundFX:
         arrangement = [pA, pB, pA, pC,
                        pA, pB, pD, pC,
                        pA, pB, pA, pD,
-                       pC, pB, pA, pD]           # 16 phrases → ~36s
+                       pC, pB, pD, pA]           # ~36s, ends on pA (loops back)
         riff = [n for phrase in arrangement for n in phrase]
         # steady low-square bass groove, one loop per 16-note phrase (Am-F-G-Am)
         A2, E2, F2, G2 = 110, 82, 87, 98
@@ -881,6 +881,16 @@ class SoundFX:
             b = self._sq(bass[i % len(bass)], beat, vol=0.15, duty=0.25)
             music.extend(lead[j] + (b[j] if j < len(b) else 0)
                          for j in range(len(lead)))
+        # Seamless loop: crossfade the tail into the head so you can't hear the
+        # repeat. The loop boundary then falls on originally-adjacent samples,
+        # so there's no click and no silent gap at the seam. (The tune starts
+        # and ends on A4, so the blend is between the same note — very smooth.)
+        xf = min(int(self.SR * 0.28), len(music) // 3)
+        if xf > 0:
+            tail, head = music[-xf:], music[:xf]
+            blended = [int(tail[k] * (1.0 - k / xf) + head[k] * (k / xf))
+                       for k in range(xf)]
+            music = blended + music[xf:-xf]
         self._paths["music"] = self._wav(music, "sonder_music.wav")
         # --- pew: descending square laser + noise crackle ---
         pew = []
@@ -1024,7 +1034,13 @@ class SoundFX:
                 try:
                     mode = self._mci(f"status {alias} mode")
                     if mode and mode.strip().lower() != "playing":
-                        self._mci(f"play {alias} from 0")
+                        # re-check membership under the lock right before the
+                        # replay: if _stop just removed this alias (e.g. the
+                        # user pressed Esc), we must NOT restart it, or the
+                        # music would keep looping after the game ends.
+                        with self._loop_lock:
+                            if alias in self._loop_aliases:
+                                self._mci(f"play {alias} from 0")
                 except Exception:
                     pass
 
