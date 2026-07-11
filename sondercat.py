@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.4"
-APP_BUILD = "0716t"
+APP_BUILD = "0716u"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -819,13 +819,21 @@ class SoundFX:
         n = int(self.SR * ms / 1000.0)
         if freq <= 0:
             return [0] * n
-        period = self.SR / freq
-        out = []
-        for i in range(n):
-            phase = (i % period) / period
-            s = vol if phase < duty else -vol
-            env = min(1.0, i / 80.0, (n - i) / 80.0)
-            out.append(int(s * env * 32767))
+        # Build one period, then tile it (C-speed) instead of computing every
+        # sample in Python — the longer tune would otherwise take ~1s to synth
+        # and hitch the first sound. Rounding the period to an int shifts pitch
+        # by only a few cents, which is inaudible.
+        iperiod = max(2, int(round(self.SR / freq)))
+        hi = int(vol * 32767)
+        cut = int(iperiod * duty)
+        one = [hi if k < cut else -hi for k in range(iperiod)]
+        out = (one * (n // iperiod + 1))[:n]
+        # short attack/release fade on the ends to avoid clicks
+        e = min(80, n // 2)
+        for i in range(e):
+            f = i / 80.0
+            out[i] = int(out[i] * f)
+            out[n - 1 - i] = int(out[n - 1 - i] * f)
         return out
 
     def _wav(self, samples, name):
@@ -842,20 +850,35 @@ class SoundFX:
 
     def _build(self):
         import math, random
-        # --- looping game music: bouncy square-wave riff + soft bass ---
-        A3, C4, D4, E4, G4, A4, C5, E5 = (220, 262, 294, 330, 392, 440,
-                                          523, 659)
+        # --- looping game music: a longer multi-phrase 8-bit tune so it
+        #     doesn't loop every few seconds and grate. Square-wave lead over
+        #     a steady square bass, all in A minor, arranged from four
+        #     distinct phrases so a full pass runs ~36s before repeating. ---
         beat = 140
-        riff = [A4, E4, A4, C5, A4, E4, G4, E4,
-                A4, E4, A4, C5, E5, C5, A4, E4,
-                D4, A3, D4, E4, D4, A3, C4, A3,
-                G4, D4, G4, A4, C5, A4, G4, E4]
-        bass = [A3, 0, A3, 0, 196, 0, 196, 0,
-                D4, 0, D4, 0, E4, 0, E4, 0]
+        A3, C4, D4, E4, F4, G4, A4, B4, C5, D5, E5 = (
+            220, 262, 294, 330, 349, 392, 440, 494, 523, 587, 659)
+        R = 0                                    # rest
+        pA = [A4, E4, A4, C5, B4, G4, E4, G4,
+              A4, E4, A4, C5, E5, C5, B4, A4]    # main hook
+        pB = [D5, C5, B4, A4, G4, A4, B4, C5,
+              D4, E4, F4, G4, A4, G4, E4, D4]    # answer, sweeps down then up
+        pC = [A3, C4, E4, A4, G4, E4, C4, E4,
+              D4, F4, A4, C5, B4, A4, G4, E4]    # bridge, opens up from low
+        pD = [E4, G4, C5, E5, D5, C5, B4, G4,
+              A4, C5, E5, A4, C5, B4, A4, R]     # climb, then a breath
+        arrangement = [pA, pB, pA, pC,
+                       pA, pB, pD, pC,
+                       pA, pB, pA, pD,
+                       pC, pB, pA, pD]           # 16 phrases → ~36s
+        riff = [n for phrase in arrangement for n in phrase]
+        # steady low-square bass groove, one loop per 16-note phrase (Am-F-G-Am)
+        A2, E2, F2, G2 = 110, 82, 87, 98
+        bass = [A2, R, A2, R, F2, R, A2, R,
+                G2, R, G2, R, A2, R, E2, R]
         music = []
         for i, f in enumerate(riff):
             lead = self._sq(f, beat, vol=0.20)
-            b = self._sq(bass[i % len(bass)], beat, vol=0.14, duty=0.25)
+            b = self._sq(bass[i % len(bass)], beat, vol=0.15, duty=0.25)
             music.extend(lead[j] + (b[j] if j < len(b) else 0)
                          for j in range(len(lead)))
         self._paths["music"] = self._wav(music, "sonder_music.wav")
