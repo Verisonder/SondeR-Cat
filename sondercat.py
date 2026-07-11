@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "9.10.7"
-APP_BUILD = "0716y"
+APP_VERSION = "9.10.8"
+APP_BUILD = "0716z"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -807,6 +807,7 @@ class SoundFX:
         self._loop_thread = None
         self._cmd_q = None           # background playback queue (lazy)
         self._worker = None          # background playback thread
+        self._dead = False           # set on shutdown() so threads exit
         try:
             self._paths = {}
             self._build()
@@ -1028,6 +1029,8 @@ class SoundFX:
     def _loop_watch(self):
         while True:
             time.sleep(0.15)
+            if self._dead:
+                break                          # engine shut down — exit thread
             with self._loop_lock:
                 aliases = list(self._loop_aliases)
             for alias in aliases:
@@ -1087,6 +1090,8 @@ class SoundFX:
     def _play_worker(self):
         while True:
             key, loop = self._cmd_q.get()
+            if key == "__die__" or self._dead:
+                break                          # engine shut down — exit thread
             try:
                 if key == "music" and not self._music_on:
                     continue                  # music was stopped meanwhile
@@ -1208,6 +1213,28 @@ class SoundFX:
                         pass
             except Exception:
                 pass
+
+    def shutdown(self):
+        """Kill the whole engine: stop all playback AND end the worker/watcher
+        threads. After this the object is dead and the manager drops it, so a
+        brand-new engine is built the next time any sound is needed. This is
+        the full 'reset' used when a minigame ends — no audio state, thread or
+        open device can possibly carry over."""
+        self._dead = True
+        self._music_on = False
+        if self._is_win:
+            try:
+                self._mci("close all")           # close every device we opened
+            except Exception:
+                pass
+        with self._loop_lock:
+            self._loop_aliases.clear()
+        self._open_aliases.clear()
+        try:
+            if self._cmd_q is not None:          # unblock the worker so it exits
+                self._cmd_q.put(("__die__", False))
+        except Exception:
+            pass
 
     def shot(self):
         self._play("shot")
@@ -3767,7 +3794,16 @@ class Manager(QObject):
     def _end_duck_hunt(self):
         self._duck_game = None
         if self._sfx is not None:
-            self._sfx.silence_all()                 # hard stop: kill all audio
+            # Full reset of the cat's sound engine on exit: stop everything,
+            # then destroy the engine (threads + all open devices) and drop it.
+            # A fresh engine is lazily rebuilt on the next sound, so nothing
+            # from the minigame — least of all the music — can survive Esc.
+            try:
+                self._sfx.silence_all()
+                self._sfx.shutdown()
+            except Exception:
+                pass
+            self._sfx = None
         c = self.primary()
         c.duck_gunner = False
         c.duck_super = False
