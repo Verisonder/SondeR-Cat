@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "9.10.6"
-APP_BUILD = "0716x"
+APP_VERSION = "9.10.7"
+APP_BUILD = "0716y"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1172,6 +1172,42 @@ class SoundFX:
             except Exception:
                 pass
         self._stop("music")
+
+    def silence_all(self):
+        """The simple, decisive stop: kill EVERYTHING this sound engine has
+        playing, no cleverness. Used when a minigame ends so the soundtrack
+        can never survive. `close all` shuts every MCI device we opened in one
+        call, whatever its alias or device type, so it doesn't matter which
+        audio path (mpegvideo/waveaudio) the music was using."""
+        self._music_on = False
+        q = self._cmd_q
+        if q is not None:                     # empty the whole worker queue
+            try:
+                import queue as _q
+                while True:
+                    try:
+                        q.get_nowait()
+                    except _q.Empty:
+                        break
+            except Exception:
+                pass
+        if self._is_win:
+            try:
+                self._mci("close all")
+            except Exception:
+                pass
+            with self._loop_lock:
+                self._loop_aliases.clear()
+            self._open_aliases.clear()
+        else:
+            try:
+                for fx in self._fx.values():
+                    try:
+                        fx.stop()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
     def shot(self):
         self._play("shot")
@@ -3731,7 +3767,7 @@ class Manager(QObject):
     def _end_duck_hunt(self):
         self._duck_game = None
         if self._sfx is not None:
-            self._sfx.music_stop()
+            self._sfx.silence_all()                 # hard stop: kill all audio
         c = self.primary()
         c.duck_gunner = False
         c.duck_super = False
