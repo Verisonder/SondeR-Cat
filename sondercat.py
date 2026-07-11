@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.6"
-APP_BUILD = "0716w"
+APP_BUILD = "0716x"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1034,12 +1034,14 @@ class SoundFX:
                 try:
                     mode = self._mci(f"status {alias} mode")
                     if mode and mode.strip().lower() != "playing":
-                        # re-check membership under the lock right before the
-                        # replay: if _stop just removed this alias (e.g. the
-                        # user pressed Esc), we must NOT restart it, or the
-                        # music would keep looping after the game ends.
+                        # re-check under the lock right before replay: if _stop
+                        # just removed this alias (e.g. the user pressed Esc),
+                        # or music was switched off, do NOT restart it — else
+                        # the soundtrack keeps looping after the game ends.
                         with self._loop_lock:
-                            if alias in self._loop_aliases:
+                            if (alias in self._loop_aliases
+                                    and not (alias == "sonder_music"
+                                             and not self._music_on)):
                                 self._mci(f"play {alias} from 0")
                 except Exception:
                     pass
@@ -1091,6 +1093,13 @@ class SoundFX:
                 alias = self._mci_reopen(key)
                 if not alias:
                     continue
+                if key == "music" and not self._music_on:
+                    # stopped WHILE the device was (slowly) opening — tear the
+                    # just-opened alias back down instead of starting it
+                    self._mci(f"stop {alias}")
+                    self._mci(f"close {alias}")
+                    self._open_aliases.discard(alias)
+                    continue
                 if loop and self._dev.get(alias) == "mpegvideo":
                     self._mci(f"play {alias} from 0 repeat")
                 elif loop:
@@ -1109,14 +1118,13 @@ class SoundFX:
                 alias = f"sonder_{key}"
                 with self._loop_lock:
                     self._loop_aliases.discard(alias)
-                if alias in self._open_aliases:
-                    # stop AND close. `stop` alone does not reliably halt a
-                    # `play ... repeat` on the mpegvideo device, so the music
-                    # kept looping after Duck Hunt closed. Closing frees the
-                    # alias entirely; the next play just reopens it fresh.
-                    self._mci(f"stop {alias}")
-                    self._mci(f"close {alias}")
-                    self._open_aliases.discard(alias)
+                # stop AND close, unconditionally. `stop` alone doesn't
+                # reliably halt a `play ... repeat`, and gating this on our own
+                # bookkeeping could skip the close if the sets ever drifted.
+                # Closing frees the device for good; the next play reopens it.
+                self._mci(f"stop {alias}")
+                self._mci(f"close {alias}")
+                self._open_aliases.discard(alias)
             else:
                 fx = self._fx.get(key)
                 if fx:
@@ -1145,6 +1153,24 @@ class SoundFX:
 
     def music_stop(self):
         self._music_on = False
+        # drop any queued music-start the worker hasn't run yet, so it can't
+        # start the track a moment after we've stopped it
+        q = self._cmd_q
+        if q is not None:
+            try:
+                import queue as _q
+                keep = []
+                while True:
+                    try:
+                        it = q.get_nowait()
+                    except _q.Empty:
+                        break
+                    if it[0] != "music":
+                        keep.append(it)
+                for it in keep:
+                    q.put_nowait(it)
+            except Exception:
+                pass
         self._stop("music")
 
     def shot(self):
