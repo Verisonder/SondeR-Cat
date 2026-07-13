@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.9"
-APP_BUILD = "0716ac"
+APP_BUILD = "0716ad"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1780,13 +1780,26 @@ class RockPaperScissorsGame(QWidget):
         self.setGeometry(scr)
         self.sw, self.sh = scr.width(), scr.height()
         # Panel geometry, computed once here instead of inside paintEvent, so
-        # the manager can park the cat against its left edge. Taller than it
-        # used to be: the old 340px box crammed the result line up against the
-        # footer with no room to breathe.
-        self.PW, self.PH = 460, 470
+        # the manager can stand the cat inside it. The panel grows to fit the
+        # cat: everything above the stage is a fixed 330px of title, score,
+        # buttons and result, then a STAGE band the cat actually stands in,
+        # then the footer. Sizing off cat_rect() rather than hardcoding means
+        # this still works at every sprite scale in the Size menu.
+        self.CONTENT_H = 330                       # title..result block
+        self.FOOTER_H = 44                         # footer hint strip
+        try:
+            cat_h = mgr.primary().cat_rect().height()
+        except Exception:
+            cat_h = 168                            # scale 6 fallback
+        self.STAGE_H = max(190, cat_h + 80)        # floor band + bubble room
+        self.PW = 460
+        self.PH = min(self.CONTENT_H + self.STAGE_H + self.FOOTER_H,
+                      max(360, self.sh - 80))      # never taller than screen
         self.panel = QRect((self.sw - self.PW) // 2,
                            (self.sh - self.PH) // 2,
                            self.PW, self.PH)
+        # the line the cat's feet rest on: the top of the footer strip
+        self.floor_y = self.panel.bottom() - self.FOOTER_H
         self.you = 0
         self.cat = 0
         self.your_move = None
@@ -3828,19 +3841,18 @@ class Manager(QObject):
         c.say(random.choice(["rock, paper, scissors? 🐾", "let's play! ✊✋✌️",
                              "I never lose 😼"]), 4)
         self._rps_game = RockPaperScissorsGame(self)
-        # Walk the cat over to watch the match: sit against the panel's left
-        # edge, feet level with its bottom, facing right toward the board.
-        # Same trick the empty-bowl beg uses to sit beside the bowls.
+        # Walk the cat INTO the panel and stand it on the stage floor: dead
+        # centre horizontally, feet resting on the footer line. cat_rect()
+        # puts the sprite flush with the window's bottom edge and centred
+        # across its width, so aligning the window's bottom to floor_y lands
+        # the feet exactly on the floor at any sprite scale.
         self._rps_home = QPoint(c.x(), c.y())      # where it was standing
-        pan = self._rps_game.panel
-        tx = pan.left() - c.width() + int(0.25 * c.width())
-        ty = pan.bottom() - c.height() + TOP_MARGIN
-        scr = QGuiApplication.primaryScreen().availableGeometry()
-        tx = max(scr.left(), min(tx, scr.right() - c.width()))
-        ty = max(scr.top(), min(ty, scr.bottom() - c.height()))
+        g = self._rps_game
+        tx = g.panel.center().x() - c.width() // 2
+        ty = g.floor_y - c.height()
         c.rps_watching = True                      # pin it there for the game
-        c.flip = False                             # look toward the panel
         c._glide_to(QPoint(tx, ty), speed=700)
+        c.raise_()                                 # stay above the panel
 
     def _rps_react(self, result):
         """The cat's live reaction to a round, fired the instant its throw is
