@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.9"
-APP_BUILD = "0716ad"
+APP_BUILD = "0716ae"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1920,14 +1920,18 @@ class RockPaperScissorsGame(QWidget):
                        else QColor(40, 48, 64, 240))
             p.setPen(QPen(QColor(120, 130, 150) if not hover
                           else QColor("#6bb8c7"), 2))
-            p.drawRoundedRect(QRectF(bx - 8, by - 8, isz + 16, isz + 24), 8, 8)
+            # Frame runs 8px above the icon and 28px below it. That bottom
+            # skirt is what the label lives in: the 3x5 pixel glyphs are 10px
+            # tall at px=2 plus a 1px shadow, so a shorter box left the text
+            # bleeding through the border and looking chopped off.
+            p.drawRoundedRect(QRectF(bx - 8, by - 8, isz + 16, isz + 36), 8, 8)
             p.setFont(emoji_font)
             p.setPen(QColor(255, 255, 255))
             p.drawText(rect, Qt.AlignCenter, EMOJI[move])
             # label under each
             lbl = move.upper()
             lw = sprites.pixel_text_width(lbl, 2)
-            sprites.draw_pixel_text(p, lbl, bx + (isz - lw) // 2, by + isz + 6,
+            sprites.draw_pixel_text(p, lbl, bx + (isz - lw) // 2, by + isz + 9,
                                     2, QColor("#c0c4cc"))
             bx += isz + gap
         # ---- result area (below the button labels) ----
