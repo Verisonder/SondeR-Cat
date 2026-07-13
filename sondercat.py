@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.9"
-APP_BUILD = "0716ab"
+APP_BUILD = "0716ac"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1779,6 +1779,14 @@ class RockPaperScissorsGame(QWidget):
         scr = QGuiApplication.primaryScreen().geometry()
         self.setGeometry(scr)
         self.sw, self.sh = scr.width(), scr.height()
+        # Panel geometry, computed once here instead of inside paintEvent, so
+        # the manager can park the cat against its left edge. Taller than it
+        # used to be: the old 340px box crammed the result line up against the
+        # footer with no room to breathe.
+        self.PW, self.PH = 460, 470
+        self.panel = QRect((self.sw - self.PW) // 2,
+                           (self.sh - self.PH) // 2,
+                           self.PW, self.PH)
         self.you = 0
         self.cat = 0
         self.your_move = None
@@ -1810,6 +1818,10 @@ class RockPaperScissorsGame(QWidget):
                 self.result = "lose"
                 self.cat += 1
             self._last_cat = self.cat_move
+            try:
+                self.mgr._rps_react(self.result)   # cat reacts, live
+            except Exception:
+                pass
         self.update()
 
     def _pick_cat_move(self):
@@ -1860,9 +1872,8 @@ class RockPaperScissorsGame(QWidget):
         p.setRenderHint(QPainter.Antialiasing, False)
         p.fillRect(self.rect(), QColor(10, 12, 20, 60))
         # ---- panel ----
-        pw_, ph_ = 460, 340
-        px0 = (self.sw - pw_) // 2
-        py0 = (self.sh - ph_) // 2
+        pw_, ph_ = self.PW, self.PH
+        px0, py0 = self.panel.left(), self.panel.top()
         p.setBrush(QColor(6, 8, 12, 240))
         p.setPen(QPen(QColor(210, 210, 215), 3))
         p.drawRoundedRect(QRectF(px0, py0, pw_, ph_), 14, 14)
@@ -1870,12 +1881,12 @@ class RockPaperScissorsGame(QWidget):
         # title
         title = "ROCK PAPER SCISSORS"
         tw = sprites.pixel_text_width(title, 3)
-        sprites.draw_pixel_text(p, title, px0 + (pw_ - tw) // 2, py0 + 22, 3,
+        sprites.draw_pixel_text(p, title, px0 + (pw_ - tw) // 2, py0 + 30, 3,
                                 QColor("#6bb8c7"), shadow)
         # score line  YOU n  CAT n
         score = f"YOU {self.you}   CAT {self.cat}"
         scw = sprites.pixel_text_width(score, 3)
-        sprites.draw_pixel_text(p, score, px0 + (pw_ - scw) // 2, py0 + 52, 3,
+        sprites.draw_pixel_text(p, score, px0 + (pw_ - scw) // 2, py0 + 70, 3,
                                 QColor("#d9a94a"), shadow)
         # ---- the three choice buttons (big emoji — instantly readable) ----
         self.buttons = []
@@ -1883,7 +1894,7 @@ class RockPaperScissorsGame(QWidget):
         gap = 30
         total = 3 * isz + 2 * gap
         bx = px0 + (pw_ - total) // 2
-        by = py0 + 96
+        by = py0 + 132
         mouse = self.mapFromGlobal(QCursor.pos())
         EMOJI = {"rock": "🪨", "paper": "📄", "scissors": "✂️"}
         emoji_font = QFont("Segoe UI Emoji", 34)
@@ -1903,11 +1914,11 @@ class RockPaperScissorsGame(QWidget):
             # label under each
             lbl = move.upper()
             lw = sprites.pixel_text_width(lbl, 2)
-            sprites.draw_pixel_text(p, lbl, bx + (isz - lw) // 2, by + isz + 4,
+            sprites.draw_pixel_text(p, lbl, bx + (isz - lw) // 2, by + isz + 6,
                                     2, QColor("#c0c4cc"))
             bx += isz + gap
         # ---- result area (below the button labels) ----
-        ry = by + isz + 62
+        ry = by + isz + 104
         if self.reveal_at:
             msg = "CAT IS THINKING"
             col = QColor("#9aa0ac")
@@ -1934,7 +1945,7 @@ class RockPaperScissorsGame(QWidget):
         fh = QFont("Segoe UI", 11)
         p.setFont(fh)
         p.setPen(QColor(180, 185, 195))
-        p.drawText(QRect(px0, py0 + ph_ - 26, pw_, 20),
+        p.drawText(QRect(px0, py0 + ph_ - 30, pw_, 20),
                    Qt.AlignHCenter, "click your move  ·  Esc to quit")
 
 
@@ -2558,6 +2569,7 @@ class Manager(QObject):
         self._guard_beam = None
         self._duck_game = None          # easter-egg minigame window
         self._rps_game = None           # rock-paper-scissors window
+        self._rps_home = None           # where the cat stood before the match
         self._bowl = None               # feeding bowls window
         self._sfx = None                # lazily-built sound engine
         self._guard_timer = QTimer()
@@ -3816,9 +3828,46 @@ class Manager(QObject):
         c.say(random.choice(["rock, paper, scissors? 🐾", "let's play! ✊✋✌️",
                              "I never lose 😼"]), 4)
         self._rps_game = RockPaperScissorsGame(self)
+        # Walk the cat over to watch the match: sit against the panel's left
+        # edge, feet level with its bottom, facing right toward the board.
+        # Same trick the empty-bowl beg uses to sit beside the bowls.
+        self._rps_home = QPoint(c.x(), c.y())      # where it was standing
+        pan = self._rps_game.panel
+        tx = pan.left() - c.width() + int(0.25 * c.width())
+        ty = pan.bottom() - c.height() + TOP_MARGIN
+        scr = QGuiApplication.primaryScreen().availableGeometry()
+        tx = max(scr.left(), min(tx, scr.right() - c.width()))
+        ty = max(scr.top(), min(ty, scr.bottom() - c.height()))
+        c.rps_watching = True                      # pin it there for the game
+        c.flip = False                             # look toward the panel
+        c._glide_to(QPoint(tx, ty), speed=700)
+
+    def _rps_react(self, result):
+        """The cat's live reaction to a round, fired the instant its throw is
+        revealed so the bubble lands together with the result on the panel.
+        `result` is from the PLAYER's point of view."""
+        c = self.primary()
+        now = time.time()
+        if result == "win":                        # the human won
+            c.say(random.choice(["no way 😾", "lucky…", "hmph 😼",
+                                 "beginner's luck!", "rematch. now."]), 2.2)
+        elif result == "lose":                     # the cat won — gloat + hop
+            c.jump_until = max(c.jump_until, now + 0.6)
+            c.say(random.choice(["hah! 😼", "I never lose 😹", "too easy",
+                                 "get good 😽", "*smug purr*"]), 2.2)
+        else:                                      # tie
+            c.say(random.choice(["great minds 🤝", "again!", "tie?! 🙀",
+                                 "*blinks* 😺"]), 2.0)
 
     def _end_rps(self):
         self._rps_game = None
+        c = self.primary()
+        c.rps_watching = False                     # free the idle AI again
+        c.say(random.choice(["good game 😺", "again sometime?", "gg 🐾"]), 2.5)
+        home = getattr(self, "_rps_home", None)
+        if home is not None:
+            c._glide_to(home, speed=500)           # wander back where it was
+            self._rps_home = None
 
     def _start_duck_hunt(self):
         if self._duck_game is not None:
@@ -4643,6 +4692,7 @@ class CatWindow(QWidget):
         # dragging / wobble
         self.dragging = False
         self.duck_gunner = False        # easter-egg: holding a gun, angry
+        self.rps_watching = False       # 🪨📄✂️ parked beside the RPS panel
         self.duck_super = False         # 15-streak power-up: blue aura ⚡
         self._aura_pad = 0              # extra transparent margin for the
         #                                 SUPER CAT flame (0 = normal window)
@@ -5568,6 +5618,19 @@ class CatWindow(QWidget):
         if getattr(self, "duck_gunner", False):
             # 🦆 DUCK HUNT LOCK: cat stays put in its corner, gun ready — no
             # wandering, sleeping, grooming, perching, chasing or hiding.
+            self.groom_until = 0.0
+            self.sleep_at = now + self.gcfg["sleep_seconds"]
+            self.next_perch_try = now + 999
+            self.next_corner_at = now + 999
+            self._corner_until = 0.0
+            if self.state not in (IDLE,) and self.glide_target is None:
+                self.state = IDLE
+        elif getattr(self, "rps_watching", False):
+            # 🪨📄✂️ RPS LOCK: the cat is sitting beside the panel watching the
+            # match. Same shape as the duck-hunt lock above — without it the
+            # idle AI would happily wander off, nap, groom or go perch on a
+            # window in the middle of the game. It only moves when _start_rps
+            # glides it into place and _end_rps sends it home.
             self.groom_until = 0.0
             self.sleep_at = now + self.gcfg["sleep_seconds"]
             self.next_perch_try = now + 999
