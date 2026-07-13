@@ -146,8 +146,8 @@ except Exception:
     sys.exit(1)
 
 APP_NAME = "SondeR cat"
-APP_VERSION = "9.10.8"
-APP_BUILD = "0716z"
+APP_VERSION = "9.10.9"
+APP_BUILD = "0716aa"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -174,6 +174,7 @@ CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".sondercat.json")
 # Ko-fi username once your page is live: https://ko-fi.com/<username>
 KOFI_URL = "https://ko-fi.com/verisonder"
 AGENT_FILE = os.path.join(os.path.expanduser("~"), ".sondercat_agent")
+PID_PATH = os.path.join(os.path.expanduser("~"), ".sondercat_pid")
 
 TOP_MARGIN = 68
 TICK_MS = 33                    # ~30 fps
@@ -239,6 +240,51 @@ def save_config(cfg):
             json.dump(cfg, f, indent=2)
     except Exception:
         pass
+
+
+def claim_single_instance():
+    """Make THIS process the one and only cat.
+
+    We write our PID to a small file, then keep an eye on it. Whenever a newer
+    cat launches it stamps the file with its own PID, so any older cat notices
+    a PID that isn't its own and hard-exits — taking its threads, and crucially
+    every audio device it ever opened, down with it.
+
+    This is what closes the "music won't stop" hole for good. No in-process fix
+    can silence a DIFFERENT process's soundtrack, so an orphaned cat left over
+    from an earlier launch could keep the Duck Hunt music going forever no
+    matter how many times you hit Esc in the cat you can see. Now the old one
+    retires itself within a couple of seconds of the new one appearing.
+
+    Deliberately no PID-killing: PIDs get recycled and we don't want to shoot
+    an innocent process. The old cat stands down on its own.
+    """
+    import threading
+    me = os.getpid()
+
+    def _stamp():
+        try:
+            with open(PID_PATH, "w", encoding="utf-8") as f:
+                f.write(str(me))
+        except Exception:
+            pass
+
+    def _owner():
+        try:
+            with open(PID_PATH, "r", encoding="utf-8") as f:
+                return int(f.read().strip() or 0)
+        except Exception:
+            return me            # missing/unreadable: assume we still own it
+
+    _stamp()
+
+    def _watch():
+        while True:
+            time.sleep(2.0)
+            if _owner() != me:   # a newer cat took over — stand down, audio too
+                os._exit(0)
+
+    threading.Thread(target=_watch, daemon=True).start()
 
 
 def custom_palette(body_hex):
@@ -2860,6 +2906,16 @@ class Manager(QObject):
         except Exception:
             self.say_primary("updated! restart me to finish 🐾", 8)
             return
+        # Make certain this process actually dies. If Qt's quit ever hangs we
+        # would leave an orphaned cat behind, still holding its audio devices
+        # open, and no other process could shut it up. Hard-exit as a backstop.
+        import threading
+
+        def _hard_exit():
+            time.sleep(3.0)
+            os._exit(0)
+
+        threading.Thread(target=_hard_exit, daemon=True).start()
         QApplication.instance().quit()
 
     # --------------------------------------------------- animation tests --
@@ -3812,6 +3868,12 @@ class Manager(QObject):
             c._parachute_to_ground()
         except Exception:
             pass
+        # Owner's call: leaving the minigame restarts the WHOLE cat, not just
+        # its sound engine. Everything above is belt; this is braces. When the
+        # process exits, the OS closes every MCI device it ever opened, so
+        # there is no bug, race or stray thread by which the Duck Hunt
+        # soundtrack can possibly outlive Esc. The cat blinks and comes back.
+        QTimer.singleShot(300, self._restart)
 
     def _end_guide(self, walk_home=True, quiet=False):
         """Close the guided-tour session (glowy eyes off, cat back home)."""
@@ -7273,6 +7335,7 @@ class CatWindow(QWidget):
 
 
 def main():
+    claim_single_instance()      # any older cat stands down (and shuts up)
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     ico = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sondercat_gray.ico")
