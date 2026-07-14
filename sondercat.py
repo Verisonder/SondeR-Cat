@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.9"
-APP_BUILD = "0716af"
+APP_BUILD = "0716ag"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -2005,7 +2005,10 @@ class BlackjackGame(QWidget):
         except Exception:
             cat_h = 168                            # scale 6 fallback
         avail = max(400, self.sh - 60)
-        want_stage = max(170, cat_h + 70)          # floor band + bubble room
+        # +100 is load-bearing: the cat is wearing a top hat that stands ~4.7
+        # sprite-cells above its head, and the speech bubble sits above THAT.
+        # At the old +70 the crown crowded the button row.
+        want_stage = max(190, cat_h + 100)         # floor + hat + bubble room
         room = avail - self.CONTENT_H - self.FOOTER_H
         self.STAGE_H = max(0, min(want_stage, room))
         self.stage_ok = self.STAGE_H >= 140        # enough to stand the cat in
@@ -4249,6 +4252,15 @@ class Manager(QObject):
         # screen the stage collapses (the card rows can't shrink), and the cat
         # falls back to standing beside the panel instead of inside it.
         self._cards_home = QPoint(c.x(), c.y())
+        # 🎩 The top hat towers ~4.0 sprite-cells above the cat's head, which is
+        # outside the normal window. Reuse the SUPER CAT aura pad to grow a
+        # transparent margin so the crown isn't clipped off. Two things fall out
+        # of this for free: the sprite itself does not move on screen (the pad
+        # shifts the window, not the cat), and BubbleWindow.reposition anchors
+        # to the window top — so the speech bubble rises by the same amount and
+        # stops landing on the hat.
+        cell = max(1, c.cat_rect().height() // sprites.GRID_H)   # = scale*grow
+        c._set_aura_pad(int(cell * 5.0) + 4)
         g = self._cards_game
         if g.stage_ok:
             tx = g.panel.center().x() - c.width() // 2
@@ -4285,6 +4297,7 @@ class Manager(QObject):
         self._cards_game = None
         c = self.primary()
         c.cards_watching = False                   # free the idle AI again
+        c._set_aura_pad(0)                         # hat off, normal window back
         c.say(random.choice(["good game 😺", "cash out already?", "gg 🐾"]), 2.5)
         home = getattr(self, "_cards_home", None)
         if home is not None:
@@ -7342,6 +7355,82 @@ class CatWindow(QWidget):
         CatWindow._HEADSET_CACHE[name] = cached
         return cached
 
+    # Handlebar moustache, in HALF-cell pixels. Tips curl UP — that flare is
+    # the whole read; a flat bar under the nose just looks like a smudge.
+    # 16 half-cells = 8 cells wide, and it is anchored at col 8, so it spans
+    # cols 8..16 exactly. That is not cosmetic: the eyes occupy cols 5-7 and
+    # 16-18, so a wider moustache puts its curling tips straight through the
+    # corners of both eyes.
+    MOUSTACHE = [
+        "##............##",
+        "###..........###",
+        ".####......####.",
+        "..############..",
+        "...##########...",
+        ".....######.....",
+    ]
+
+    def _draw_dealer_props(self, p, tx, ty, tw_, th_):
+        """🎩 Top hat + moustache, worn only while dealing blackjack.
+
+        Positioned in SPRITE CELL units off the rect the frame was actually
+        drawn into — NOT off cat_rect() — so the costume inherits the jump,
+        the CHASE bob, the mochi sag and the wobble tilt for free. Anchoring it
+        to cat_rect() instead would leave the hat hanging in mid-air every time
+        the cat hops to gloat about a hand it just won.
+
+        Cell landmarks in the 26x28 sprite grid: ears rows 2-5, skull top row
+        5, eyes rows 8-10, nose rows 10-11. So the brim lands on the ear tips
+        and the moustache sits directly under the muzzle, at any sprite scale.
+
+        The crown reaches 4.0 cells ABOVE the sprite — that overhang is exactly
+        what the aura pad in _start_cards is buying, and without it the hat gets
+        clipped off at the window edge.
+        """
+        from PySide6.QtGui import QColor
+        from PySide6.QtCore import QRectF
+        cw = tw_ / sprites.GRID_W
+        ch = th_ / sprites.GRID_H
+
+        def cell(cx, cy, w, h, col):
+            p.fillRect(QRectF(tx + cx * cw, ty + cy * ch,
+                              w * cw + 0.5, h * ch + 0.5), col)
+
+        felt = QColor("#14161c")        # hat body
+        sheen = QColor("#2e323c")       # silk highlight down one side
+        band = QColor("#b03a3a")        # ribbon
+        # A black hat on the near-black blackjack panel would be invisible, and
+        # so would a black moustache on a black cat. Everything gets a light rim.
+        rim = QColor("#9aa0b0")
+
+        # The BRIM BOTTOM has to land on row 5, and that number is load-bearing.
+        # The ears are two separate spikes with a GAP between them (cols 8-15 at
+        # row 2), and the skull only goes solid at row 5. Park the brim any
+        # higher and you see straight through that gap to the background: the
+        # hat visibly floats above the cat's head. Sitting it at 3.5-5.0 closes
+        # the gap and leaves the ear tips poking out either side of the crown.
+        cell(6.8, -4.0, 10.4, 7.8, rim)         # crown, rimmed
+        cell(7.0, -3.8, 10.0, 7.4, felt)
+        cell(7.6, -3.4, 1.4, 6.6, sheen)
+        cell(7.0, 2.2, 10.0, 1.1, band)         # ribbon
+        cell(1.8, 3.35, 19.4, 1.85, rim)        # brim, rimmed, drawn LAST so
+        cell(2.0, 3.5, 19.0, 1.5, felt)         # it reads in front of the crown
+
+        # moustache: rim pass first, then the hair, so the rim of one pixel
+        # never paints over the fill of its neighbour
+        hair = QColor("#1b1d24")
+        sx, sy = cw / 2.0, ch / 2.0             # half-cell pixels
+        ox = tx + 8.0 * cw                      # cols 8..16 — clear of the eyes
+        oy = ty + 10.5 * ch                     # tucked under the nose (row 10)
+        for col, grow in ((rim, 1.0), (hair, 0.0)):
+            for gy, row in enumerate(self.MOUSTACHE):
+                for gx, c in enumerate(row):
+                    if c == "#":
+                        p.fillRect(QRectF(ox + gx * sx - grow,
+                                          oy + gy * sy - grow,
+                                          sx + 0.5 + grow * 2,
+                                          sy + 0.5 + grow * 2), col)
+
     def paintEvent(self, _ev):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, False)
@@ -7624,6 +7713,10 @@ class CatWindow(QWidget):
                 p.setPen(Qt.NoPen)
             p.restore()
         p.drawImage(QRect(tx, ty, tw_, th_), img)
+        # 🎩 dealer costume — INSIDE the save/restore, so the hat and moustache
+        # rotate with the wobble tilt exactly like the sprite they sit on.
+        if getattr(self, "cards_watching", False):
+            self._draw_dealer_props(p, tx, ty, tw_, th_)
         p.restore()
 
         # 🔫 duck-hunt blaster: drawn in screen space, pivoting at the cat's
