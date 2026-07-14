@@ -897,6 +897,13 @@ PIXFONT = {
     "P": ["###", "# #", "###", "#  ", "#  "],
     "V": ["# #", "# #", "# #", "# #", " # "],
     "Y": ["# #", "# #", "###", " # ", " # "],
+    # The alphabet was missing F, J, M and Z. draw_pixel_text falls back to a
+    # SPACE for any glyph it doesn't know, silently — so "BLACKJACK" rendered
+    # as "BLACK ACK" and a Jack card had a blank rank. Completed here.
+    "F": ["###", "#  ", "###", "#  ", "#  "],
+    "J": ["  #", "  #", "  #", "# #", "###"],
+    "M": ["# #", "###", "###", "# #", "# #"],
+    "Z": ["###", "  #", " # ", "#  ", "###"],
     ".": ["   ", "   ", "   ", "   ", " # "],
     "!": [" # ", " # ", " # ", "   ", " # "],
     " ": ["   ", "   ", "   ", "   ", "   "],
@@ -983,6 +990,68 @@ def draw_rps_icon(painter, kind, x, y, px, color=None):
     if grid is None:
         return
     col = QColor(color or RPS_COLORS.get(kind, "#ffffff"))
+    for gy, row in enumerate(grid):
+        for gx, ch in enumerate(row):
+            if ch == "#":
+                painter.fillRect(x + gx * px, y + gy * px, px, px, col)
+
+
+# ---------------------------------------------------------------------------
+# Card suits for the Blackjack minigame (7x7, '#' = filled).
+# Hand-drawn pixel cells rather than the ♠♥♦♣ unicode glyphs on purpose: the
+# app also runs on Linux, where the Segoe UI Symbol / emoji fonts the RPS panel
+# leans on are not guaranteed to exist. fillRect always works.
+# ---------------------------------------------------------------------------
+SUIT_SPADE = [
+    "...#...",
+    "..###..",
+    ".#####.",
+    "#######",
+    "#######",
+    "...#...",
+    ".#####.",
+]
+SUIT_HEART = [
+    ".##.##.",
+    "#######",
+    "#######",
+    "#######",
+    ".#####.",
+    "..###..",
+    "...#...",
+]
+SUIT_DIAMOND = [
+    "...#...",
+    "..###..",
+    ".#####.",
+    "#######",
+    ".#####.",
+    "..###..",
+    "...#...",
+]
+SUIT_CLUB = [
+    "..###..",
+    ".#####.",
+    "#######",
+    "#######",
+    "..###..",
+    "...#...",
+    ".#####.",
+]
+
+SUITS = {"S": SUIT_SPADE, "H": SUIT_HEART,
+         "D": SUIT_DIAMOND, "C": SUIT_CLUB}
+SUIT_W = 7          # cells; pixel width at cell size px is SUIT_W * px
+
+
+def draw_suit(painter, suit, x, y, px, color):
+    """Draw a 7x7 suit pip with pixel cells of size px. `suit` is one of
+    S H D C. Mirrors draw_rps_icon: no font, no antialiasing, just fillRect."""
+    from PySide6.QtGui import QColor
+    grid = SUITS.get(suit)
+    if grid is None:
+        return
+    col = QColor(color)
     for gy, row in enumerate(grid):
         for gx, ch in enumerate(row):
             if ch == "#":

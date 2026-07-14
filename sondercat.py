@@ -147,7 +147,7 @@ except Exception:
 
 APP_NAME = "SondeR cat"
 APP_VERSION = "9.10.9"
-APP_BUILD = "0716ae"
+APP_BUILD = "0716af"
 
 # Distribution channel. The GitHub build self-updates from the repo; the
 # Microsoft Store build is packaged as MSIX (read-only, Microsoft handles
@@ -1966,6 +1966,344 @@ class RockPaperScissorsGame(QWidget):
                    Qt.AlignHCenter, "click your move  ·  Esc to quit")
 
 
+class BlackjackGame(QWidget):
+    """Blackjack against the cat, who deals. Same shape as the RPS panel: a
+    centred pixel-art panel with a stage band the cat physically stands on, so
+    the dealer is the actual desktop pet rather than a drawing of one.
+
+    Rules are house-standard and deliberately boring: 6-deck-ish shoe (a fresh
+    52 reshuffled whenever it runs low), naturals pay on the spot, the cat
+    draws to 16 and stands on all 17s. Endless rounds, running score."""
+
+    RANKS = "A23456789TJQK"
+    SUITS = "SHDC"
+    CW, CH = 54, 78                 # card size
+
+    def __init__(self, mgr):
+        super().__init__(None, Qt.FramelessWindowHint
+                         | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.mgr = mgr
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFocusPolicy(Qt.StrongFocus)
+        scr = QGuiApplication.primaryScreen().geometry()
+        self.setGeometry(scr)
+        self.sw, self.sh = scr.width(), scr.height()
+        # Panel geometry, computed once here and not in paintEvent, so the
+        # manager can stand the cat inside it (same contract as RPS).
+        #
+        # The layout above the stage is FIXED — two card rows, a result line
+        # and a button row all have to fit — so unlike RPS the stage is the
+        # part that gives way on a short screen. If the cat no longer has a
+        # band tall enough to stand in, stage_ok goes False and the manager
+        # parks it beside the panel instead. That keeps the cards readable on
+        # a 768px laptop at sprite scale 10 rather than clipping them.
+        self.PW = 520
+        self.CONTENT_H = 406                       # title..buttons block
+        self.FOOTER_H = 44
+        try:
+            cat_h = mgr.primary().cat_rect().height()
+        except Exception:
+            cat_h = 168                            # scale 6 fallback
+        avail = max(400, self.sh - 60)
+        want_stage = max(170, cat_h + 70)          # floor band + bubble room
+        room = avail - self.CONTENT_H - self.FOOTER_H
+        self.STAGE_H = max(0, min(want_stage, room))
+        self.stage_ok = self.STAGE_H >= 140        # enough to stand the cat in
+        self.PH = self.CONTENT_H + self.STAGE_H + self.FOOTER_H
+        self.panel = QRect((self.sw - self.PW) // 2,
+                           (self.sh - self.PH) // 2,
+                           self.PW, self.PH)
+        # the line the cat's feet rest on: the top of the footer strip
+        self.floor_y = self.panel.bottom() - self.FOOTER_H
+        self.you = 0
+        self.cat = 0
+        self.deck = self._new_deck()
+        self.you_cards = []
+        self.cat_cards = []
+        self.hole_up = False        # is the cat's second card face-up yet
+        self.phase = "player"       # player -> dealer -> done
+        self.result = None          # win / lose / push, from the PLAYER's POV
+        self.msg = None             # headline for the result line
+        self.act_at = 0.0           # next dealer draw beat
+        self.buttons = []           # (rect, action) hit targets
+        self._deal()
+        self._tick = QTimer(self)
+        self._tick.timeout.connect(self._step)
+        self._tick.start(33)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.setFocus()
+
+    # ---- cards -----------------------------------------------------------
+    def _new_deck(self):
+        import random
+        d = [(r, s) for r in self.RANKS for s in self.SUITS]
+        random.shuffle(d)
+        return d
+
+    def _pop(self):
+        if len(self.deck) < 15:          # reshuffle before the shoe runs dry
+            self.deck = self._new_deck()
+        return self.deck.pop()
+
+    @staticmethod
+    def _value(cards):
+        """Best hand total: aces count 11 until that would bust, then 1."""
+        total, aces = 0, 0
+        for r, _s in cards:
+            if r == "A":
+                total += 11
+                aces += 1
+            elif r in ("T", "J", "Q", "K"):
+                total += 10
+            else:
+                total += int(r)
+        while total > 21 and aces:
+            total -= 10
+            aces -= 1
+        return total
+
+    # ---- round flow ------------------------------------------------------
+    def _deal(self):
+        self.phase = "player"
+        self.hole_up = False
+        self.result = None
+        self.msg = None
+        self.act_at = 0.0
+        self.you_cards = [self._pop(), self._pop()]
+        self.cat_cards = [self._pop(), self._pop()]
+        # a natural on either side ends the hand before anyone acts
+        if self._value(self.you_cards) == 21 or self._value(self.cat_cards) == 21:
+            self._resolve()
+
+    def _hit(self):
+        if self.phase != "player":
+            return
+        self.you_cards.append(self._pop())
+        v = self._value(self.you_cards)
+        if v > 21:
+            self._resolve()                        # bust
+        elif v == 21:
+            self._stand()                          # nothing left to decide
+
+    def _stand(self):
+        import time as _t
+        if self.phase != "player":
+            return
+        self.phase = "dealer"
+        self.hole_up = True
+        self.act_at = _t.time() + 0.7              # cat turns over its hole card
+
+    def _resolve(self):
+        self.hole_up = True
+        yv = self._value(self.you_cards)
+        cv = self._value(self.cat_cards)
+        nat_you = yv == 21 and len(self.you_cards) == 2
+        nat_cat = cv == 21 and len(self.cat_cards) == 2
+        if yv > 21:
+            res, self.msg = "lose", "BUST!"
+        elif cv > 21:
+            res, self.msg = "win", "CAT BUSTS!"
+        elif nat_you and not nat_cat:
+            res, self.msg = "win", "BLACKJACK!"
+        elif nat_cat and not nat_you:
+            res, self.msg = "lose", "CAT HAS BLACKJACK"
+        elif yv > cv:
+            res, self.msg = "win", "YOU WIN!"
+        elif cv > yv:
+            res, self.msg = "lose", "CAT WINS"
+        else:
+            res, self.msg = "push", "PUSH"
+        self.result = res
+        if res == "win":
+            self.you += 1
+        elif res == "lose":
+            self.cat += 1
+        self.phase = "done"
+        try:
+            self.mgr._cards_react(res)             # cat reacts, live
+        except Exception:
+            pass
+
+    def _step(self):
+        import time as _t
+        now = _t.time()
+        if self.phase == "dealer" and self.act_at and now >= self.act_at:
+            if self._value(self.cat_cards) < 17:   # draws to 16, stands on 17
+                self.cat_cards.append(self._pop())
+                self.act_at = now + 0.6
+            else:
+                self.act_at = 0.0
+                self._resolve()
+        self.update()
+
+    # ---- input -----------------------------------------------------------
+    def mousePressEvent(self, ev):
+        pt = ev.position().toPoint()
+        for rect, action in self.buttons:
+            if rect.contains(pt):
+                if action == "hit":
+                    self._hit()
+                elif action == "stand":
+                    self._stand()
+                elif action == "next":
+                    self._deal()
+                return
+
+    def keyPressEvent(self, ev):
+        k = ev.key()
+        if k == Qt.Key_Escape:
+            self.stop()
+        elif k == Qt.Key_H and self.phase == "player":
+            self._hit()
+        elif k == Qt.Key_S and self.phase == "player":
+            self._stand()
+        elif k in (Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter) \
+                and self.phase == "done":
+            self._deal()
+
+    def stop(self):
+        self._tick.stop()
+        self.hide()
+        self.mgr._end_cards()
+
+    # ---- painting --------------------------------------------------------
+    def _row_geom(self, n):
+        """Left edge + per-card step for a centred row of n cards. Cards start
+        overlapping once the row would run past the panel, so a six-card hand
+        still fits instead of spilling out the sides."""
+        step = self.CW + 12
+        if n > 1:
+            maxw = self.PW - 60
+            if self.CW + (n - 1) * step > maxw:
+                step = max(18, (maxw - self.CW) // (n - 1))
+        total = self.CW + (n - 1) * step
+        return self.panel.left() + (self.PW - total) // 2, step
+
+    def _draw_card(self, p, x, y, card, face_up=True):
+        from PySide6.QtGui import QColor, QPen
+        from PySide6.QtCore import QRectF
+        cw, ch = self.CW, self.CH
+        if not face_up:
+            p.setBrush(QColor(38, 52, 92))
+            p.setPen(QPen(QColor(150, 165, 200), 2))
+            p.drawRoundedRect(QRectF(x, y, cw, ch), 6, 6)
+            back = QColor(72, 92, 140)
+            for gy in range(8, ch - 8, 8):         # woven pixel back
+                for gx in range(8, cw - 8, 8):
+                    p.fillRect(x + gx, y + gy, 4, 4, back)
+            return
+        rank, suit = card
+        col = QColor("#c0392b") if suit in ("H", "D") else QColor("#1c2230")
+        p.setBrush(QColor(236, 236, 228))
+        p.setPen(QPen(QColor(120, 126, 140), 2))
+        p.drawRoundedRect(QRectF(x, y, cw, ch), 6, 6)
+        lbl = "10" if rank == "T" else rank
+        sprites.draw_pixel_text(p, lbl, x + 7, y + 7, 2, col)
+        sprites.draw_suit(p, suit, x + cw - 7 - sprites.SUIT_W * 2, y + 8,
+                          2, col)
+        big = sprites.SUIT_W * 4                   # centre pip
+        sprites.draw_suit(p, suit, x + (cw - big) // 2, y + (ch - big) // 2 + 6,
+                          4, col)
+
+    def _draw_button(self, p, rect, label, action, enabled=True):
+        from PySide6.QtGui import QColor, QPen
+        from PySide6.QtCore import QRectF
+        mouse = self.mapFromGlobal(QCursor.pos())
+        hover = enabled and rect.contains(mouse)
+        if enabled:
+            self.buttons.append((rect, action))
+        p.setBrush(QColor(40, 48, 64, 240) if hover else QColor(24, 28, 38, 235))
+        p.setPen(QPen(QColor("#6bb8c7") if hover else QColor(120, 130, 150), 2))
+        p.drawRoundedRect(QRectF(rect.left(), rect.top(),
+                                 rect.width(), rect.height()), 8, 8)
+        lw = sprites.pixel_text_width(label, 3)
+        # 3x5 glyphs at px=3 are 15px tall plus a 1px shadow row — centre on 16
+        sprites.draw_pixel_text(
+            p, label, rect.left() + (rect.width() - lw) // 2,
+            rect.top() + (rect.height() - 16) // 2, 3,
+            QColor("#e6e8ec") if enabled else QColor("#5a606c"))
+
+    def paintEvent(self, _ev):
+        from PySide6.QtGui import QPainter, QColor, QPen, QFont
+        from PySide6.QtCore import QRectF, QRect
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, False)
+        p.fillRect(self.rect(), QColor(10, 12, 20, 60))
+        pw_, ph_ = self.PW, self.PH
+        px0, py0 = self.panel.left(), self.panel.top()
+        p.setBrush(QColor(6, 8, 12, 240))
+        p.setPen(QPen(QColor(210, 210, 215), 3))
+        p.drawRoundedRect(QRectF(px0, py0, pw_, ph_), 14, 14)
+        shadow = QColor(0, 0, 0, 170)
+        # felt strip behind the two card rows, so the cards read as a table
+        p.setBrush(QColor(22, 58, 44, 235))
+        p.setPen(QPen(QColor(46, 92, 72), 2))
+        p.drawRoundedRect(QRectF(px0 + 18, py0 + 86, pw_ - 36, 212), 10, 10)
+        # title
+        title = "BLACKJACK"
+        tw = sprites.pixel_text_width(title, 3)
+        sprites.draw_pixel_text(p, title, px0 + (pw_ - tw) // 2, py0 + 26, 3,
+                                QColor("#6bb8c7"), shadow)
+        # running score
+        score = f"YOU {self.you}   CAT {self.cat}"
+        scw = sprites.pixel_text_width(score, 3)
+        sprites.draw_pixel_text(p, score, px0 + (pw_ - scw) // 2, py0 + 58, 3,
+                                QColor("#d9a94a"), shadow)
+        # ---- the cat's hand (hole card down until it's the cat's turn) ----
+        cv = self._value(self.cat_cards)
+        clab = f"CAT {cv}" if self.hole_up else "CAT"
+        sprites.draw_pixel_text(p, clab, px0 + 34, py0 + 94, 2,
+                                QColor("#c0c4cc"), shadow)
+        cx, step = self._row_geom(len(self.cat_cards))
+        for i, card in enumerate(self.cat_cards):
+            self._draw_card(p, cx + i * step, py0 + 112, card,
+                            face_up=(i != 1 or self.hole_up))
+        # ---- your hand ----
+        yv = self._value(self.you_cards)
+        sprites.draw_pixel_text(p, f"YOU {yv}", px0 + 34, py0 + 200, 2,
+                                QColor("#c0c4cc"), shadow)
+        yx, ystep = self._row_geom(len(self.you_cards))
+        for i, card in enumerate(self.you_cards):
+            self._draw_card(p, yx + i * ystep, py0 + 218, card)
+        # ---- result line ----
+        if self.phase == "dealer":
+            msg, col = "CAT DRAWS", QColor("#9aa0ac")
+        elif self.phase == "done":
+            msg = self.msg or ""
+            col = (QColor("#7ad17a") if self.result == "win"
+                   else QColor("#e06b6b") if self.result == "lose"
+                   else QColor("#d9d97a"))
+        else:
+            msg, col = "HIT OR STAND", QColor("#c0c4cc")
+        mw = sprites.pixel_text_width(msg, 4)
+        sprites.draw_pixel_text(p, msg, px0 + (pw_ - mw) // 2, py0 + 312, 4,
+                                col, shadow)
+        # ---- buttons ----
+        self.buttons = []
+        by, bh = py0 + 346, 46
+        if self.phase == "player":
+            bw, gap = 150, 30
+            bx = px0 + (pw_ - (2 * bw + gap)) // 2
+            self._draw_button(p, QRect(bx, by, bw, bh), "HIT", "hit")
+            self._draw_button(p, QRect(bx + bw + gap, by, bw, bh),
+                              "STAND", "stand")
+        elif self.phase == "done":
+            bw = 250
+            self._draw_button(p, QRect(px0 + (pw_ - bw) // 2, by, bw, bh),
+                              "NEXT HAND", "next")
+        else:                                       # dealer is drawing
+            bw = 250
+            self._draw_button(p, QRect(px0 + (pw_ - bw) // 2, by, bw, bh),
+                              "DEALING", "none", enabled=False)
+        # footer hint
+        p.setFont(QFont("Segoe UI", 11))
+        p.setPen(QColor(180, 185, 195))
+        p.drawText(QRect(px0, py0 + ph_ - 30, pw_, 20), Qt.AlignHCenter,
+                   "H hit  ·  S stand  ·  Space deal  ·  Esc to quit")
+
+
 class FeedingBowls(QWidget):
     """Two little pixel bowls (food + water) that live on the desktop.
     Drag to place them anywhere; click a bowl to refill it. Levels drain
@@ -2587,6 +2925,8 @@ class Manager(QObject):
         self._duck_game = None          # easter-egg minigame window
         self._rps_game = None           # rock-paper-scissors window
         self._rps_home = None           # where the cat stood before the match
+        self._cards_game = None         # blackjack window
+        self._cards_home = None         # where the cat stood before the deal
         self._bowl = None               # feeding bowls window
         self._sfx = None                # lazily-built sound engine
         self._guard_timer = QTimer()
@@ -3833,13 +4173,17 @@ class Manager(QObject):
             self._start_duck_hunt()
         elif which == "rps":
             self._start_rps()
+        elif which == "cards":
+            self._start_cards()
 
     def _start_rps(self):
         if getattr(self, "_rps_game", None) is not None:
             return
-        # one game at a time — close duck hunt if it's running
+        # one game at a time — close anything else that's running
         if self._duck_game is not None:
             self._duck_game.stop()
+        if getattr(self, "_cards_game", None) is not None:
+            self._cards_game.stop()
         c = self.primary()
         self._end_guide(walk_home=False, quiet=True)
         c.say(random.choice(["rock, paper, scissors? 🐾", "let's play! ✊✋✌️",
@@ -3885,12 +4229,76 @@ class Manager(QObject):
             c._glide_to(home, speed=500)           # wander back where it was
             self._rps_home = None
 
+    def _start_cards(self):
+        if getattr(self, "_cards_game", None) is not None:
+            return
+        # one game at a time — close anything else that's running
+        if self._duck_game is not None:
+            self._duck_game.stop()
+        if getattr(self, "_rps_game", None) is not None:
+            self._rps_game.stop()
+        c = self.primary()
+        self._end_guide(walk_home=False, quiet=True)
+        c.say(random.choice(["blackjack? deal me in 🃏", "the house always wins 😼",
+                             "hit or stand? 🐾"]), 4)
+        self._cards_game = BlackjackGame(self)
+        # Stand the cat inside the panel on the stage band, exactly as RPS
+        # does: cat_rect() puts the sprite flush with the window's bottom edge
+        # and centred across its width, so aligning the window bottom to
+        # floor_y lands the feet on the floor at any sprite scale. On a short
+        # screen the stage collapses (the card rows can't shrink), and the cat
+        # falls back to standing beside the panel instead of inside it.
+        self._cards_home = QPoint(c.x(), c.y())
+        g = self._cards_game
+        if g.stage_ok:
+            tx = g.panel.center().x() - c.width() // 2
+            ty = g.floor_y - c.height()
+        else:
+            tx = g.panel.left() - c.width() - 12
+            if tx < 0:                             # no room on the left
+                tx = g.panel.right() + 12
+            ty = g.panel.bottom() - c.height()
+        c.cards_watching = True                    # pin it there for the game
+        c._glide_to(QPoint(tx, ty), speed=700)
+        c.raise_()                                 # stay above the panel
+
+    def _cards_react(self, result):
+        """The cat's live reaction to a hand, fired the instant the result is
+        settled so the bubble lands with the headline on the panel. `result` is
+        from the PLAYER's point of view."""
+        c = self.primary()
+        now = time.time()
+        if result == "win":                        # the human won
+            c.say(random.choice(["the deck is rigged 😾", "hmph 😼",
+                                 "lucky draw…", "deal again. now.",
+                                 "I let you have that one"]), 2.2)
+        elif result == "lose":                     # the cat won — gloat + hop
+            c.jump_until = max(c.jump_until, now + 0.6)
+            c.say(random.choice(["the house always wins 😼", "hah! 😹",
+                                 "too easy", "*smug purr*",
+                                 "should have stood 😽"]), 2.2)
+        else:                                      # push
+            c.say(random.choice(["a push 🤝", "nobody wins", "again!",
+                                 "*blinks* 😺"]), 2.0)
+
+    def _end_cards(self):
+        self._cards_game = None
+        c = self.primary()
+        c.cards_watching = False                   # free the idle AI again
+        c.say(random.choice(["good game 😺", "cash out already?", "gg 🐾"]), 2.5)
+        home = getattr(self, "_cards_home", None)
+        if home is not None:
+            c._glide_to(home, speed=500)           # wander back where it was
+            self._cards_home = None
+
     def _start_duck_hunt(self):
         if self._duck_game is not None:
             return
-        # one game at a time — close RPS if it's open
+        # one game at a time — close anything else that's running
         if getattr(self, "_rps_game", None) is not None:
             self._rps_game.stop()
+        if getattr(self, "_cards_game", None) is not None:
+            self._cards_game.stop()
         c = self.primary()
         # end anything that owns the cat, then strike the gunner pose in the
         # bottom-left corner
@@ -4709,6 +5117,7 @@ class CatWindow(QWidget):
         self.dragging = False
         self.duck_gunner = False        # easter-egg: holding a gun, angry
         self.rps_watching = False       # 🪨📄✂️ parked beside the RPS panel
+        self.cards_watching = False     # 🃏 dealing blackjack on the table
         self.duck_super = False         # 15-streak power-up: blue aura ⚡
         self._aura_pad = 0              # extra transparent margin for the
         #                                 SUPER CAT flame (0 = normal window)
@@ -5000,6 +5409,9 @@ class CatWindow(QWidget):
         rps = QAction("Rock Paper Scissors ✊", menu)
         rps.triggered.connect(lambda: mgr.start_minigame("rps"))
         mini.addAction(rps)
+        bj = QAction("Blackjack 🃏", menu)
+        bj.triggered.connect(lambda: mgr.start_minigame("cards"))
+        mini.addAction(bj)
         mini.addSeparator()
         soon = QAction("more coming soon…", menu)
         soon.setEnabled(False)
@@ -5647,6 +6059,18 @@ class CatWindow(QWidget):
             # idle AI would happily wander off, nap, groom or go perch on a
             # window in the middle of the game. It only moves when _start_rps
             # glides it into place and _end_rps sends it home.
+            self.groom_until = 0.0
+            self.sleep_at = now + self.gcfg["sleep_seconds"]
+            self.next_perch_try = now + 999
+            self.next_corner_at = now + 999
+            self._corner_until = 0.0
+            if self.state not in (IDLE,) and self.glide_target is None:
+                self.state = IDLE
+        elif getattr(self, "cards_watching", False):
+            # 🃏 BLACKJACK LOCK: the cat is dealing. Same shape as the RPS lock
+            # above — without it the idle AI would wander off, nap, groom or go
+            # perch on a window in the middle of a hand. It only moves when
+            # _start_cards glides it onto the table and _end_cards sends it home.
             self.groom_until = 0.0
             self.sleep_at = now + self.gcfg["sleep_seconds"]
             self.next_perch_try = now + 999
