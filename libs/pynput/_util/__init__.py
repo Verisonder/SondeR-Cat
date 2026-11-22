@@ -35,7 +35,7 @@ import time
 
 import six
 
-from six.moves import queue
+import queue  # was six.moves (breaks under PySide6 import hook)
 
 
 #: Possible resolutions for import related errors.
