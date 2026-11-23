@@ -1333,7 +1333,8 @@ def pick_minutes(title, label, initial_min=25):
 
 
 class _AudioMeter:
-    """System output level 0..1 via WASAPI IAudioMeterInformation."""
+    """System output level 0..1: WASAPI IAudioMeterInformation on Windows,
+    "is another app playing?" via PipeWire/PulseAudio on Linux."""
     def __init__(self):
         self._meter = None
         self._dead_until = 0.0
@@ -1386,7 +1387,55 @@ class _AudioMeter:
         self._c_float = c_float
         self._byref = byref
 
+    # ---- Linux: is any other app playing audio? (PipeWire / PulseAudio) --
+    # Measuring real loudness would need an audio *capture* stream, which
+    # desktop shells (e.g. Omarchy) show as "microphone in use". Instead we
+    # check, once a second in the background, whether another app has an
+    # active (uncorked, unmuted) playback stream, and report a steady level.
+    def _linux_poll(self):
+        import shutil
+        if not shutil.which("pactl"):
+            self._linux_dead = True
+            return
+        while time.time() - self._linux_last_ask < 5:
+            level = 0.0
+            try:
+                out = subprocess.run(
+                    ["pactl", "-f", "json", "list", "sink-inputs"],
+                    capture_output=True, text=True, timeout=3).stdout
+                me = str(os.getpid())
+                for st in json.loads(out or "[]"):
+                    pr = st.get("properties", {}) or {}
+                    pid = str(pr.get("application.process.id") or "")
+                    if not pid or pid == me:
+                        continue      # no owning app (loopbacks) or us
+                    if pr.get("media.name") == "sondercat.py":
+                        continue
+                    if st.get("corked") or st.get("mute"):
+                        continue
+                    level = 0.5
+                    break
+            except Exception:
+                pass
+            self._linux_level = level
+            time.sleep(1.0)
+        # nobody asked for 5s (dancing turned off): stop until asked again
+        self._linux_level = 0.0
+        self._linux_started = False
+
+    def _linux_peak(self):
+        if getattr(self, "_linux_dead", False):
+            return 0.0
+        self._linux_last_ask = time.time()
+        if not getattr(self, "_linux_started", False):
+            self._linux_started = True
+            import threading
+            threading.Thread(target=self._linux_poll, daemon=True).start()
+        return getattr(self, "_linux_level", 0.0)
+
     def peak(self):
+        if platform.system() == "Linux":
+            return self._linux_peak()
         if platform.system() != "Windows":
             return 0.0
         now = time.time()
