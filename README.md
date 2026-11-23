@@ -119,6 +119,36 @@ content diffs to the app files, so they never reset that trust.
 | **Wayland with XWayland** (default on Ubuntu, Fedora, etc.) | ✅ Auto-detected — the cat routes itself through XWayland for full features |
 | **Pure Wayland** (no XWayland) | ⚠️ Runs, but global cursor tracking / hooks / self-positioning are restricted by Wayland's security model — the cat tells you at startup |
 | **GNOME** | ✅ Note: GNOME hides system trays — just right-click the *cat* for the full menu |
+| **Hyprland** (incl. Omarchy) | ✅ Add the window rule below so the cat floats borderless and stays on top on every workspace |
+
+### Hyprland
+
+Hyprland ignores the "frameless / always on top" hints the cat asks for, so
+give it a window rule. With the Lua config (Hyprland 0.57+), add to
+`~/.config/hypr/hyprland.lua`:
+
+```lua
+-- SondeR cat: borderless, floating, pinned above everything on every workspace.
+-- Matching the title leaves the cat's right-click menus (titled
+-- "sondercat.py") unmanaged, which keeps hover and submenus working.
+hl.window_rule({
+  match = { class = "^sondercat\\.py$", title = "^SondeR cat$", xwayland = true },
+  float = true,
+  pin = true,
+  border_size = 0,
+  rounding = 0,
+  decorate = false,
+  no_shadow = true,
+  no_blur = true,
+  no_anim = true,
+  no_dim = true,
+  no_initial_focus = true,
+  opacity = "1.0 override 1.0 override",
+})
+```
+
+On Omarchy, use its helper instead so floating workspaces leave the cat alone:
+`o.window({ class = "^sondercat\\.py$", title = "^SondeR cat$", xwayland = true }, { ...same rules... })`.
 
 Tested package managers: **apt** (Debian/Ubuntu/Mint), **dnf** (Fedora),
 **pacman** (Arch), **zypper** (openSUSE), **apk** (Alpine). `install.sh`
