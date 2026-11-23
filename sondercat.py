@@ -77,6 +77,28 @@ LINUX_DEPS_HINT = (
 )
 
 
+def _x_resource_dpi():
+    """Xft.dpi from the X resource database (0 if unset/unreadable)."""
+    try:
+        from Xlib import display, Xatom
+        d = display.Display()
+        try:
+            prop = d.screen().root.get_full_property(
+                d.intern_atom("RESOURCE_MANAGER"), Xatom.STRING)
+        finally:
+            d.close()
+        raw = prop.value if prop else b""
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", "replace")
+        for line in raw.splitlines():
+            key, _, val = line.partition(":")
+            if key.strip() == "Xft.dpi":
+                return float(val.strip())
+    except Exception:
+        pass
+    return 0.0
+
+
 def _linux_platform_shim():
     """Make the cat behave the same everywhere:
     - pure X11: nothing to do (full features)
@@ -85,13 +107,26 @@ def _linux_platform_shim():
     - pure Wayland (no XWayland): run natively, warn about limits"""
     if platform.system() != "Linux":
         return None
-    if os.environ.get("QT_QPA_PLATFORM"):
+    qpa = os.environ.get("QT_QPA_PLATFORM", "").strip()
+    # A single explicit backend is a deliberate user choice — respect it.
+    # A fallback list like "wayland;xcb" (set globally by e.g. Omarchy) is
+    # only a desktop-wide preference: the cat still needs xcb when available.
+    if qpa and ";" not in qpa:
         return "user-set"
     wayland = (os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
                or bool(os.environ.get("WAYLAND_DISPLAY")))
     if wayland:
         if os.environ.get("DISPLAY"):
             os.environ["QT_QPA_PLATFORM"] = "xcb"     # XWayland bridge
+            # Compositors that render XWayland unscaled (e.g. Hyprland with
+            # xwayland:force_zero_scaling) pass the HiDPI factor via GDK_SCALE,
+            # which Qt ignores — mirror it so menus/bubbles aren't tiny.
+            # Skipped when Xft.dpi is HiDPI (e.g. KDE): Qt already scales
+            # from that, and doing both would double the size.
+            gdk = os.environ.get("GDK_SCALE", "").strip()
+            if (not os.environ.get("QT_SCALE_FACTOR") and gdk.isdigit()
+                    and int(gdk) > 1 and _x_resource_dpi() <= 96):
+                os.environ["QT_SCALE_FACTOR"] = gdk
             return "xwayland"
         return "wayland"
     return None
@@ -2429,7 +2464,7 @@ class FeedingBowls(QWidget):
         hide.setChecked(g.get("bowl_hide_apps", False))
         m.addSeparator()
         off = m.addAction("Turn off feeding")
-        chosen = m.exec(ev.globalPos())
+        chosen = _exec_menu_beside(m, self, ev.globalPos())
         if chosen is fill:
             g["food_level"] = 1.0
             g["water_level"] = 1.0
@@ -5795,6 +5830,10 @@ class CatWindow(QWidget):
 
     # ------------------------------------------------------------ main tick -
     def tick(self):
+        # Hold still while any of our menus is open: a cat wandering or
+        # chasing under the menu would cover it and steal the pointer.
+        if QApplication.activePopupWidget() is not None:
+            return
         now = time.time()
         # stop the pet-purr ~5s after the last pet (or immediately if the
         # index-0 cat and sounds got turned off)
@@ -6455,7 +6494,8 @@ class CatWindow(QWidget):
             self._last_drag_x = ev.globalPosition().toPoint().x()
             self._last_drag_dir = 0
         elif ev.button() == Qt.RightButton:
-            self.build_menu().exec(ev.globalPosition().toPoint())
+            _exec_menu_beside(self.build_menu(), self,
+                              ev.globalPosition().toPoint())
 
     def mouseReleaseEvent(self, ev):
         if ev.button() == Qt.LeftButton and self.dragging:
@@ -7930,9 +7970,50 @@ class CatWindow(QWidget):
         p.end()
 
 
+def _exec_menu_beside(menu, widget, gpos):
+    """Open a context menu next to `widget` rather than on top of it.
+    On Wayland compositors the cat may be pinned above everything (e.g.
+    Hyprland pin), so a menu overlapping it gets partly covered and loses
+    the pointer there."""
+    from PySide6.QtWidgets import QApplication as _QA
+    if platform.system() != "Linux":
+        return menu.exec(gpos)              # other OSes keep menus above us
+    menu.ensurePolished()
+    size = menu.sizeHint()
+    geo = widget.frameGeometry()
+    scr = widget.screen() or _QA.primaryScreen()
+    area = scr.availableGeometry() if scr is not None else None
+    x, y = gpos.x(), gpos.y()
+    if area is not None:
+        if geo.right() + 1 + size.width() <= area.right():
+            x = geo.right() + 1                       # right of the cat
+        elif geo.left() - size.width() >= area.left():
+            x = geo.left() - size.width()             # left of the cat
+        y = max(area.top(), min(y, area.bottom() - size.height()))
+    return menu.exec(QPoint(x, y))
+
+
+class _WindowTitler(QObject):
+    """Give every untitled top-level window (cat, bubbles, bowls, games…)
+    the app name before it maps, so window managers can tell them apart from
+    popup menus — which must stay unmanaged or hover/submenus break."""
+
+    def eventFilter(self, obj, ev):
+        from PySide6.QtCore import QEvent
+        if (ev.type() == QEvent.Show and isinstance(obj, QWidget)
+                and obj.isWindow() and not obj.windowTitle()
+                and (obj.windowFlags() & Qt.Popup) != Qt.Popup
+                and obj.windowFlags() & Qt.FramelessWindowHint):
+            obj.setWindowTitle(APP_NAME)
+        return False
+
+
 def main():
     claim_single_instance()      # any older cat stands down (and shuts up)
     app = QApplication(sys.argv)
+    if platform.system() == "Linux":
+        _titler = _WindowTitler(app)
+        app.installEventFilter(_titler)
     app.setQuitOnLastWindowClosed(False)
     ico = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sondercat_gray.ico")
     if os.path.exists(ico):
