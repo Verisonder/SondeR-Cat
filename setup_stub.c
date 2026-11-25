@@ -129,6 +129,52 @@ static int run_hidden(const wchar_t *exe, wchar_t *cmdline, DWORD timeout_ms)
     return (int)code;
 }
 
+/* like run_hidden, but child stdout+stderr are appended to the log */
+static int run_logged(const wchar_t *exe, wchar_t *cmdline, DWORD timeout_ms)
+{
+    wchar_t tmp[MAX_PATH], outp[MAX_PATH];
+    GetTempPathW(MAX_PATH, tmp);
+    _snwprintf(outp, MAX_PATH, L"%sSondeRcat_check.txt", tmp);
+    SECURITY_ATTRIBUTES sa = { sizeof sa, NULL, TRUE };
+    HANDLE h = CreateFileW(outp, GENERIC_WRITE, FILE_SHARE_READ, &sa,
+                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    STARTUPINFOW si; PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof si); si.cb = sizeof si;
+    si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
+    si.wShowWindow = SW_HIDE;
+    si.hStdOutput = si.hStdError = h;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    if (h == INVALID_HANDLE_VALUE ||
+        !CreateProcessW(exe, cmdline, NULL, NULL, TRUE,
+                        CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+        char eb[96];
+        _snprintf(eb, sizeof eb, "could not start python, GetLastError=%lu",
+                  GetLastError());
+        logline(eb);
+        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+        return -1;
+    }
+    WaitForSingleObject(pi.hProcess, timeout_ms);
+    DWORD code = (DWORD)-1;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
+    CloseHandle(h);
+    FILE *f = _wfopen(outp, L"rb");
+    if (f) {
+        char buf[1024]; size_t n;
+        logline("---- python health check output ----");
+        while ((n = fread(buf, 1, sizeof buf, f)) > 0 && g_log)
+            fwrite(buf, 1, n, g_log);
+        fclose(f);
+        DeleteFileW(outp);
+        logline("---- end ----");
+    }
+    char eb[64];
+    _snprintf(eb, sizeof eb, "health check exit code %d", (int)code);
+    logline(eb);
+    return (int)code;
+}
+
 static int python_ok(const wchar_t *exe)
 {
     if (wcsstr(exe, L"WindowsApps"))
@@ -159,7 +205,8 @@ static int reg_python(HKEY root, DWORD view)
         wchar_t name[64]; DWORD n = 64;
         if (RegEnumKeyExW(core, i, name, &n, 0, 0, 0, 0) != ERROR_SUCCESS)
             break;
-        if (wcsncmp(name, L"3.", 2) == 0 && wcscmp(name, best) > 0)
+        if (wcsncmp(name, L"3.", 2) == 0 &&
+            (best[0] == 0 || _wtoi(name + 2) > _wtoi(best + 2)))
             wcscpy(best, name);
     }
     int ok = 0;
@@ -367,13 +414,15 @@ static DWORD WINAPI worker(LPVOID arg)
      * legacy <dest>\libs location for older installs) */
     status(L"Checking everything works\u2026");
     wchar_t cmd[2048];
-    _snwprintf(cmd, 2048,
-        L"\"%s\" -c \"import sys; "
-        L"sys.path.insert(0, r'%s\\libs'); "
-        L"sys.path.insert(0, r'%s\\libs'); "
-        L"import PySide6.QtWidgets, pynput\"",
-        g_python, g_dest, g_app);
-    if (run_hidden(g_python, cmd, 5 * 60 * 1000) != 0)
+    {
+        char pb[MAX_PATH * 3];
+        WideCharToMultiByte(CP_UTF8, 0, g_python, -1, pb, sizeof pb, 0, 0);
+        logline("using python:");
+        logline(pb);
+    }
+    _snwprintf(cmd, 2048, L"\"%s\" \"%s\\healthcheck.py\" \"%s\"",
+               g_python, g_app, g_app);
+    if (run_logged(g_python, cmd, 5 * 60 * 1000) != 0)
         fail(L"The bundled components failed to load with your Python.\n\n"
              L"A log was saved to %TEMP%\\SondeRcat_setup.log \u2014 "
              L"send it to the developer and this gets fixed fast.");
