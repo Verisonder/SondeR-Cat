@@ -67,6 +67,13 @@ if platform.system() == "Windows":
             sys.path.insert(0, _cand)
             break
 
+# import pynput BEFORE PySide6: PySide6's import hook otherwise trips over
+# six.moves (AttributeError: _SixMetaPathImporter has no _path)
+try:
+    import pynput.keyboard, pynput.mouse  # noqa: F401
+except Exception:
+    pass
+
 LINUX_DEPS_HINT = (
     "  Debian/Ubuntu:  sudo apt install libxcb-cursor0 libgl1 "
     "libxkbcommon-x11-0 libegl1\n"

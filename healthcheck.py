@@ -11,8 +11,9 @@ print("libs    :", libs, "exists" if os.path.isdir(libs) else "MISSING")
 print("PATH has WindowsApps:", "WindowsApps" in os.environ.get("PATH", ""))
 
 failed = False
-for mod in ("six", "shiboken6", "PySide6.QtCore", "PySide6.QtGui",
-            "PySide6.QtWidgets", "pynput.keyboard", "pynput.mouse"):
+for mod in ("six", "pynput.keyboard", "pynput.mouse", "shiboken6",
+            "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets",
+            "pynput.keyboard", "pynput.mouse"):
     try:
         __import__(mod)
         print("ok     ", mod)
