@@ -177,6 +177,7 @@ class _SixMetaPathImporter(object):
 
     def __init__(self, six_module_name):
         self.name = six_module_name
+        self._path = []  # PySide6 feature hook / module repr expect this
         self.known_modules = {}
 
     def _add_module(self, mod, *fullnames):
